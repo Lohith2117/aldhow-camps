@@ -1,3 +1,4 @@
+import dhowLogoImg from './assets/dhow-logo.png';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Building2, Users, ShieldCheck, Eye, EyeOff, Lock, Mail, LogOut,
@@ -5,26 +6,12 @@ import {
   UserPlus, KeyRound, Bed, Home, RefreshCw, X, ChevronRight, UserCheck,
   Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings
 } from 'lucide-react';
-
-// ==========================================
-// 1. OFFICIAL DHOW LOGO SVG COMPONENT
-// ==========================================
 const DhowLogo = ({ className = "h-8 w-auto" }) => (
-  <svg viewBox="0 0 280 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
-    {/* Stylized Dhow Sail / Waves Icon */}
-    <path d="M15 50C15 30 35 15 55 10C35 25 25 45 25 65H15V50Z" fill="#00A3E0" />
-    <path d="M32 45C32 25 50 12 70 8C50 20 40 38 40 58H32V45Z" fill="#00C4F0" />
-    <path d="M48 40C48 22 64 10 82 6C65 18 56 34 56 52H48V40Z" fill="#0090D4" />
-    <path d="M20 62H75C75 50 68 38 55 35C42 38 28 50 20 62Z" fill="#00588A" />
-    
-    {/* Text: Dhow Engineering */}
-    <text x="92" y="42" fill="currentColor" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="28" letter-spacing="-0.5">
-      Dhow
-    </text>
-    <text x="92" y="60" fill="currentColor" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="11" letter-spacing="3.5" opacity="0.85">
-      ENGINEERING
-    </text>
-  </svg>
+  <img
+    src={dhowLogoImg}
+    alt="Dhow Engineering"
+    className={className}
+  />
 );
 
 // ==========================================
