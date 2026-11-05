@@ -665,22 +665,22 @@ export default function App() {
   // STATE INITIALIZATION & PERSISTENCE
   // ==========================================
   const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('aldhow_erp_users_v2');
+    const saved = localStorage.getItem('dhow_camp_users_v3');
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('aldhow_erp_session_v2');
+    const saved = localStorage.getItem('dhow_camp_session_v3');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [camps, setCamps] = useState(() => {
-    const saved = localStorage.getItem('aldhow_erp_camps_v2');
+    const saved = localStorage.getItem('dhow_camp_camps_v3');
     return saved ? JSON.parse(saved) : INITIAL_CAMPS;
   });
 
   const [occupants, setOccupants] = useState(() => {
-    const saved = localStorage.getItem('aldhow_erp_occupants_v2');
+    const saved = localStorage.getItem('dhow_camp_occupants_v3');
     return saved ? JSON.parse(saved) : INITIAL_OCCUPANTS;
   });
 
@@ -766,22 +766,22 @@ export default function App() {
 
   // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('aldhow_erp_users_v2', JSON.stringify(users));
+    localStorage.setItem('dhow_camp_users_v3', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('aldhow_erp_camps_v2', JSON.stringify(camps));
+    localStorage.setItem('dhow_camp_camps_v3', JSON.stringify(camps));
   }, [camps]);
 
   useEffect(() => {
-    localStorage.setItem('aldhow_erp_occupants_v2', JSON.stringify(occupants));
+    localStorage.setItem('dhow_camp_occupants_v3', JSON.stringify(occupants));
   }, [occupants]);
 
   useEffect(() => {
     if (currentUser && rememberMe) {
-      localStorage.setItem('aldhow_erp_session_v2', JSON.stringify(currentUser));
+      localStorage.setItem('dhow_camp_session_v3', JSON.stringify(currentUser));
     } else if (!currentUser) {
-      localStorage.removeItem('aldhow_erp_session_v2');
+      localStorage.removeItem('dhow_camp_session_v3');
     }
   }, [currentUser, rememberMe]);
 
@@ -837,7 +837,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('aldhow_erp_session_v2');
+    localStorage.removeItem('dhow_camp_session_v3');
     setActiveTab('map');
   };
 
@@ -915,7 +915,7 @@ export default function App() {
   }, [occupants]);
 
   // ==========================================
-  // OPERATIONAL HANDLERS (ADD CAMP, CHECK-IN, MANAGE)
+  // OPERATIONAL HANDLERS
   // ==========================================
   const handleCreateCamp = (e) => {
     e.preventDefault();
@@ -1038,7 +1038,7 @@ export default function App() {
       reallocationCostCenter: checkInForm.costCenter.split('-')[0],
       exitDate: '',
       afrExitRef: '',
-      remarks: 'Checked in via AFR Portal'
+      remarks: 'Checked in via Dhow Portal'
     };
 
     setOccupants(prev => [...prev, newOcc]);
@@ -1115,9 +1115,7 @@ export default function App() {
     }
   };
 
-  // =========================================================
-  // RBAC USER & ROLE EDITING HANDLERS (FOR SUPER ADMIN)
-  // =========================================================
+  // RBAC handlers
   const handleCreateUser = (e) => {
     e.preventDefault();
     const newUser = {
@@ -1312,14 +1310,14 @@ export default function App() {
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `1ACD000_Occupants_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Dhow_Camp_Occupants_${new Date().toISOString().slice(0, 10)}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   // =========================================================
-  // VIEW 1: CLEAN WHITE SIGN-IN SCREEN (Zero Profile Leakage)
+  // VIEW 1: CLEAN WHITE SIGN-IN SCREEN
   // =========================================================
   if (!currentUser) {
     return (
@@ -1328,14 +1326,22 @@ export default function App() {
 
         <div className="w-full max-w-[420px] mx-auto my-auto">
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-indigo-600 rounded-2xl shadow-md shadow-indigo-600/20 mb-3">
-              <Building2 className="w-6 h-6 text-white" />
+            <div className="inline-flex items-center justify-center p-2.5 bg-white border border-slate-200 rounded-2xl shadow-md mb-3">
+              <img
+                src="https://raw.githubusercontent.com/Lohith2117/aldhow-camps/main/public/logo.png"
+                alt="Dhow Engineering Logo"
+                className="h-10 object-contain"
+                onError={(e) => {
+                  // Fallback if image asset isn't fetched instantly
+                  e.target.style.display = 'none';
+                }}
+              />
             </div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900">
-              AL-DHOW <span className="text-indigo-600">ERP</span>
+              DHOW <span className="text-indigo-600">CAMP MANAGEMENT</span>
             </h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Camp & Apartment Management • Cost Center 1ACD000
+              Accommodation & Camp Operations (Cost Center 1ACD000)
             </p>
           </div>
 
@@ -1438,7 +1444,7 @@ export default function App() {
             <span>•</span>
             <span className="hover:text-slate-600 cursor-pointer">Terms and Conditions</span>
           </div>
-          <div>© 2026 AL-DHOW Engineering General Trading & Contracting Co.</div>
+          <div>© 2026 Dhow Engineering General Trading & Contracting Co.</div>
         </div>
 
         {showForgotModal && (
@@ -1468,7 +1474,7 @@ export default function App() {
   }
 
   // =========================================================
-  // VIEW 2: ORIGINAL ERP UI/UX (Dark Navy Header + Light Body)
+  // VIEW 2: AUTHENTICATED ERP PORTAL
   // =========================================================
   const isSuperAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions.canManageUsers;
   const canAddCamps = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions.canAddCamps;
@@ -1476,18 +1482,22 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
       {/* ======================================================= */}
-      {/* TOP DARK NAVY ERP HEADER (AFR Check-In Button Removed) */}
+      {/* TOP DARK NAVY ERP HEADER WITH DHOW LOGO                 */}
       {/* ======================================================= */}
       <header className="bg-[#0f172a] text-white shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-indigo-600 flex items-center justify-center shadow-lg shadow-indigo-600/30 shrink-0">
-              <Building2 className="w-6 h-6 text-white" />
+            <div className="bg-white p-2 rounded-xl shadow-md shrink-0 flex items-center justify-center">
+              <img
+                src="https://raw.githubusercontent.com/Lohith2117/aldhow-camps/main/public/logo.png"
+                alt="Dhow Logo"
+                className="h-8 object-contain"
+              />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
                 <h1 className="text-lg sm:text-xl font-black tracking-tight text-white uppercase">
-                  AL-DHOW CAMP & APARTMENT ERP
+                  Dhow Camp Management System
                 </h1>
                 <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-indigo-950/90 text-indigo-300 border border-indigo-700/60">
                   Cost Center: 1ACD000
@@ -1963,7 +1973,7 @@ export default function App() {
                   className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
                 >
                   <Download className="w-3.5 h-3.5" />
-                  Export Book1.xlsx CSV
+                  Export Dhow CSV
                 </button>
               </div>
             </div>
@@ -2399,7 +2409,7 @@ export default function App() {
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-indigo-600" />
-                AFR Employee Room Assignment
+                Dhow Employee Room Assignment
               </h3>
               <button onClick={() => setShowCheckInModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
@@ -2507,7 +2517,7 @@ export default function App() {
                   type="submit"
                   className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold"
                 >
-                  Confirm AFR Check-In
+                  Confirm Room Check-In
                 </button>
               </div>
             </form>
@@ -2553,7 +2563,7 @@ export default function App() {
                   onClick={() => handleUpdateOccupantStatus(manageOccupantModal.employeeId, 'Exited')}
                   className="w-full py-2.5 px-4 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-xl font-bold"
                 >
-                  Process AFR Check-Out (Vacate Bed)
+                  Process Check-Out (Vacate Bed)
                 </button>
               </div>
             </div>
