@@ -69,7 +69,6 @@ const INITIAL_USERS = [
   }
 ];
 
-// Helper to get default permissions when switching a role preset
 const getRoleDefaultPermissions = (role) => {
   if (role === 'SUPER_ADMIN') {
     return {
@@ -1159,7 +1158,6 @@ export default function App() {
     });
   };
 
-  // 1-Click Inline Role Change in RBAC Table
   const handleInlineRoleChange = (userId, newRole) => {
     if (userId === currentUser.id && newRole !== 'SUPER_ADMIN') {
       alert('You cannot demote your own active Super Admin account.');
@@ -1180,7 +1178,6 @@ export default function App() {
     );
   };
 
-  // 1-Click Inline Camp Scope Change in RBAC Table
   const handleInlineScopeChange = (userId, newScope) => {
     setUsers(prev =>
       prev.map(u => {
@@ -1196,7 +1193,6 @@ export default function App() {
     );
   };
 
-  // 1-Click Inline Permission Pill Toggle in RBAC Table
   const handleToggleUserPermission = (userId, permKey) => {
     if (userId === currentUser.id && permKey === 'canManageUsers') {
       alert('You cannot revoke user management access from your own Super Admin account.');
@@ -1220,7 +1216,6 @@ export default function App() {
     );
   };
 
-  // Save Full Edit Role & Permissions Modal
   const handleSaveEditedUser = (e) => {
     e.preventDefault();
     if (!editingUserModal) return;
@@ -1476,13 +1471,12 @@ export default function App() {
   // VIEW 2: ORIGINAL ERP UI/UX (Dark Navy Header + Light Body)
   // =========================================================
   const isSuperAdmin = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions.canManageUsers;
-  const canEdit = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions.canEditOccupants;
   const canAddCamps = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions.canAddCamps;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
       {/* ======================================================= */}
-      {/* TOP DARK NAVY ERP HEADER                                */}
+      {/* TOP DARK NAVY ERP HEADER (AFR Check-In Button Removed) */}
       {/* ======================================================= */}
       <header className="bg-[#0f172a] text-white shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -1513,15 +1507,6 @@ export default function App() {
               >
                 <Plus className="w-4 h-4" />
                 <span>Add Apartment</span>
-              </button>
-            )}
-            {canEdit && (
-              <button
-                onClick={() => setShowCheckInModal(true)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shadow-md flex items-center gap-1.5 transition-all cursor-pointer"
-              >
-                <UserPlus className="w-4 h-4" />
-                <span>AFR Check-In</span>
               </button>
             )}
             <button
@@ -1597,9 +1582,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ======================================================= */}
-      {/* SUB-HEADER STATUS BAR                                   */}
-      {/* ======================================================= */}
+      {/* Sub-Header Status Bar */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
@@ -1626,9 +1609,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* ======================================================= */}
-      {/* MAIN BODY CONTAINER                                     */}
-      {/* ======================================================= */}
+      {/* Main Body Container */}
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
         {/* 6 KPI SUMMARY CARDS ROW */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
@@ -1699,9 +1680,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* ======================================================= */}
-        {/* TAB 1: INTERACTIVE APARTMENT & ROOM MAP                 */}
-        {/* ======================================================= */}
+        {/* TAB 1: MAP */}
         {activeTab === 'map' && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
@@ -1779,7 +1758,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Floor Selector Cards */}
+            {/* Floor Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
               {activeCamp.floors.map(floor => {
                 let flBeds = 0;
@@ -1829,10 +1808,7 @@ export default function App() {
                     </div>
 
                     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
-                      <div
-                        className="h-full bg-emerald-500 rounded-full transition-all"
-                        style={{ width: `${flPct}%` }}
-                      />
+                      <div className="h-full bg-emerald-500 rounded-full transition-all" style={{ width: `${flPct}%` }} />
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
@@ -1844,7 +1820,7 @@ export default function App() {
               })}
             </div>
 
-            {/* 3-Column Flat & Room Cards */}
+            {/* Flats & Rooms Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {activeFloor.flats.map(flat => {
                 let flatCap = 0;
@@ -1855,10 +1831,7 @@ export default function App() {
                 });
 
                 return (
-                  <div
-                    key={flat.flatCode}
-                    className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs flex flex-col"
-                  >
+                  <div key={flat.flatCode} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs flex flex-col">
                     <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
                       <div>
                         <div className="text-sm font-black tracking-tight">Flat {flat.flatCode}</div>
@@ -1875,21 +1848,14 @@ export default function App() {
                       {flat.rooms.map(room => {
                         const occCount = room.occupants.length;
                         return (
-                          <div
-                            key={room.roomNo}
-                            className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2.5 shadow-2xs"
-                          >
+                          <div key={room.roomNo} className="bg-white border border-slate-200 rounded-xl p-3.5 space-y-2.5 shadow-2xs">
                             <div className="flex items-center justify-between">
                               <div className="text-xs font-bold text-slate-800">
                                 Room {room.roomNo}{' '}
-                                <span className="text-slate-400 font-normal">
-                                  ({flat.roomGrade} • Max {room.capacity})
-                                </span>
+                                <span className="text-slate-400 font-normal">({flat.roomGrade} • Max {room.capacity})</span>
                               </div>
                               <span className={`text-[11px] font-bold px-2 py-0.5 rounded-md ${
-                                occCount === room.capacity
-                                  ? 'bg-slate-100 text-slate-700'
-                                  : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
+                                occCount === room.capacity ? 'bg-slate-100 text-slate-700' : 'bg-emerald-50 text-emerald-700 border border-emerald-200'
                               }`}>
                                 {occCount}/{room.capacity} Occupied
                               </span>
@@ -1903,28 +1869,15 @@ export default function App() {
                                 if (occ) {
                                   const isOnLeave = occ.employeeStatus === 'On Leave';
                                   return (
-                                    <div
-                                      key={empId}
-                                      className={`p-3 rounded-xl border transition-all ${
-                                        isOnLeave
-                                          ? 'bg-amber-50/70 border-amber-200'
-                                          : 'bg-slate-50/80 border-slate-200/90'
-                                      }`}
-                                    >
+                                    <div key={empId} className={`p-3 rounded-xl border transition-all ${isOnLeave ? 'bg-amber-50/70 border-amber-200' : 'bg-slate-50/80 border-slate-200/90'}`}>
                                       <div className="flex items-center justify-between gap-2">
                                         <div className="flex items-center gap-2 min-w-0">
                                           <span className="bg-slate-900 text-white text-[11px] font-mono font-bold px-2 py-0.5 rounded">
                                             #{occ.employeeId}
                                           </span>
-                                          <span className="text-xs font-bold text-slate-900 truncate">
-                                            {occ.employeeName}
-                                          </span>
+                                          <span className="text-xs font-bold text-slate-900 truncate">{occ.employeeName}</span>
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
-                                          isOnLeave
-                                            ? 'bg-amber-200/80 text-amber-900'
-                                            : 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                                        }`}>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${isOnLeave ? 'bg-amber-200/80 text-amber-900' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'}`}>
                                           {isOnLeave ? '✈ On Leave' : 'On Job'}
                                         </span>
                                       </div>
@@ -1951,9 +1904,7 @@ export default function App() {
                                     className="w-full py-2.5 px-3.5 rounded-xl border border-dashed border-emerald-400 bg-emerald-50/30 hover:bg-emerald-50 text-emerald-700 flex items-center justify-between text-xs font-semibold transition-all cursor-pointer"
                                   >
                                     <span>+ Free Spot #{idx + 1} ({flat.roomGrade})</span>
-                                    <span className="underline decoration-emerald-500/60 font-bold">
-                                      Assign Employee
-                                    </span>
+                                    <span className="underline decoration-emerald-500/60 font-bold">Assign Employee</span>
                                   </button>
                                 );
                               })}
@@ -1969,9 +1920,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ======================================================= */}
-        {/* TAB 2: 31-COLUMN OCCUPANT LIST (Book1.xlsx)             */}
-        {/* ======================================================= */}
+        {/* TAB 2: OCCUPANTS LIST */}
         {activeTab === 'occupants' && (
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
@@ -2072,11 +2021,7 @@ export default function App() {
                         <td className="py-2.5 px-3 font-mono font-bold text-indigo-600">{occ.roomNo}</td>
                         <td className="py-2.5 px-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            occ.employeeStatus === 'On Job'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : occ.employeeStatus === 'On Leave'
-                              ? 'bg-amber-100 text-amber-800'
-                              : 'bg-rose-50 text-rose-700'
+                            occ.employeeStatus === 'On Job' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : occ.employeeStatus === 'On Leave' ? 'bg-amber-100 text-amber-800' : 'bg-rose-50 text-rose-700'
                           }`}>
                             {occ.employeeStatus}
                           </span>
@@ -2099,9 +2044,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ======================================================= */}
-        {/* TAB 3: VACANCY, OCCUPANCY & DIVISION REPORTS            */}
-        {/* ======================================================= */}
+        {/* TAB 3: REPORTS */}
         {activeTab === 'reports' && (
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
@@ -2146,9 +2089,7 @@ export default function App() {
                   return (
                     <div key={div} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
                       <span className="font-bold text-slate-800">Division: {div}</span>
-                      <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold">
-                        {count} Active Employees
-                      </span>
+                      <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold">{count} Active Employees</span>
                     </div>
                   );
                 })}
@@ -2157,9 +2098,7 @@ export default function App() {
           </div>
         )}
 
-        {/* ======================================================= */}
-        {/* TAB 4: ADMIN & USER ACCESS (RBAC) - With Role Editing   */}
-        {/* ======================================================= */}
+        {/* TAB 4: ADMIN */}
         {activeTab === 'admin' && isSuperAdmin && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
@@ -2206,18 +2145,12 @@ export default function App() {
                           <div className="text-[11px] text-slate-400">{u.title || 'Staff Member'}</div>
                         </td>
                         <td className="py-3.5 px-4 text-slate-600">{u.email}</td>
-
-                        {/* Interactive Role Selector Dropdown */}
                         <td className="py-3.5 px-4">
                           <select
                             value={u.role}
                             onChange={(e) => handleInlineRoleChange(u.id, e.target.value)}
                             className={`text-[11px] font-bold uppercase px-2.5 py-1.5 rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${
-                              u.role === 'SUPER_ADMIN'
-                                ? 'bg-purple-100 text-purple-800 border-purple-200'
-                                : u.role === 'CAMP_EDITOR'
-                                ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                : 'bg-slate-100 text-slate-700 border-slate-200'
+                              u.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800 border-purple-200' : u.role === 'CAMP_EDITOR' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}
                           >
                             <option value="SUPER_ADMIN">SUPER_ADMIN</option>
@@ -2225,8 +2158,6 @@ export default function App() {
                             <option value="AUDITOR">AUDITOR (Read-Only)</option>
                           </select>
                         </td>
-
-                        {/* Interactive Camp Scope Selector Dropdown */}
                         <td className="py-3.5 px-4">
                           <select
                             value={u.campScope}
@@ -2239,82 +2170,59 @@ export default function App() {
                             ))}
                           </select>
                         </td>
-
-                        {/* Interactive Permission Toggles */}
                         <td className="py-3.5 px-4">
                           <div className="flex items-center gap-1.5">
                             <button
                               type="button"
                               onClick={() => handleToggleUserPermission(u.id, 'canEditOccupants')}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canEditOccupants
-                                  ? 'bg-emerald-50 text-emerald-700 border-emerald-200'
-                                  : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                u.permissions?.canEditOccupants ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
                               }`}
-                              title="Click to toggle Occupant Check-In / Edit rights"
                             >
                               Edit Occupants
                             </button>
-
                             <button
                               type="button"
                               onClick={() => handleToggleUserPermission(u.id, 'canAddCamps')}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canAddCamps
-                                  ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
-                                  : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                u.permissions?.canAddCamps ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
                               }`}
-                              title="Click to toggle Add Apartment Building rights"
                             >
                               Add Camps
                             </button>
-
                             <button
                               type="button"
                               onClick={() => handleToggleUserPermission(u.id, 'canExportReports')}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canExportReports
-                                  ? 'bg-cyan-50 text-cyan-700 border-cyan-200'
-                                  : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                u.permissions?.canExportReports ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
                               }`}
-                              title="Click to toggle CSV Export rights"
                             >
                               Export
                             </button>
                           </div>
                         </td>
-
-                        {/* Strictly Masked Password Column */}
                         <td className="py-3.5 px-4">
                           <span className="inline-flex items-center gap-1.5 text-slate-400 font-mono text-xs">
                             <Lock className="w-3.5 h-3.5 text-slate-400" />
                             •••••••• (Encrypted)
                           </span>
                         </td>
-
                         <td className="py-3.5 px-4">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            u.status === 'Active'
-                              ? 'bg-emerald-50 text-emerald-700 border border-emerald-200'
-                              : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            u.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
                           }`}>
                             {u.status}
                           </span>
                         </td>
-
                         <td className="py-3.5 px-4 text-right">
                           <div className="flex items-center justify-end gap-2">
-                            {/* Edit Role & Permissions Modal Trigger */}
                             <button
                               onClick={() => setEditingUserModal({ ...u, permissions: { ...u.permissions } })}
                               className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 flex items-center gap-1 cursor-pointer"
-                              title="Edit Role, Scope & Granular Permissions"
                             >
                               <Settings className="w-3.5 h-3.5 text-slate-600" />
                               Edit Role
                             </button>
-
-                            {/* Reset Password Trigger */}
                             <button
                               onClick={() => {
                                 setTargetUserForReset(u);
@@ -2325,7 +2233,6 @@ export default function App() {
                               <KeyRound className="w-3.5 h-3.5" />
                               Reset Password
                             </button>
-
                             {u.id !== currentUser.id && (
                               <button
                                 onClick={() => handleToggleUserStatus(u.id)}
@@ -2334,7 +2241,6 @@ export default function App() {
                                 {u.status === 'Active' ? 'Suspend' : 'Activate'}
                               </button>
                             )}
-
                             {u.id !== currentUser.id && (
                               <button
                                 onClick={() => handleDeleteUser(u.id)}
@@ -2355,9 +2261,7 @@ export default function App() {
         )}
       </main>
 
-      {/* ======================================================= */}
-      {/* MODAL 1: ADD NEW APARTMENT BUILDING WIZARD              */}
-      {/* ======================================================= */}
+      {/* MODALS */}
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
@@ -2489,9 +2393,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* MODAL 2: AFR CHECK-IN / ASSIGN EMPLOYEE TO ROOM         */}
-      {/* ======================================================= */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
@@ -2614,16 +2515,11 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* MODAL 3: MANAGE OCCUPANT (On Job / Leave / AFR Exit)    */}
-      {/* ======================================================= */}
       {manageOccupantModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900">
-                Manage Occupant #{manageOccupantModal.employeeId}
-              </h3>
+              <h3 className="text-base font-bold text-slate-900">Manage Occupant #{manageOccupantModal.employeeId}</h3>
               <button onClick={() => setManageOccupantModal(null)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
@@ -2640,21 +2536,13 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => handleUpdateOccupantStatus(manageOccupantModal.employeeId, 'On Job')}
-                  className={`py-2.5 px-3 rounded-xl font-bold border ${
-                    manageOccupantModal.employeeStatus === 'On Job'
-                      ? 'bg-indigo-600 text-white border-indigo-600'
-                      : 'bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
+                  className={`py-2.5 px-3 rounded-xl font-bold border ${manageOccupantModal.employeeStatus === 'On Job' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
                 >
                   Mark On Job
                 </button>
                 <button
                   onClick={() => handleUpdateOccupantStatus(manageOccupantModal.employeeId, 'On Leave')}
-                  className={`py-2.5 px-3 rounded-xl font-bold border ${
-                    manageOccupantModal.employeeStatus === 'On Leave'
-                      ? 'bg-amber-500 text-white border-amber-500'
-                      : 'bg-slate-50 text-slate-700 border-slate-200'
-                  }`}
+                  className={`py-2.5 px-3 rounded-xl font-bold border ${manageOccupantModal.employeeStatus === 'On Leave' ? 'bg-amber-500 text-white border-amber-500' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
                 >
                   Mark On Leave
                 </button>
@@ -2673,9 +2561,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* MODAL 4: ADD SYSTEM USER (Super Admin)                  */}
-      {/* ======================================================= */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
@@ -2731,7 +2616,7 @@ export default function App() {
                   <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
                   <input
                     type="text"
-                    placeholder="e.g. Camp Boss / HR Officer"
+                    placeholder="e.g. Camp Boss"
                     value={newUserForm.title}
                     onChange={(e) => setNewUserForm({ ...newUserForm, title: e.target.value })}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2"
@@ -2758,12 +2643,7 @@ export default function App() {
                     value={newUserForm.role}
                     onChange={(e) => {
                       const nextRole = e.target.value;
-                      const defaultPerms = getRoleDefaultPermissions(nextRole);
-                      setNewUserForm({
-                        ...newUserForm,
-                        role: nextRole,
-                        ...defaultPerms
-                      });
+                      setNewUserForm({ ...newUserForm, role: nextRole, ...getRoleDefaultPermissions(nextRole) });
                     }}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2"
                   >
@@ -2787,49 +2667,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Granular Permission Checkboxes */}
-              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                <div className="font-bold text-slate-700">Granular Editing & Access Permissions:</div>
-                <div className="grid grid-cols-2 gap-2">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newUserForm.canEditOccupants}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, canEditOccupants: e.target.checked })}
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Can Check-In / Edit Occupants</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newUserForm.canAddCamps}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, canAddCamps: e.target.checked })}
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Can Add Apartment Buildings</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newUserForm.canExportReports}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, canExportReports: e.target.checked })}
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Can Export Excel / CSV</span>
-                  </label>
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={newUserForm.canManageUsers}
-                      onChange={(e) => setNewUserForm({ ...newUserForm, canManageUsers: e.target.checked })}
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Can Manage Users (RBAC)</span>
-                  </label>
-                </div>
-              </div>
-
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
@@ -2850,9 +2687,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* MODAL 5: EDIT USER ROLE, SCOPE & PERMISSIONS            */}
-      {/* ======================================================= */}
       {editingUserModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
@@ -2900,11 +2734,7 @@ export default function App() {
                         alert('You cannot demote your own active Super Admin account.');
                         return;
                       }
-                      setEditingUserModal({
-                        ...editingUserModal,
-                        role: nextRole,
-                        permissions: getRoleDefaultPermissions(nextRole)
-                      });
+                      setEditingUserModal({ ...editingUserModal, role: nextRole, permissions: getRoleDefaultPermissions(nextRole) });
                     }}
                     className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold text-indigo-700"
                   >
@@ -2929,72 +2759,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2.5">
-                <div className="font-bold text-slate-800">Fine-Grained Role Permissions:</div>
-                <div className="grid grid-cols-2 gap-2.5">
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!editingUserModal.permissions?.canEditOccupants}
-                      onChange={(e) =>
-                        setEditingUserModal({
-                          ...editingUserModal,
-                          permissions: { ...editingUserModal.permissions, canEditOccupants: e.target.checked }
-                        })
-                      }
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Check-In / Edit Occupants</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!editingUserModal.permissions?.canAddCamps}
-                      onChange={(e) =>
-                        setEditingUserModal({
-                          ...editingUserModal,
-                          permissions: { ...editingUserModal.permissions, canAddCamps: e.target.checked }
-                        })
-                      }
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Add Apartment Buildings</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      checked={!!editingUserModal.permissions?.canExportReports}
-                      onChange={(e) =>
-                        setEditingUserModal({
-                          ...editingUserModal,
-                          permissions: { ...editingUserModal.permissions, canExportReports: e.target.checked }
-                        })
-                      }
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Export 31-Col CSV Reports</span>
-                  </label>
-
-                  <label className="flex items-center gap-2 cursor-pointer">
-                    <input
-                      type="checkbox"
-                      disabled={editingUserModal.id === currentUser.id}
-                      checked={!!editingUserModal.permissions?.canManageUsers}
-                      onChange={(e) =>
-                        setEditingUserModal({
-                          ...editingUserModal,
-                          permissions: { ...editingUserModal.permissions, canManageUsers: e.target.checked }
-                        })
-                      }
-                      className="rounded border-slate-300 text-indigo-600"
-                    />
-                    <span>Manage System Users (RBAC)</span>
-                  </label>
-                </div>
-              </div>
-
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
@@ -3015,9 +2779,6 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* MODAL 6: SUPER ADMIN PASSWORD RESET (Zero Plaintext)    */}
-      {/* ======================================================= */}
       {showResetPasswordModal && targetUserForReset && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
