@@ -3,11 +3,32 @@ import {
   Building2, Users, ShieldCheck, Eye, EyeOff, Lock, Mail, LogOut,
   Plus, Search, Filter, Download, CheckCircle2, AlertCircle, Trash2,
   UserPlus, KeyRound, Bed, Home, RefreshCw, X, ChevronRight, UserCheck,
-  Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings, Compass
+  Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings
 } from 'lucide-react';
 
 // ==========================================
-// 1. INITIAL SYSTEM USERS (RBAC & AUTH)
+// 1. OFFICIAL DHOW LOGO SVG COMPONENT
+// ==========================================
+const DhowLogo = ({ className = "h-8 w-auto" }) => (
+  <svg viewBox="0 0 280 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    {/* Stylized Dhow Sail / Waves Icon */}
+    <path d="M15 50C15 30 35 15 55 10C35 25 25 45 25 65H15V50Z" fill="#00A3E0" />
+    <path d="M32 45C32 25 50 12 70 8C50 20 40 38 40 58H32V45Z" fill="#00C4F0" />
+    <path d="M48 40C48 22 64 10 82 6C65 18 56 34 56 52H48V40Z" fill="#0090D4" />
+    <path d="M20 62H75C75 50 68 38 55 35C42 38 28 50 20 62Z" fill="#00588A" />
+    
+    {/* Text: Dhow Engineering */}
+    <text x="92" y="42" fill="currentColor" font-family="system-ui, -apple-system, sans-serif" font-weight="900" font-size="28" letter-spacing="-0.5">
+      Dhow
+    </text>
+    <text x="92" y="60" fill="currentColor" font-family="system-ui, -apple-system, sans-serif" font-weight="700" font-size="11" letter-spacing="3.5" opacity="0.85">
+      ENGINEERING
+    </text>
+  </svg>
+);
+
+// ==========================================
+// 2. INITIAL SYSTEM USERS (RBAC & AUTH)
 // ==========================================
 const INITIAL_USERS = [
   {
@@ -98,7 +119,7 @@ const getRoleDefaultPermissions = (role) => {
 };
 
 // ==========================================
-// 2. INITIAL APARTMENT / CAMP HIERARCHY
+// 3. INITIAL APARTMENT / CAMP HIERARCHY
 // ==========================================
 const INITIAL_CAMPS = [
   {
@@ -292,7 +313,7 @@ const INITIAL_CAMPS = [
 ];
 
 // ==========================================
-// 3. INITIAL OCCUPANTS (Book1.xlsx)
+// 4. INITIAL OCCUPANTS (Book1.xlsx)
 // ==========================================
 const INITIAL_OCCUPANTS = [
   {
@@ -322,7 +343,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-5838',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1IDS051',
     exitDate: '',
     afrExitRef: '',
@@ -355,7 +376,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-6104',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1IDS051',
     exitDate: '',
     afrExitRef: '',
@@ -388,7 +409,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-6290',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1MEP019',
     exitDate: '',
     afrExitRef: '',
@@ -421,7 +442,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '2026-11-25',
     leaveReturnDate: '',
     afrLogNo: 'LOG-5912',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1CIV011',
     exitDate: '',
     afrExitRef: '',
@@ -454,7 +475,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-7101',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1MEP019',
     exitDate: '',
     afrExitRef: '',
@@ -487,7 +508,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-7102',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1MEP019',
     exitDate: '',
     afrExitRef: '',
@@ -520,7 +541,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-7103',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1CIV011',
     exitDate: '',
     afrExitRef: '',
@@ -553,7 +574,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-7104',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1IDS038',
     exitDate: '',
     afrExitRef: '',
@@ -586,7 +607,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-8201',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1CIV011',
     exitDate: '',
     afrExitRef: '',
@@ -619,7 +640,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-8202',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1CIV011',
     exitDate: '',
     afrExitRef: '',
@@ -652,7 +673,7 @@ const INITIAL_OCCUPANTS = [
     leaveEndDate: '',
     leaveReturnDate: '',
     afrLogNo: 'LOG-9011',
-    residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+    residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
     reallocationCostCenter: '1IDS038',
     exitDate: '',
     afrExitRef: '',
@@ -662,22 +683,22 @@ const INITIAL_OCCUPANTS = [
 
 export default function App() {
   const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_users_v4');
+    const saved = localStorage.getItem('dhow_camp_users_v5');
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_session_v4');
+    const saved = localStorage.getItem('dhow_camp_session_v5');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [camps, setCamps] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_camps_v4');
+    const saved = localStorage.getItem('dhow_camp_camps_v5');
     return saved ? JSON.parse(saved) : INITIAL_CAMPS;
   });
 
   const [occupants, setOccupants] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_occupants_v4');
+    const saved = localStorage.getItem('dhow_camp_occupants_v5');
     return saved ? JSON.parse(saved) : INITIAL_OCCUPANTS;
   });
 
@@ -761,22 +782,22 @@ export default function App() {
   });
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_users_v4', JSON.stringify(users));
+    localStorage.setItem('dhow_camp_users_v5', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_camps_v4', JSON.stringify(camps));
+    localStorage.setItem('dhow_camp_camps_v5', JSON.stringify(camps));
   }, [camps]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_occupants_v4', JSON.stringify(occupants));
+    localStorage.setItem('dhow_camp_occupants_v5', JSON.stringify(occupants));
   }, [occupants]);
 
   useEffect(() => {
     if (currentUser && rememberMe) {
-      localStorage.setItem('dhow_camp_session_v4', JSON.stringify(currentUser));
+      localStorage.setItem('dhow_camp_session_v5', JSON.stringify(currentUser));
     } else if (!currentUser) {
-      localStorage.removeItem('dhow_camp_session_v4');
+      localStorage.removeItem('dhow_camp_session_v5');
     }
   }, [currentUser, rememberMe]);
 
@@ -829,7 +850,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('dhow_camp_session_v4');
+    localStorage.removeItem('dhow_camp_session_v5');
     setActiveTab('map');
   };
 
@@ -1301,20 +1322,20 @@ export default function App() {
   };
 
   // =========================================================
-  // VIEW 1: SIGN-IN SCREEN WITH DHOW VECTOR BRANDING
+  // VIEW 1: SIGN-IN SCREEN WITH DHOW LOGO
   // =========================================================
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between p-4 sm:p-6 font-sans antialiased">
         <div className="w-full pt-4" />
 
-        <div className="w-full max-w-[420px] mx-auto my-auto">
+        <div className="w-full max-w-[440px] mx-auto my-auto">
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-700 rounded-2xl shadow-lg shadow-cyan-500/20 mb-3 text-white">
-              <Compass className="w-8 h-8" />
+            <div className="inline-flex items-center justify-center p-3.5 bg-white border border-slate-200/90 rounded-2xl shadow-lg mb-3">
+              <DhowLogo className="h-10 w-auto text-slate-900" />
             </div>
-            <h1 className="text-2xl font-black tracking-tight text-slate-900">
-              DHOW <span className="text-cyan-600">CAMP MANAGEMENT</span>
+            <h1 className="text-2xl font-black tracking-tight text-slate-900 uppercase">
+              Camp Management System
             </h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
               Dhow Engineering • Cost Center 1ACD000
@@ -1458,13 +1479,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
       {/* ======================================================= */}
-      {/* TOP DARK NAVY ERP HEADER WITH VECTOR LOGO               */}
+      {/* TOP DARK NAVY ERP HEADER WITH DHOW LOGO                 */}
       {/* ======================================================= */}
       <header className="bg-[#0f172a] text-white shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25 shrink-0 text-white">
-              <Compass className="w-6 h-6" />
+            <div className="bg-white px-3 py-2 rounded-xl shadow-md shrink-0 flex items-center justify-center">
+              <DhowLogo className="h-7 w-auto text-slate-900" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
