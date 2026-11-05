@@ -1476,8 +1476,8 @@ export default function App() {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white uppercase">
-                  Dhow Camp Management System
+                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white titlecase">
+                  Camp Management System
                 </h1>
                 <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-indigo-950/90 text-indigo-300 border border-indigo-700/60">
                   Cost Center: 1ACD000
