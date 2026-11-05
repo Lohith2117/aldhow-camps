@@ -3,7 +3,7 @@ import {
   Building2, Users, ShieldCheck, Eye, EyeOff, Lock, Mail, LogOut,
   Plus, Search, Filter, Download, CheckCircle2, AlertCircle, Trash2,
   UserPlus, KeyRound, Bed, Home, RefreshCw, X, ChevronRight, UserCheck,
-  Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings
+  Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings, Compass
 } from 'lucide-react';
 
 // ==========================================
@@ -292,7 +292,7 @@ const INITIAL_CAMPS = [
 ];
 
 // ==========================================
-// 3. INITIAL 31-COLUMN OCCUPANTS (Book1.xlsx)
+// 3. INITIAL OCCUPANTS (Book1.xlsx)
 // ==========================================
 const INITIAL_OCCUPANTS = [
   {
@@ -661,35 +661,31 @@ const INITIAL_OCCUPANTS = [
 ];
 
 export default function App() {
-  // ==========================================
-  // STATE INITIALIZATION & PERSISTENCE
-  // ==========================================
   const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_users_v3');
+    const saved = localStorage.getItem('dhow_camp_users_v4');
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_session_v3');
+    const saved = localStorage.getItem('dhow_camp_session_v4');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [camps, setCamps] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_camps_v3');
+    const saved = localStorage.getItem('dhow_camp_camps_v4');
     return saved ? JSON.parse(saved) : INITIAL_CAMPS;
   });
 
   const [occupants, setOccupants] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_occupants_v3');
+    const saved = localStorage.getItem('dhow_camp_occupants_v4');
     return saved ? JSON.parse(saved) : INITIAL_OCCUPANTS;
   });
 
-  // Navigation Tabs: 'map' | 'occupants' | 'reports' | 'admin'
   const [activeTab, setActiveTab] = useState('map');
   const [selectedCampId, setSelectedCampId] = useState(INITIAL_CAMPS[0].id);
   const [selectedFloorNo, setSelectedFloorNo] = useState(1);
 
-  // Login Form States
+  // Login Form
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -710,12 +706,12 @@ export default function App() {
   const [confirmPasswordValue, setConfirmPasswordValue] = useState('');
   const [resetSuccessMessage, setResetSuccessMessage] = useState('');
 
-  // Search & Filter States
+  // Search & Filters
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [divisionFilter, setDivisionFilter] = useState('ALL');
 
-  // New Camp Wizard State
+  // New Camp Wizard
   const [newCampForm, setNewCampForm] = useState({
     campNo: 'CAMP-03',
     campArea: 'Fahaheel Block A',
@@ -728,7 +724,7 @@ export default function App() {
     upperFloorCapacity: 3
   });
 
-  // AFR Check-In Form State
+  // Check-In Form
   const [checkInForm, setCheckInForm] = useState({
     campId: 'camp-1',
     floorNo: 1,
@@ -748,7 +744,7 @@ export default function App() {
     entryDate: new Date().toISOString().slice(0, 10)
   });
 
-  // New User Form State
+  // New User Form
   const [newUserForm, setNewUserForm] = useState({
     staffId: '',
     name: '',
@@ -764,30 +760,26 @@ export default function App() {
     canExportReports: true,
   });
 
-  // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('dhow_camp_users_v3', JSON.stringify(users));
+    localStorage.setItem('dhow_camp_users_v4', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_camps_v3', JSON.stringify(camps));
+    localStorage.setItem('dhow_camp_camps_v4', JSON.stringify(camps));
   }, [camps]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_occupants_v3', JSON.stringify(occupants));
+    localStorage.setItem('dhow_camp_occupants_v4', JSON.stringify(occupants));
   }, [occupants]);
 
   useEffect(() => {
     if (currentUser && rememberMe) {
-      localStorage.setItem('dhow_camp_session_v3', JSON.stringify(currentUser));
+      localStorage.setItem('dhow_camp_session_v4', JSON.stringify(currentUser));
     } else if (!currentUser) {
-      localStorage.removeItem('dhow_camp_session_v3');
+      localStorage.removeItem('dhow_camp_session_v4');
     }
   }, [currentUser, rememberMe]);
 
-  // ==========================================
-  // AUTHENTICATION HANDLERS
-  // ==========================================
   const handleLogin = (e) => {
     e.preventDefault();
     setLoginError('');
@@ -837,13 +829,10 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('dhow_camp_session_v3');
+    localStorage.removeItem('dhow_camp_session_v4');
     setActiveTab('map');
   };
 
-  // ==========================================
-  // GLOBAL & BUILDING METRICS COMPUTATION
-  // ==========================================
   const globalStats = useMemo(() => {
     let totalFlats = 0;
     let totalRooms = 0;
@@ -891,7 +880,6 @@ export default function App() {
     return activeCamp.floors.find(f => f.floorNo === selectedFloorNo) || activeCamp.floors[0];
   }, [activeCamp, selectedFloorNo]);
 
-  // Filtered Occupants
   const filteredOccupants = useMemo(() => {
     return occupants.filter(occ => {
       const q = searchTerm.toLowerCase();
@@ -914,9 +902,6 @@ export default function App() {
     return Array.from(new Set(occupants.map(o => o.division))).filter(Boolean);
   }, [occupants]);
 
-  // ==========================================
-  // OPERATIONAL HANDLERS
-  // ==========================================
   const handleCreateCamp = (e) => {
     e.preventDefault();
     const campDigit = newCampForm.campDigit || String(camps.length + 1);
@@ -1034,7 +1019,7 @@ export default function App() {
       leaveEndDate: '',
       leaveReturnDate: '',
       afrLogNo: `LOG-${empId}`,
-      residencyCompany: 'AL-DHOW ENGINEERING GENERAL TRADING & CONTRACTING Company',
+      residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
       reallocationCostCenter: checkInForm.costCenter.split('-')[0],
       exitDate: '',
       afrExitRef: '',
@@ -1115,7 +1100,6 @@ export default function App() {
     }
   };
 
-  // RBAC handlers
   const handleCreateUser = (e) => {
     e.preventDefault();
     const newUser = {
@@ -1317,7 +1301,7 @@ export default function App() {
   };
 
   // =========================================================
-  // VIEW 1: CLEAN WHITE SIGN-IN SCREEN
+  // VIEW 1: SIGN-IN SCREEN WITH DHOW VECTOR BRANDING
   // =========================================================
   if (!currentUser) {
     return (
@@ -1326,22 +1310,14 @@ export default function App() {
 
         <div className="w-full max-w-[420px] mx-auto my-auto">
           <div className="text-center mb-6">
-            <div className="inline-flex items-center justify-center p-2.5 bg-white border border-slate-200 rounded-2xl shadow-md mb-3">
-              <img
-                src="https://raw.githubusercontent.com/Lohith2117/aldhow-camps/main/public/logo.png"
-                alt="Dhow Engineering Logo"
-                className="h-10 object-contain"
-                onError={(e) => {
-                  // Fallback if image asset isn't fetched instantly
-                  e.target.style.display = 'none';
-                }}
-              />
+            <div className="inline-flex items-center justify-center w-14 h-14 bg-gradient-to-br from-cyan-500 to-blue-700 rounded-2xl shadow-lg shadow-cyan-500/20 mb-3 text-white">
+              <Compass className="w-8 h-8" />
             </div>
             <h1 className="text-2xl font-black tracking-tight text-slate-900">
-              DHOW <span className="text-indigo-600">CAMP MANAGEMENT</span>
+              DHOW <span className="text-cyan-600">CAMP MANAGEMENT</span>
             </h1>
             <p className="text-xs text-slate-500 font-medium mt-0.5">
-              Accommodation & Camp Operations (Cost Center 1ACD000)
+              Dhow Engineering • Cost Center 1ACD000
             </p>
           </div>
 
@@ -1371,7 +1347,7 @@ export default function App() {
                     if (loginError) setLoginError('');
                   }}
                   placeholder="name@al-dhow.com"
-                  className="w-full bg-white border border-slate-300 rounded-lg py-2.5 px-3.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all"
+                  className="w-full bg-white border border-slate-300 rounded-lg py-2.5 px-3.5 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-600 focus:border-transparent transition-all"
                 />
               </div>
 
@@ -1389,7 +1365,7 @@ export default function App() {
                       if (loginError) setLoginError('');
                     }}
                     placeholder="••••••••••••"
-                    className="w-full bg-white border border-slate-300 rounded-lg py-2.5 px-3.5 pr-10 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600 focus:border-transparent transition-all"
+                    className="w-full bg-white border border-slate-300 rounded-lg py-2.5 px-3.5 pr-10 text-sm text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-600 focus:border-transparent transition-all"
                   />
                   <button
                     type="button"
@@ -1407,14 +1383,14 @@ export default function App() {
                     type="checkbox"
                     checked={rememberMe}
                     onChange={(e) => setRememberMe(e.target.checked)}
-                    className="rounded border-slate-300 text-indigo-600 focus:ring-indigo-500"
+                    className="rounded border-slate-300 text-cyan-600 focus:ring-cyan-500"
                   />
                   Remember me
                 </label>
                 <button
                   type="button"
                   onClick={() => setShowForgotModal(true)}
-                  className="text-xs text-indigo-600 hover:text-indigo-700 font-semibold"
+                  className="text-xs text-cyan-600 hover:text-cyan-700 font-semibold"
                 >
                   Forgot your password?
                 </button>
@@ -1450,14 +1426,14 @@ export default function App() {
         {showForgotModal && (
           <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
             <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl">
-              <div className="w-12 h-12 rounded-full bg-indigo-50 text-indigo-600 flex items-center justify-center mx-auto">
+              <div className="w-12 h-12 rounded-full bg-cyan-50 text-cyan-600 flex items-center justify-center mx-auto">
                 <KeyRound className="w-6 h-6" />
               </div>
               <h3 className="text-lg font-bold text-slate-900">Password Recovery</h3>
               <p className="text-xs text-slate-600 leading-relaxed">
                 For security reasons, user passwords are encrypted and cannot be viewed. Please contact the Super Administrator to reset your password:
               </p>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-indigo-700 font-semibold">
+              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-cyan-700 font-semibold">
                 admin@al-dhow.com
               </div>
               <button
@@ -1482,17 +1458,13 @@ export default function App() {
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
       {/* ======================================================= */}
-      {/* TOP DARK NAVY ERP HEADER WITH DHOW LOGO                 */}
+      {/* TOP DARK NAVY ERP HEADER WITH VECTOR LOGO               */}
       {/* ======================================================= */}
       <header className="bg-[#0f172a] text-white shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
-            <div className="bg-white p-2 rounded-xl shadow-md shrink-0 flex items-center justify-center">
-              <img
-                src="https://raw.githubusercontent.com/Lohith2117/aldhow-camps/main/public/logo.png"
-                alt="Dhow Logo"
-                className="h-8 object-contain"
-              />
+            <div className="w-11 h-11 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/25 shrink-0 text-white">
+              <Compass className="w-6 h-6" />
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
@@ -1535,13 +1507,13 @@ export default function App() {
             onClick={() => setActiveTab('map')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'map'
-                ? 'bg-slate-800/90 text-white border-indigo-400'
+                ? 'bg-slate-800/90 text-white border-cyan-400'
                 : 'text-slate-400 hover:text-slate-200 border-transparent'
             }`}
           >
-            <Layers className="w-4 h-4 text-indigo-400" />
+            <Layers className="w-4 h-4 text-cyan-400" />
             <span>Interactive Apartment & Room Map</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-md bg-indigo-950 text-indigo-300 border border-indigo-800">
+            <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800">
               {globalStats.freeBeds} Free Spots
             </span>
           </button>
@@ -1550,7 +1522,7 @@ export default function App() {
             onClick={() => setActiveTab('occupants')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'occupants'
-                ? 'bg-slate-800/90 text-white border-indigo-400'
+                ? 'bg-slate-800/90 text-white border-cyan-400'
                 : 'text-slate-400 hover:text-slate-200 border-transparent'
             }`}
           >
@@ -1565,7 +1537,7 @@ export default function App() {
             onClick={() => setActiveTab('reports')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'reports'
-                ? 'bg-slate-800/90 text-white border-indigo-400'
+                ? 'bg-slate-800/90 text-white border-cyan-400'
                 : 'text-slate-400 hover:text-slate-200 border-transparent'
             }`}
           >
@@ -1581,7 +1553,7 @@ export default function App() {
               onClick={() => setActiveTab('admin')}
               className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
                 activeTab === 'admin'
-                  ? 'bg-slate-800/90 text-white border-indigo-400'
+                  ? 'bg-slate-800/90 text-white border-cyan-400'
                   : 'text-slate-400 hover:text-slate-200 border-transparent'
               }`}
             >
@@ -1610,7 +1582,7 @@ export default function App() {
             {isSuperAdmin && (
               <button
                 onClick={() => setActiveTab('admin')}
-                className="text-indigo-600 hover:text-indigo-800 font-semibold flex items-center gap-1 cursor-pointer"
+                className="text-cyan-600 hover:text-cyan-800 font-semibold flex items-center gap-1 cursor-pointer"
               >
                 <span>Manage Users & Role Permissions →</span>
               </button>
@@ -1621,12 +1593,12 @@ export default function App() {
 
       {/* Main Body Container */}
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
-        {/* 6 KPI SUMMARY CARDS ROW */}
+        {/* KPI SUMMARY CARDS */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
               <span>Apartments / Camps</span>
-              <Building2 className="w-4 h-4 text-indigo-500" />
+              <Building2 className="w-4 h-4 text-cyan-500" />
             </div>
             <div className="text-2xl font-black text-slate-900 mt-1.5">{globalStats.campsCount}</div>
             <div className="text-[11px] text-slate-400 mt-1">
@@ -1648,9 +1620,9 @@ export default function App() {
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
               <span>Occupied Spots</span>
-              <Users className="w-4 h-4 text-indigo-600" />
+              <Users className="w-4 h-4 text-cyan-600" />
             </div>
-            <div className="text-2xl font-black text-indigo-600 mt-1.5">{globalStats.occupiedBeds}</div>
+            <div className="text-2xl font-black text-cyan-600 mt-1.5">{globalStats.occupiedBeds}</div>
             <div className="text-[11px] text-slate-400 mt-1">
               {globalStats.occupancyPct}% Total Occupancy
             </div>
@@ -1729,7 +1701,7 @@ export default function App() {
                       }`}
                     >
                       <div className="text-xs font-bold">
-                        {camp.campNo} <span className={isSelected ? 'text-indigo-300' : 'text-slate-500'}>• {camp.campArea}</span>
+                        {camp.campNo} <span className={isSelected ? 'text-cyan-300' : 'text-slate-500'}>• {camp.campArea}</span>
                       </div>
                       <div className={`text-[11px] mt-0.5 ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
                         {camp.floors.length} Floors • {campFlats} Flats •{' '}
@@ -1756,7 +1728,7 @@ export default function App() {
               <div className="flex items-center gap-4 pt-1">
                 <div className="inline-flex items-center gap-4 px-3.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700">
                   <span className="flex items-center gap-1.5">
-                    <span className="w-2.5 h-2.5 rounded-full bg-indigo-600"></span> On Job
+                    <span className="w-2.5 h-2.5 rounded-full bg-cyan-600"></span> On Job
                   </span>
                   <span className="flex items-center gap-1.5">
                     <span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> On Leave
@@ -1791,7 +1763,7 @@ export default function App() {
                     onClick={() => setSelectedFloorNo(floor.floorNo)}
                     className={`bg-white rounded-2xl p-4 cursor-pointer transition-all border-2 ${
                       isFloorSelected
-                        ? 'border-indigo-600 shadow-md'
+                        ? 'border-cyan-600 shadow-md'
                         : 'border-slate-200 hover:border-slate-300'
                     }`}
                   >
@@ -1802,9 +1774,9 @@ export default function App() {
                         </span>
                         <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-md ${
                           floor.floorNo === 1
-                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                            : floor.floorNo === 2
                             ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
+                            : floor.floorNo === 2
+                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
                             : 'bg-amber-50 text-amber-700 border border-amber-200'
                         }`}>
                           {floor.floorGrade || (floor.floorNo === 1 ? 'Engineer' : 'Labor')}
@@ -1887,7 +1859,7 @@ export default function App() {
                                           </span>
                                           <span className="text-xs font-bold text-slate-900 truncate">{occ.employeeName}</span>
                                         </div>
-                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${isOnLeave ? 'bg-amber-200/80 text-amber-900' : 'bg-indigo-50 text-indigo-700 border border-indigo-200'}`}>
+                                        <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${isOnLeave ? 'bg-amber-200/80 text-amber-900' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'}`}>
                                           {isOnLeave ? '✈ On Leave' : 'On Job'}
                                         </span>
                                       </div>
@@ -1898,7 +1870,7 @@ export default function App() {
                                         </span>
                                         <button
                                           onClick={() => setManageOccupantModal(occ)}
-                                          className="text-slate-500 hover:text-indigo-600 font-semibold shrink-0 ml-2 cursor-pointer"
+                                          className="text-slate-500 hover:text-cyan-600 font-semibold shrink-0 ml-2 cursor-pointer"
                                         >
                                           Manage →
                                         </button>
@@ -1941,7 +1913,7 @@ export default function App() {
                   placeholder="Search by ID, Name, Civil ID, Passport, Flat, Room..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
-                  className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-indigo-600"
+                  className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-600"
                 />
               </div>
 
@@ -1981,7 +1953,7 @@ export default function App() {
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="px-4 py-3 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs text-slate-600 font-medium">
                 <span>Showing {filteredOccupants.length} of {occupants.length} Master Records</span>
-                <span className="font-mono text-indigo-600 font-bold">1ACD000 — 31 Columns Active</span>
+                <span className="font-mono text-cyan-600 font-bold">1ACD000 — 31 Columns Active</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
@@ -2010,10 +1982,10 @@ export default function App() {
                       <tr key={occ.employeeId} className="hover:bg-slate-50">
                         <td className="py-2.5 px-3 font-mono text-slate-500">{occ.srNo}</td>
                         <td className="py-2.5 px-3 font-bold text-slate-900">{occ.campNo}</td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-600">#{occ.employeeId}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-cyan-600">#{occ.employeeId}</td>
                         <td className="py-2.5 px-3 font-semibold text-slate-900">{occ.employeeName}</td>
                         <td className="py-2.5 px-3">
-                          <span className="px-2 py-0.5 rounded bg-indigo-50 text-indigo-700 font-mono text-[10px] font-bold">
+                          <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 font-mono text-[10px] font-bold">
                             {occ.division}
                           </span>
                         </td>
@@ -2028,7 +2000,7 @@ export default function App() {
                           </span>
                         </td>
                         <td className="py-2.5 px-3 font-mono font-bold text-slate-800">{occ.flatCode}</td>
-                        <td className="py-2.5 px-3 font-mono font-bold text-indigo-600">{occ.roomNo}</td>
+                        <td className="py-2.5 px-3 font-mono font-bold text-cyan-600">{occ.roomNo}</td>
                         <td className="py-2.5 px-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             occ.employeeStatus === 'On Job' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : occ.employeeStatus === 'On Leave' ? 'bg-amber-100 text-amber-800' : 'bg-rose-50 text-rose-700'
@@ -2040,7 +2012,7 @@ export default function App() {
                         <td className="py-2.5 px-3">
                           <button
                             onClick={() => setManageOccupantModal(occ)}
-                            className="text-indigo-600 hover:underline font-semibold cursor-pointer"
+                            className="text-cyan-600 hover:underline font-semibold cursor-pointer"
                           >
                             Manage
                           </button>
@@ -2059,7 +2031,7 @@ export default function App() {
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <Building2 className="w-4 h-4 text-indigo-600" />
+                <Building2 className="w-4 h-4 text-cyan-600" />
                 Occupancy & Free Spots by Camp Building
               </h3>
               <div className="space-y-3">
@@ -2080,7 +2052,7 @@ export default function App() {
                         <span className="text-emerald-700">{free} Free / {beds} Total Beds ({pct}%)</span>
                       </div>
                       <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
-                        <div className="h-full bg-indigo-600 rounded-full" style={{ width: `${pct}%` }} />
+                        <div className="h-full bg-cyan-600 rounded-full" style={{ width: `${pct}%` }} />
                       </div>
                     </div>
                   );
@@ -2090,7 +2062,7 @@ export default function App() {
 
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
               <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-                <BarChart3 className="w-4 h-4 text-indigo-600" />
+                <BarChart3 className="w-4 h-4 text-cyan-600" />
                 Division & Project Cost Center Allocation
               </h3>
               <div className="space-y-2.5">
@@ -2099,7 +2071,7 @@ export default function App() {
                   return (
                     <div key={div} className="flex items-center justify-between p-3 rounded-xl bg-slate-50 border border-slate-200 text-xs">
                       <span className="font-bold text-slate-800">Division: {div}</span>
-                      <span className="px-2.5 py-1 rounded-lg bg-indigo-50 text-indigo-700 font-bold">{count} Active Employees</span>
+                      <span className="px-2.5 py-1 rounded-lg bg-cyan-50 text-cyan-700 font-bold">{count} Active Employees</span>
                     </div>
                   );
                 })}
@@ -2114,7 +2086,7 @@ export default function App() {
             <div className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
               <div>
                 <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                  <ShieldCheck className="w-5 h-5 text-indigo-600" />
+                  <ShieldCheck className="w-5 h-5 text-cyan-600" />
                   System Users & Role-Based Access Control (RBAC)
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
@@ -2123,7 +2095,7 @@ export default function App() {
               </div>
               <button
                 onClick={() => setShowAddUserModal(true)}
-                className="bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 self-start sm:self-auto cursor-pointer"
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 self-start sm:self-auto cursor-pointer"
               >
                 <UserPlus className="w-4 h-4" />
                 Add System User
@@ -2149,7 +2121,7 @@ export default function App() {
                   <tbody className="divide-y divide-slate-200">
                     {users.map(u => (
                       <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
-                        <td className="py-3.5 px-4 font-mono font-bold text-indigo-600">{u.staffId}</td>
+                        <td className="py-3.5 px-4 font-mono font-bold text-cyan-600">{u.staffId}</td>
                         <td className="py-3.5 px-4">
                           <div className="font-bold text-slate-900">{u.name}</div>
                           <div className="text-[11px] text-slate-400">{u.title || 'Staff Member'}</div>
@@ -2159,8 +2131,8 @@ export default function App() {
                           <select
                             value={u.role}
                             onChange={(e) => handleInlineRoleChange(u.id, e.target.value)}
-                            className={`text-[11px] font-bold uppercase px-2.5 py-1.5 rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-all ${
-                              u.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800 border-purple-200' : u.role === 'CAMP_EDITOR' ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-700 border-slate-200'
+                            className={`text-[11px] font-bold uppercase px-2.5 py-1.5 rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all ${
+                              u.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800 border-purple-200' : u.role === 'CAMP_EDITOR' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-slate-100 text-slate-700 border-slate-200'
                             }`}
                           >
                             <option value="SUPER_ADMIN">SUPER_ADMIN</option>
@@ -2172,7 +2144,7 @@ export default function App() {
                           <select
                             value={u.campScope}
                             onChange={(e) => handleInlineScopeChange(u.id, e.target.value)}
-                            className="bg-slate-50 border border-slate-200 text-slate-800 font-mono text-[11px] font-bold rounded-lg px-2.5 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-indigo-500"
+                            className="bg-slate-50 border border-slate-200 text-slate-800 font-mono text-[11px] font-bold rounded-lg px-2.5 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500"
                           >
                             <option value="ALL">ALL</option>
                             {camps.map(c => (
@@ -2195,7 +2167,7 @@ export default function App() {
                               type="button"
                               onClick={() => handleToggleUserPermission(u.id, 'canAddCamps')}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canAddCamps ? 'bg-indigo-50 text-indigo-700 border-indigo-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                u.permissions?.canAddCamps ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
                               }`}
                             >
                               Add Camps
@@ -2204,7 +2176,7 @@ export default function App() {
                               type="button"
                               onClick={() => handleToggleUserPermission(u.id, 'canExportReports')}
                               className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canExportReports ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
+                                u.permissions?.canExportReports ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
                               }`}
                             >
                               Export
@@ -2238,7 +2210,7 @@ export default function App() {
                                 setTargetUserForReset(u);
                                 setShowResetPasswordModal(true);
                               }}
-                              className="px-2.5 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold border border-indigo-200 flex items-center gap-1 cursor-pointer"
+                              className="px-2.5 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg text-xs font-semibold border border-cyan-200 flex items-center gap-1 cursor-pointer"
                             >
                               <KeyRound className="w-3.5 h-3.5" />
                               Reset Password
@@ -2360,7 +2332,7 @@ export default function App() {
               </div>
 
               <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <div className="font-bold text-indigo-700">Room Capacity Rules</div>
+                <div className="font-bold text-cyan-700">Room Capacity Rules</div>
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-600 mb-1">Floor 1 (Engineer) Beds/Room</label>
@@ -2408,7 +2380,7 @@ export default function App() {
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-indigo-600" />
+                <UserPlus className="w-5 h-5 text-cyan-600" />
                 Dhow Employee Room Assignment
               </h3>
               <button onClick={() => setShowCheckInModal(false)} className="text-slate-400 hover:text-slate-700">
@@ -2416,9 +2388,9 @@ export default function App() {
               </button>
             </div>
 
-            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-xl text-xs flex items-center justify-between">
+            <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-xl text-xs flex items-center justify-between">
               <span>Target Room: <strong>{checkInForm.roomNo}</strong> (Flat {checkInForm.flatCode})</span>
-              <span className="font-bold text-indigo-700">{checkInForm.roomGrade} Grade</span>
+              <span className="font-bold text-cyan-700">{checkInForm.roomGrade} Grade</span>
             </div>
 
             <form onSubmit={handleCheckInSubmit} className="space-y-3 text-xs">
@@ -2515,7 +2487,7 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold"
+                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold"
                 >
                   Confirm Room Check-In
                 </button>
@@ -2546,7 +2518,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-2.5">
                 <button
                   onClick={() => handleUpdateOccupantStatus(manageOccupantModal.employeeId, 'On Job')}
-                  className={`py-2.5 px-3 rounded-xl font-bold border ${manageOccupantModal.employeeStatus === 'On Job' ? 'bg-indigo-600 text-white border-indigo-600' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
+                  className={`py-2.5 px-3 rounded-xl font-bold border ${manageOccupantModal.employeeStatus === 'On Job' ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-slate-50 text-slate-700 border-slate-200'}`}
                 >
                   Mark On Job
                 </button>
@@ -2576,7 +2548,7 @@ export default function App() {
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-indigo-600" />
+                <UserPlus className="w-5 h-5 text-cyan-600" />
                 Add System User Account
               </h3>
               <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-slate-700">
@@ -2687,7 +2659,7 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 text-white rounded-xl font-bold"
+                  className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold"
                 >
                   Create User
                 </button>
@@ -2702,7 +2674,7 @@ export default function App() {
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Settings className="w-5 h-5 text-indigo-600" />
+                <Settings className="w-5 h-5 text-cyan-600" />
                 Edit User Role & Permissions ({editingUserModal.staffId})
               </h3>
               <button onClick={() => setEditingUserModal(null)} className="text-slate-400 hover:text-slate-700">
@@ -2746,7 +2718,7 @@ export default function App() {
                       }
                       setEditingUserModal({ ...editingUserModal, role: nextRole, permissions: getRoleDefaultPermissions(nextRole) });
                     }}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold text-indigo-700"
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold text-cyan-700"
                   >
                     <option value="SUPER_ADMIN">SUPER_ADMIN (Full Control)</option>
                     <option value="CAMP_EDITOR">CAMP_EDITOR (Can Edit)</option>
@@ -2779,7 +2751,7 @@ export default function App() {
                 </button>
                 <button
                   type="submit"
-                  className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold shadow-md"
+                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold shadow-md"
                 >
                   Save Role & Permissions
                 </button>
@@ -2794,7 +2766,7 @@ export default function App() {
           <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-indigo-600" />
+                <KeyRound className="w-5 h-5 text-cyan-600" />
                 Reset User Password
               </h3>
               <button
@@ -2855,7 +2827,7 @@ export default function App() {
                   </button>
                   <button
                     type="submit"
-                    className="px-5 py-2 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold"
+                    className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold"
                   >
                     Update Password
                   </button>
