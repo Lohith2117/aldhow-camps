@@ -6,6 +6,7 @@ import {
   Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings,
   Receipt, Printer, Edit3, SlidersHorizontal, ArrowRightLeft
 } from 'lucide-react';
+import dhowLogoImg from './assets/dhow-logo.png';
 
 // ==========================================
 // 1. OFFICIAL DHOW LOGO SVG COMPONENT
