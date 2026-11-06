@@ -1,17 +1,28 @@
-import dhowLogoImg from './assets/dhow-logo.png';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   Building2, Users, ShieldCheck, Eye, EyeOff, Lock, Mail, LogOut,
   Plus, Search, Filter, Download, CheckCircle2, AlertCircle, Trash2,
   UserPlus, KeyRound, Bed, Home, RefreshCw, X, ChevronRight, UserCheck,
-  Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings
+  Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings,
+  Receipt, Printer, FileText, Check, DollarSign, Edit3
 } from 'lucide-react';
+
+// ==========================================
+// 1. OFFICIAL DHOW LOGO SVG COMPONENT
+// ==========================================
 const DhowLogo = ({ className = "h-8 w-auto" }) => (
-  <img
-    src={dhowLogoImg}
-    alt="Dhow Engineering"
-    className={className}
-  />
+  <svg viewBox="0 0 280 80" fill="none" xmlns="http://www.w3.org/2000/svg" className={className}>
+    <path d="M15 50C15 30 35 15 55 10C35 25 25 45 25 65H15V50Z" fill="#00A3E0" />
+    <path d="M32 45C32 25 50 12 70 8C50 20 40 38 40 58H32V45Z" fill="#00C4F0" />
+    <path d="M48 40C48 22 64 10 82 6C65 18 56 34 56 52H48V40Z" fill="#0090D4" />
+    <path d="M20 62H75C75 50 68 38 55 35C42 38 28 50 20 62Z" fill="#00588A" />
+    <text x="92" y="42" fill="currentColor" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="900" fontSize="28" letterSpacing="-0.5">
+      Dhow
+    </text>
+    <text x="92" y="60" fill="currentColor" fontFamily="system-ui, -apple-system, sans-serif" fontWeight="700" fontSize="11" letterSpacing="3.5" opacity="0.85">
+      ENGINEERING
+    </text>
+  </svg>
 );
 
 // ==========================================
@@ -34,8 +45,9 @@ const INITIAL_USERS = [
       canDeleteCamps: true,
       canEditOccupants: true,
       canExportReports: true,
+      canManageInvoices: true,
     },
-    lastLogin: '2026-11-05 10:20 AM'
+    lastLogin: '2026-11-06 09:15 AM'
   },
   {
     id: 'u-2',
@@ -53,8 +65,9 @@ const INITIAL_USERS = [
       canDeleteCamps: false,
       canEditOccupants: true,
       canExportReports: true,
+      canManageInvoices: true,
     },
-    lastLogin: '2026-11-04 04:15 PM'
+    lastLogin: '2026-11-05 04:15 PM'
   },
   {
     id: 'u-3',
@@ -72,8 +85,9 @@ const INITIAL_USERS = [
       canDeleteCamps: false,
       canEditOccupants: false,
       canExportReports: true,
+      canManageInvoices: false,
     },
-    lastLogin: '2026-11-03 09:30 AM'
+    lastLogin: '2026-11-04 11:30 AM'
   }
 ];
 
@@ -85,6 +99,7 @@ const getRoleDefaultPermissions = (role) => {
       canDeleteCamps: true,
       canEditOccupants: true,
       canExportReports: true,
+      canManageInvoices: true,
     };
   }
   if (role === 'CAMP_EDITOR') {
@@ -94,6 +109,7 @@ const getRoleDefaultPermissions = (role) => {
       canDeleteCamps: false,
       canEditOccupants: true,
       canExportReports: true,
+      canManageInvoices: true,
     };
   }
   return {
@@ -102,11 +118,13 @@ const getRoleDefaultPermissions = (role) => {
     canDeleteCamps: false,
     canEditOccupants: false,
     canExportReports: true,
+    canManageInvoices: false,
   };
 };
 
 // ==========================================
 // 3. INITIAL APARTMENT / CAMP HIERARCHY
+// (Flats have independent room grades)
 // ==========================================
 const INITIAL_CAMPS = [
   {
@@ -118,7 +136,6 @@ const INITIAL_CAMPS = [
     floors: [
       {
         floorNo: 1,
-        floorGrade: 'Engineer',
         flats: [
           {
             flatNo: 1,
@@ -142,19 +159,18 @@ const INITIAL_CAMPS = [
           },
           {
             flatNo: 3,
-            flatCode: '1-01-03-E',
-            roomGrade: 'Engineer',
+            flatCode: '1-01-03-F',
+            roomGrade: 'Foreman',
             rooms: [
-              { roomNo: '1-01-03-A', capacity: 2, occupants: [] },
-              { roomNo: '1-01-03-B', capacity: 2, occupants: [] },
-              { roomNo: '1-01-03-C', capacity: 2, occupants: [] },
+              { roomNo: '1-01-03-A', capacity: 3, occupants: [] },
+              { roomNo: '1-01-03-B', capacity: 3, occupants: [] },
+              { roomNo: '1-01-03-C', capacity: 3, occupants: [] },
             ]
           }
         ]
       },
       {
         floorNo: 2,
-        floorGrade: 'Foreman',
         flats: [
           {
             flatNo: 1,
@@ -168,8 +184,8 @@ const INITIAL_CAMPS = [
           },
           {
             flatNo: 2,
-            flatCode: '1-02-02-F',
-            roomGrade: 'Foreman',
+            flatCode: '1-02-02-L',
+            roomGrade: 'Labor',
             rooms: [
               { roomNo: '1-02-02-A', capacity: 3, occupants: [] },
               { roomNo: '1-02-02-B', capacity: 3, occupants: [] },
@@ -178,8 +194,8 @@ const INITIAL_CAMPS = [
           },
           {
             flatNo: 3,
-            flatCode: '1-02-03-F',
-            roomGrade: 'Foreman',
+            flatCode: '1-02-03-L',
+            roomGrade: 'Labor',
             rooms: [
               { roomNo: '1-02-03-A', capacity: 3, occupants: [] },
               { roomNo: '1-02-03-B', capacity: 3, occupants: [] },
@@ -190,7 +206,6 @@ const INITIAL_CAMPS = [
       },
       {
         floorNo: 3,
-        floorGrade: 'Labor',
         flats: [
           {
             flatNo: 1,
@@ -235,7 +250,6 @@ const INITIAL_CAMPS = [
     floors: [
       {
         floorNo: 1,
-        floorGrade: 'Engineer',
         flats: [
           {
             flatNo: 1,
@@ -249,19 +263,18 @@ const INITIAL_CAMPS = [
           },
           {
             flatNo: 2,
-            flatCode: '2-01-02-E',
-            roomGrade: 'Engineer',
+            flatCode: '2-01-02-L',
+            roomGrade: 'Labor',
             rooms: [
-              { roomNo: '2-01-02-A', capacity: 2, occupants: [] },
-              { roomNo: '2-01-02-B', capacity: 2, occupants: [] },
-              { roomNo: '2-01-02-C', capacity: 2, occupants: [] },
+              { roomNo: '2-01-02-A', capacity: 3, occupants: [] },
+              { roomNo: '2-01-02-B', capacity: 3, occupants: [] },
+              { roomNo: '2-01-02-C', capacity: 3, occupants: [] },
             ]
           }
         ]
       },
       {
         floorNo: 2,
-        floorGrade: 'Labor',
         flats: [
           {
             flatNo: 1,
@@ -669,31 +682,42 @@ const INITIAL_OCCUPANTS = [
 ];
 
 export default function App() {
+  // Persistence
   const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_users_v5');
+    const saved = localStorage.getItem('dhow_camp_users_v6');
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_session_v5');
+    const saved = localStorage.getItem('dhow_camp_session_v6');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [camps, setCamps] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_camps_v5');
+    const saved = localStorage.getItem('dhow_camp_camps_v6');
     return saved ? JSON.parse(saved) : INITIAL_CAMPS;
   });
 
   const [occupants, setOccupants] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_occupants_v5');
+    const saved = localStorage.getItem('dhow_camp_occupants_v6');
     return saved ? JSON.parse(saved) : INITIAL_OCCUPANTS;
   });
 
+  // Monthly Billing Rates (KWD per bed per month)
+  const [billingRates, setBillingRates] = useState(() => {
+    const saved = localStorage.getItem('dhow_camp_billing_rates');
+    return saved ? JSON.parse(saved) : { engineer: 75, foreman: 45, labor: 30 };
+  });
+
+  // Selected billing cycle
+  const [billingMonth, setBillingMonth] = useState('2026-11');
+
+  // Navigation Tabs: 'map' | 'occupants' | 'reports' | 'invoicing' | 'admin'
   const [activeTab, setActiveTab] = useState('map');
   const [selectedCampId, setSelectedCampId] = useState(INITIAL_CAMPS[0].id);
   const [selectedFloorNo, setSelectedFloorNo] = useState(1);
 
-  // Login Form
+  // Login Form States
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -704,6 +728,8 @@ export default function App() {
 
   // Modals
   const [showAddCampModal, setShowAddCampModal] = useState(false);
+  const [editingCampModal, setEditingCampModal] = useState(null);
+  const [editingFlatModal, setEditingFlatModal] = useState(null);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [manageOccupantModal, setManageOccupantModal] = useState(null);
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -714,7 +740,11 @@ export default function App() {
   const [confirmPasswordValue, setConfirmPasswordValue] = useState('');
   const [resetSuccessMessage, setResetSuccessMessage] = useState('');
 
-  // Search & Filters
+  // Invoicing Specific Modals
+  const [selectedInvoiceView, setSelectedInvoiceView] = useState(null);
+  const [showRatesModal, setShowRatesModal] = useState(false);
+
+  // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [divisionFilter, setDivisionFilter] = useState('ALL');
@@ -727,9 +757,7 @@ export default function App() {
     floorsCount: 3,
     flatsPerFloor: 3,
     roomsPerFlat: 3,
-    floor1Grade: 'Engineer',
-    floor1Capacity: 2,
-    upperFloorCapacity: 3
+    engineerFlatsCount: 1, // Number of engineer flats
   });
 
   // Check-In Form
@@ -766,25 +794,30 @@ export default function App() {
     canDeleteCamps: false,
     canEditOccupants: true,
     canExportReports: true,
+    canManageInvoices: true,
   });
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_users_v5', JSON.stringify(users));
+    localStorage.setItem('dhow_camp_users_v6', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_camps_v5', JSON.stringify(camps));
+    localStorage.setItem('dhow_camp_camps_v6', JSON.stringify(camps));
   }, [camps]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_occupants_v5', JSON.stringify(occupants));
+    localStorage.setItem('dhow_camp_occupants_v6', JSON.stringify(occupants));
   }, [occupants]);
 
   useEffect(() => {
+    localStorage.setItem('dhow_camp_billing_rates', JSON.stringify(billingRates));
+  }, [billingRates]);
+
+  useEffect(() => {
     if (currentUser && rememberMe) {
-      localStorage.setItem('dhow_camp_session_v5', JSON.stringify(currentUser));
+      localStorage.setItem('dhow_camp_session_v6', JSON.stringify(currentUser));
     } else if (!currentUser) {
-      localStorage.removeItem('dhow_camp_session_v5');
+      localStorage.removeItem('dhow_camp_session_v6');
     }
   }, [currentUser, rememberMe]);
 
@@ -837,7 +870,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('dhow_camp_session_v5');
+    localStorage.removeItem('dhow_camp_session_v6');
     setActiveTab('map');
   };
 
@@ -888,6 +921,61 @@ export default function App() {
     return activeCamp.floors.find(f => f.floorNo === selectedFloorNo) || activeCamp.floors[0];
   }, [activeCamp, selectedFloorNo]);
 
+  // ==========================================
+  // INVOICING COMPUTATIONS (Grouped by Cost Center)
+  // ==========================================
+  const projectInvoices = useMemo(() => {
+    const activeOccs = occupants.filter(o => o.employeeStatus !== 'Exited');
+    const costCenterMap = {};
+
+    activeOccs.forEach(occ => {
+      const cc = occ.costCenter || 'UNASSIGNED';
+      if (!costCenterMap[cc]) {
+        costCenterMap[cc] = {
+          costCenter: cc,
+          division: occ.division || 'GENERAL',
+          residencyCompany: occ.residencyCompany || 'Dhow Engineering',
+          engineers: [],
+          foremen: [],
+          laborers: [],
+          totalOccupants: 0,
+        };
+      }
+
+      const grade = (occ.roomGrade || '').toLowerCase();
+      if (grade.includes('engineer')) {
+        costCenterMap[cc].engineers.push(occ);
+      } else if (grade.includes('foreman')) {
+        costCenterMap[cc].foremen.push(occ);
+      } else {
+        costCenterMap[cc].laborers.push(occ);
+      }
+      costCenterMap[cc].totalOccupants += 1;
+    });
+
+    return Object.values(costCenterMap).map((inv, idx) => {
+      const engAmount = inv.engineers.length * billingRates.engineer;
+      const foremanAmount = inv.foremen.length * billingRates.foreman;
+      const laborAmount = inv.laborers.length * billingRates.labor;
+      const totalAmount = engAmount + foremanAmount + laborAmount;
+      const invoiceNumber = `INV-${billingMonth.replace('-', '')}-${String(idx + 1).padStart(3, '0')}`;
+
+      return {
+        ...inv,
+        invoiceNumber,
+        billingMonth,
+        ratesApplied: { ...billingRates },
+        amounts: { engAmount, foremanAmount, laborAmount, totalAmount },
+        status: 'Generated'
+      };
+    });
+  }, [occupants, billingRates, billingMonth]);
+
+  const totalInvoicedAmount = useMemo(() => {
+    return projectInvoices.reduce((sum, inv) => sum + inv.amounts.totalAmount, 0);
+  }, [projectInvoices]);
+
+  // Filtered Occupants
   const filteredOccupants = useMemo(() => {
     return occupants.filter(occ => {
       const q = searchTerm.toLowerCase();
@@ -910,24 +998,39 @@ export default function App() {
     return Array.from(new Set(occupants.map(o => o.division))).filter(Boolean);
   }, [occupants]);
 
+  // ==========================================
+  // CAMP & FLAT EDITING HANDLERS
+  // ==========================================
   const handleCreateCamp = (e) => {
     e.preventDefault();
     const campDigit = newCampForm.campDigit || String(camps.length + 1);
     const totalFloors = parseInt(newCampForm.floorsCount, 10);
     const flatsPerFl = parseInt(newCampForm.flatsPerFloor, 10);
     const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10);
+    const engFlats = parseInt(newCampForm.engineerFlatsCount || 1, 10);
 
     const generatedFloors = [];
-    for (let f = 1; f <= totalFloors; f++) {
-      const isFloor1 = f === 1;
-      const flatGrade = isFloor1 ? newCampForm.floor1Grade : 'Labor';
-      const gradeInitial = flatGrade === 'Engineer' ? 'E' : 'L';
-      const roomCapacity = isFloor1
-        ? parseInt(newCampForm.floor1Capacity, 10)
-        : parseInt(newCampForm.upperFloorCapacity, 10);
+    let engineerFlatsAssigned = 0;
 
+    for (let f = 1; f <= totalFloors; f++) {
       const floorFlats = [];
       for (let fl = 1; fl <= flatsPerFl; fl++) {
+        let flatGrade = 'Labor';
+        let roomCapacity = 3;
+        let gradeInitial = 'L';
+
+        // Custom allocation: allocate specified number of Engineer flats first
+        if (engineerFlatsAssigned < engFlats) {
+          flatGrade = 'Engineer';
+          roomCapacity = 2;
+          gradeInitial = 'E';
+          engineerFlatsAssigned++;
+        } else if (f === 2 && fl === 1) {
+          flatGrade = 'Foreman';
+          roomCapacity = 3;
+          gradeInitial = 'F';
+        }
+
         const floorStr = String(f).padStart(2, '0');
         const flatStr = String(fl).padStart(2, '0');
         const flatCode = `${campDigit}-${floorStr}-${flatStr}-${gradeInitial}`;
@@ -953,7 +1056,6 @@ export default function App() {
 
       generatedFloors.push({
         floorNo: f,
-        floorGrade: flatGrade,
         flats: floorFlats
       });
     }
@@ -971,6 +1073,63 @@ export default function App() {
     setSelectedCampId(newCampObj.id);
     setSelectedFloorNo(1);
     setShowAddCampModal(false);
+  };
+
+  const handleUpdateCampDetails = (e) => {
+    e.preventDefault();
+    if (!editingCampModal) return;
+
+    setCamps(prev =>
+      prev.map(c => c.id === editingCampModal.id ? editingCampModal : c)
+    );
+    setEditingCampModal(null);
+  };
+
+  const handleUpdateFlatGrade = (targetFlatCode, newGrade, newCapacity) => {
+    const gradeInitial = newGrade === 'Engineer' ? 'E' : newGrade === 'Foreman' ? 'F' : 'L';
+
+    setCamps(prev =>
+      prev.map(camp => {
+        if (camp.id !== selectedCampId) return camp;
+        return {
+          ...camp,
+          floors: camp.floors.map(fl => {
+            if (fl.floorNo !== selectedFloorNo) return fl;
+            return {
+              ...fl,
+              flats: fl.flats.map(flat => {
+                if (flat.flatCode !== targetFlatCode) return flat;
+                const parts = flat.flatCode.split('-');
+                parts[3] = gradeInitial;
+                const updatedCode = parts.join('-');
+
+                return {
+                  ...flat,
+                  flatCode: updatedCode,
+                  roomGrade: newGrade,
+                  rooms: flat.rooms.map(rm => ({
+                    ...rm,
+                    capacity: Number(newCapacity)
+                  }))
+                };
+              })
+            };
+          })
+        };
+      })
+    );
+
+    // Also update any existing occupants in that flat to reflect the new grade
+    setOccupants(prev =>
+      prev.map(o => {
+        if (o.flatCode === targetFlatCode) {
+          return { ...o, roomGrade: newGrade };
+        }
+        return o;
+      })
+    );
+
+    setEditingFlatModal(null);
   };
 
   const openQuickAssignModal = (camp, floor, flat, room) => {
@@ -1108,208 +1267,46 @@ export default function App() {
     }
   };
 
-  const handleCreateUser = (e) => {
-    e.preventDefault();
-    const newUser = {
-      id: `u-${Date.now()}`,
-      staffId: newUserForm.staffId,
-      name: newUserForm.name,
-      email: newUserForm.email,
-      passwordHash: newUserForm.password,
-      title: newUserForm.title || 'Camp Coordinator',
-      role: newUserForm.role,
-      campScope: newUserForm.campScope,
-      status: 'Active',
-      permissions: {
-        canManageUsers: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canManageUsers,
-        canAddCamps: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canAddCamps,
-        canDeleteCamps: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canDeleteCamps,
-        canEditOccupants: newUserForm.canEditOccupants,
-        canExportReports: newUserForm.canExportReports,
-      },
-      lastLogin: 'Never'
-    };
-
-    setUsers(prev => [...prev, newUser]);
-    setShowAddUserModal(false);
-    setNewUserForm({
-      staffId: '',
-      name: '',
-      email: '',
-      password: '',
-      title: '',
-      role: 'CAMP_EDITOR',
-      campScope: 'ALL',
-      canManageUsers: false,
-      canAddCamps: false,
-      canDeleteCamps: false,
-      canEditOccupants: true,
-      canExportReports: true,
-    });
-  };
-
-  const handleInlineRoleChange = (userId, newRole) => {
-    if (userId === currentUser.id && newRole !== 'SUPER_ADMIN') {
-      alert('You cannot demote your own active Super Admin account.');
-      return;
-    }
-    const updatedPermissions = getRoleDefaultPermissions(newRole);
-    setUsers(prev =>
-      prev.map(u => {
-        if (u.id === userId) {
-          const updated = { ...u, role: newRole, permissions: updatedPermissions };
-          if (currentUser && currentUser.id === userId) {
-            setCurrentUser(updated);
-          }
-          return updated;
-        }
-        return u;
-      })
-    );
-  };
-
-  const handleInlineScopeChange = (userId, newScope) => {
-    setUsers(prev =>
-      prev.map(u => {
-        if (u.id === userId) {
-          const updated = { ...u, campScope: newScope };
-          if (currentUser && currentUser.id === userId) {
-            setCurrentUser(updated);
-          }
-          return updated;
-        }
-        return u;
-      })
-    );
-  };
-
-  const handleToggleUserPermission = (userId, permKey) => {
-    if (userId === currentUser.id && permKey === 'canManageUsers') {
-      alert('You cannot revoke user management access from your own Super Admin account.');
-      return;
-    }
-    setUsers(prev =>
-      prev.map(u => {
-        if (u.id === userId) {
-          const updatedPerms = {
-            ...u.permissions,
-            [permKey]: !u.permissions[permKey]
-          };
-          const updated = { ...u, permissions: updatedPerms };
-          if (currentUser && currentUser.id === userId) {
-            setCurrentUser(updated);
-          }
-          return updated;
-        }
-        return u;
-      })
-    );
-  };
-
-  const handleSaveEditedUser = (e) => {
-    e.preventDefault();
-    if (!editingUserModal) return;
-
-    setUsers(prev =>
-      prev.map(u => {
-        if (u.id === editingUserModal.id) {
-          if (currentUser && currentUser.id === u.id) {
-            setCurrentUser(editingUserModal);
-          }
-          return editingUserModal;
-        }
-        return u;
-      })
-    );
-    setEditingUserModal(null);
-  };
-
-  const handleExecutePasswordReset = (e) => {
-    e.preventDefault();
-    if (newPasswordValue.length < 8) {
-      alert('Password must be at least 8 characters long.');
-      return;
-    }
-    if (newPasswordValue !== confirmPasswordValue) {
-      alert('New password and confirmation do not match.');
-      return;
-    }
-
-    setUsers(prev =>
-      prev.map(u =>
-        u.id === targetUserForReset.id
-          ? { ...u, passwordHash: newPasswordValue }
-          : u
-      )
-    );
-
-    setResetSuccessMessage(`Password updated for ${targetUserForReset.name}.`);
-    setTimeout(() => {
-      setShowResetPasswordModal(false);
-      setTargetUserForReset(null);
-      setNewPasswordValue('');
-      setConfirmPasswordValue('');
-      setResetSuccessMessage('');
-    }, 1400);
-  };
-
-  const handleDeleteUser = (userId) => {
-    if (userId === currentUser.id) {
-      alert('You cannot delete your own active Super Admin account.');
-      return;
-    }
-    if (confirm('Permanently revoke and remove this user account?')) {
-      setUsers(prev => prev.filter(u => u.id !== userId));
-    }
-  };
-
-  const handleToggleUserStatus = (userId) => {
-    if (userId === currentUser.id) {
-      alert('You cannot suspend your own active Super Admin account.');
-      return;
-    }
-    setUsers(prev =>
-      prev.map(u =>
-        u.id === userId
-          ? { ...u, status: u.status === 'Active' ? 'Suspended' : 'Active' }
-          : u
-      )
-    );
-  };
-
-  const handleExportCSV = () => {
+  const handleExportInvoicesCSV = () => {
     const headers = [
-      'Sr.No', 'CAMP #', 'Status', 'Division', 'Cost Center', 'ID', 'AFR Entry Ref.',
-      'Employee Name', 'Nationality', 'Title', 'Productivity Type', 'Entry Date',
-      'Passport No', 'Civil ID', 'Room Grade', 'Camp Area', 'Floor No#', 'Flat No#',
-      'Flat Code', 'Room #', 'Employee Status', 'Mobile No.', 'Leave Start Date',
-      'Leave End Date', 'Leave Return Date', 'AFR Log No', 'Residency Company',
-      'Reallocation Cost Center', 'Exit Date', 'AFR Exit Ref.', 'Remarks'
+      'Invoice #', 'Billing Period', 'Project Cost Center', 'Division',
+      'Engineers Billed', 'Engineer Rate (KWD)', 'Engineer Total (KWD)',
+      'Foremen Billed', 'Foreman Rate (KWD)', 'Foreman Total (KWD)',
+      'Laborers Billed', 'Labor Rate (KWD)', 'Labor Total (KWD)',
+      'Total Beds', 'Total Monthly Invoice (KWD)', 'Status'
     ];
 
-    const rows = filteredOccupants.map(o => [
-      o.srNo, `"${o.campNo}"`, `"${o.status}"`, `"${o.division}"`, `"${o.costCenter}"`,
-      `"${o.employeeId}"`, `"${o.afrEntryRef}"`, `"${o.employeeName}"`, `"${o.nationality}"`,
-      `"${o.title}"`, `"${o.productivityType}"`, `"${o.entryDate}"`, `"${o.passportNo}"`,
-      `"${o.civilId}"`, `"${o.roomGrade}"`, `"${o.campArea}"`, o.floorNo, o.flatNo,
-      `"${o.flatCode}"`, `"${o.roomNo}"`, `"${o.employeeStatus}"`, `"${o.mobileNo}"`,
-      `"${o.leaveStartDate}"`, `"${o.leaveEndDate}"`, `"${o.leaveReturnDate}"`,
-      `"${o.afrLogNo}"`, `"${o.residencyCompany}"`, `"${o.reallocationCostCenter}"`,
-      `"${o.exitDate}"`, `"${o.afrExitRef}"`, `"${o.remarks}"`
+    const rows = projectInvoices.map(inv => [
+      `"${inv.invoiceNumber}"`,
+      `"${inv.billingMonth}"`,
+      `"${inv.costCenter}"`,
+      `"${inv.division}"`,
+      inv.engineers.length,
+      billingRates.engineer,
+      inv.amounts.engAmount,
+      inv.foremen.length,
+      billingRates.foreman,
+      inv.amounts.foremanAmount,
+      inv.laborers.length,
+      billingRates.labor,
+      inv.amounts.laborAmount,
+      inv.totalOccupants,
+      inv.amounts.totalAmount,
+      `"${inv.status}"`
     ]);
 
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', `Dhow_Camp_Occupants_${new Date().toISOString().slice(0, 10)}.csv`);
+    link.setAttribute('download', `Dhow_Project_Accommodation_Invoices_${billingMonth}.csv`);
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
   };
 
   // =========================================================
-  // VIEW 1: SIGN-IN SCREEN WITH DHOW LOGO
+  // VIEW 1: SIGN-IN SCREEN
   // =========================================================
   if (!currentUser) {
     return (
@@ -1430,29 +1427,6 @@ export default function App() {
           </div>
           <div>© 2026 Dhow Engineering General Trading & Contracting Co.</div>
         </div>
-
-        {showForgotModal && (
-          <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 text-center space-y-4 shadow-2xl">
-              <div className="w-12 h-12 rounded-full bg-cyan-50 text-cyan-600 flex items-center justify-center mx-auto">
-                <KeyRound className="w-6 h-6" />
-              </div>
-              <h3 className="text-lg font-bold text-slate-900">Password Recovery</h3>
-              <p className="text-xs text-slate-600 leading-relaxed">
-                For security reasons, user passwords are encrypted and cannot be viewed. Please contact the Super Administrator to reset your password:
-              </p>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs font-mono text-cyan-700 font-semibold">
-                admin@al-dhow.com
-              </div>
-              <button
-                onClick={() => setShowForgotModal(false)}
-                className="w-full py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold"
-              >
-                Back to Sign In
-              </button>
-            </div>
-          </div>
-        )}
       </div>
     );
   }
@@ -1465,9 +1439,7 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
-      {/* ======================================================= */}
-      {/* TOP DARK NAVY ERP HEADER WITH DHOW LOGO                 */}
-      {/* ======================================================= */}
+      {/* TOP HEADER */}
       <header className="bg-[#0f172a] text-white shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
           <div className="flex items-start sm:items-center gap-3.5">
@@ -1476,15 +1448,15 @@ export default function App() {
             </div>
             <div>
               <div className="flex flex-wrap items-center gap-2.5">
-                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white titlecase">
-                  Camp Management System
+                <h1 className="text-lg sm:text-xl font-black tracking-tight text-white uppercase">
+                  Dhow Camp Management System
                 </h1>
                 <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-md bg-indigo-950/90 text-indigo-300 border border-indigo-700/60">
                   Cost Center: 1ACD000
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Accommodation Occupants Registry • Configurable Hierarchy, AFR Tracker & RBAC Security
+                Accommodation Registry • Configurable Hierarchy, Inter-Project Invoicing & RBAC
               </p>
             </div>
           </div>
@@ -1520,7 +1492,7 @@ export default function App() {
             }`}
           >
             <Layers className="w-4 h-4 text-cyan-400" />
-            <span>Interactive Apartment & Room Map</span>
+            <span>Apartment & Room Map</span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800">
               {globalStats.freeBeds} Free Spots
             </span>
@@ -1542,6 +1514,21 @@ export default function App() {
           </button>
 
           <button
+            onClick={() => setActiveTab('invoicing')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
+              activeTab === 'invoicing'
+                ? 'bg-slate-800/90 text-white border-cyan-400'
+                : 'text-slate-400 hover:text-slate-200 border-transparent'
+            }`}
+          >
+            <Receipt className="w-4 h-4 text-emerald-400" />
+            <span>Monthly Project Invoicing</span>
+            <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800">
+              {totalInvoicedAmount} KWD
+            </span>
+          </button>
+
+          <button
             onClick={() => setActiveTab('reports')}
             className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 transition-all whitespace-nowrap ${
               activeTab === 'reports'
@@ -1550,7 +1537,7 @@ export default function App() {
             }`}
           >
             <BarChart3 className="w-4 h-4 text-slate-400" />
-            <span>Vacancy, Occupancy & Division Reports</span>
+            <span>Vacancy & Allocation Reports</span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300">
               {globalStats.occupancyPct}% Full
             </span>
@@ -1566,40 +1553,38 @@ export default function App() {
               }`}
             >
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Admin & User Access (RBAC)</span>
+              <span>Admin & Access (RBAC)</span>
             </button>
           )}
         </div>
       </header>
 
-      {/* Sub-Header Status Bar */}
+      {/* Sub-Header */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
             <span className="text-slate-500">Logged in as:</span>
             <span className="font-bold text-slate-900">{currentUser.name}</span>
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
-              {currentUser.role === 'SUPER_ADMIN' ? 'Super Admin' : currentUser.role}
+              {currentUser.role}
             </span>
             <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-              Camp Scope: {currentUser.campScope}
+              Scope: {currentUser.campScope}
             </span>
           </div>
 
           <div className="flex items-center gap-4">
-            {isSuperAdmin && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                className="text-cyan-600 hover:text-cyan-800 font-semibold flex items-center gap-1 cursor-pointer"
-              >
-                <span>Manage Users & Role Permissions →</span>
-              </button>
-            )}
+            <button
+              onClick={() => setActiveTab('invoicing')}
+              className="text-emerald-700 hover:text-emerald-900 font-semibold flex items-center gap-1 cursor-pointer"
+            >
+              <span>Current Month Invoices: <strong>{totalInvoicedAmount} KWD</strong> →</span>
+            </button>
           </div>
         </div>
       </div>
 
-      {/* Main Body Container */}
+      {/* Main Body */}
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
         {/* KPI SUMMARY CARDS */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
@@ -1620,9 +1605,7 @@ export default function App() {
               <Bed className="w-4 h-4 text-slate-700" />
             </div>
             <div className="text-2xl font-black text-slate-900 mt-1.5">{globalStats.totalBeds}</div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              Flr 1: 2/rm (Eng) • Flr 2+: 9/flat
-            </div>
+            <div className="text-[11px] text-slate-400 mt-1">Configurable Per Flat</div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
@@ -1642,95 +1625,250 @@ export default function App() {
               <Home className="w-4 h-4 text-emerald-600" />
             </div>
             <div className="text-2xl font-black text-emerald-700 mt-1.5">{globalStats.freeBeds}</div>
-            <div className="text-[11px] text-emerald-700/80 mt-1">
-              Ready for immediate check-in
-            </div>
+            <div className="text-[11px] text-emerald-700/80 mt-1">Ready for check-in</div>
           </div>
 
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
-              <span>Physically On Job</span>
-              <CheckCircle2 className="w-4 h-4 text-teal-600" />
+              <span>Active Billable Beds</span>
+              <Receipt className="w-4 h-4 text-emerald-600" />
             </div>
-            <div className="text-2xl font-black text-slate-900 mt-1.5">{globalStats.onJobCount}</div>
-            <div className="text-[11px] text-slate-400 mt-1">
-              Active on project sites
-            </div>
+            <div className="text-2xl font-black text-slate-900 mt-1.5">{globalStats.activeCount}</div>
+            <div className="text-[11px] text-slate-400 mt-1">Across {projectInvoices.length} Projects</div>
           </div>
 
           <div className="bg-amber-50/70 border border-amber-200 rounded-2xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-xs text-amber-800 font-semibold">
-              <span>Currently On Leave</span>
-              <Plane className="w-4 h-4 text-amber-600" />
+              <span>Monthly Invoiced</span>
+              <DollarSign className="w-4 h-4 text-amber-600" />
             </div>
-            <div className="text-2xl font-black text-amber-700 mt-1.5">{globalStats.onLeaveCount}</div>
-            <div className="text-[11px] text-amber-700/80 mt-1">
-              Beds held during vacation
-            </div>
+            <div className="text-2xl font-black text-amber-700 mt-1.5">{totalInvoicedAmount} <span className="text-xs font-normal">KD</span></div>
+            <div className="text-[11px] text-amber-700/80 mt-1">Period: {billingMonth}</div>
           </div>
         </div>
 
-        {/* TAB 1: MAP */}
+        {/* ======================================================= */}
+        {/* NEW TAB: MONTHLY PROJECT INVOICING & DEBIT VOUCHERS     */}
+        {/* ======================================================= */}
+        {activeTab === 'invoicing' && (
+          <div className="space-y-6">
+            <div className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col md:flex-row md:items-center justify-between gap-4 shadow-xs">
+              <div>
+                <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <Receipt className="w-5 h-5 text-emerald-600" />
+                  Monthly Project Accommodation Invoicing & Debit Notes
+                </h2>
+                <p className="text-xs text-slate-500 mt-0.5">
+                  Inter-project cost allocation for camp rent, utilities & beds charged to client projects from master cost center <strong>1ACD000</strong>.
+                </p>
+              </div>
+
+              <div className="flex flex-wrap items-center gap-3">
+                <div className="flex items-center gap-2 bg-slate-50 border border-slate-200 px-3 py-1.5 rounded-xl text-xs">
+                  <Calendar className="w-4 h-4 text-slate-500" />
+                  <span className="font-semibold text-slate-600">Cycle:</span>
+                  <input
+                    type="month"
+                    value={billingMonth}
+                    onChange={(e) => setBillingMonth(e.target.value)}
+                    className="font-bold text-slate-900 bg-transparent focus:outline-none"
+                  />
+                </div>
+
+                {isSuperAdmin && (
+                  <button
+                    onClick={() => setShowRatesModal(true)}
+                    className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold flex items-center gap-1.5 border border-slate-200"
+                  >
+                    <Settings className="w-3.5 h-3.5 text-slate-600" />
+                    Adjust Rates
+                  </button>
+                )}
+
+                <button
+                  onClick={handleExportInvoicesCSV}
+                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-sm"
+                >
+                  <Download className="w-3.5 h-3.5" />
+                  Export Invoices CSV
+                </button>
+              </div>
+            </div>
+
+            {/* Rates Banner */}
+            <div className="p-3.5 bg-gradient-to-r from-emerald-50 to-teal-50 border border-emerald-200/80 rounded-2xl flex flex-wrap items-center justify-between gap-3 text-xs">
+              <div className="flex items-center gap-2 text-emerald-900 font-semibold">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
+                Active Monthly Billing Rates:
+              </div>
+              <div className="flex items-center gap-4 text-xs font-mono">
+                <span className="bg-white px-2.5 py-1 rounded-lg border border-emerald-200 text-emerald-900">
+                  Engineer: <strong>{billingRates.engineer} KWD / Bed</strong>
+                </span>
+                <span className="bg-white px-2.5 py-1 rounded-lg border border-emerald-200 text-emerald-900">
+                  Foreman: <strong>{billingRates.foreman} KWD / Bed</strong>
+                </span>
+                <span className="bg-white px-2.5 py-1 rounded-lg border border-emerald-200 text-emerald-900">
+                  Labor: <strong>{billingRates.labor} KWD / Bed</strong>
+                </span>
+              </div>
+            </div>
+
+            {/* Invoices Table */}
+            <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs whitespace-nowrap">
+                  <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b border-slate-200">
+                    <tr>
+                      <th className="py-3.5 px-4">Invoice #</th>
+                      <th className="py-3.5 px-4">Project / Cost Center</th>
+                      <th className="py-3.5 px-4">Division</th>
+                      <th className="py-3.5 px-4 text-center">Engineers</th>
+                      <th className="py-3.5 px-4 text-center">Foremen</th>
+                      <th className="py-3.5 px-4 text-center">Laborers</th>
+                      <th className="py-3.5 px-4 text-center">Total Beds</th>
+                      <th className="py-3.5 px-4 text-right">Invoice Total</th>
+                      <th className="py-3.5 px-4 text-center">Status</th>
+                      <th className="py-3.5 px-4 text-right">Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-200">
+                    {projectInvoices.map((inv) => (
+                      <tr key={inv.costCenter} className="hover:bg-slate-50 transition-colors">
+                        <td className="py-3 px-4 font-mono font-bold text-cyan-600">{inv.invoiceNumber}</td>
+                        <td className="py-3 px-4">
+                          <div className="font-bold text-slate-900 font-mono">{inv.costCenter}</div>
+                          <div className="text-[11px] text-slate-500">{inv.residencyCompany}</div>
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 font-mono text-[10px] font-bold">
+                            {inv.division}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          {inv.engineers.length} <span className="text-[10px] text-slate-400">(@{billingRates.engineer}KD)</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          {inv.foremen.length} <span className="text-[10px] text-slate-400">(@{billingRates.foreman}KD)</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-mono">
+                          {inv.laborers.length} <span className="text-[10px] text-slate-400">(@{billingRates.labor}KD)</span>
+                        </td>
+                        <td className="py-3 px-4 text-center font-bold text-slate-900">{inv.totalOccupants} Beds</td>
+                        <td className="py-3 px-4 text-right font-black font-mono text-emerald-700 text-sm">
+                          {inv.amounts.totalAmount.toLocaleString()} KWD
+                        </td>
+                        <td className="py-3 px-4 text-center">
+                          <span className="px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
+                            {inv.status}
+                          </span>
+                        </td>
+                        <td className="py-3 px-4 text-right">
+                          <button
+                            onClick={() => setSelectedInvoiceView(inv)}
+                            className="px-3 py-1.5 bg-slate-900 hover:bg-slate-800 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 inline-flex cursor-pointer"
+                          >
+                            <FileText className="w-3.5 h-3.5" />
+                            <span>View Voucher</span>
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-slate-50 font-bold border-t border-slate-200 text-xs">
+                    <tr>
+                      <td colSpan={6} className="py-3 px-4 text-right uppercase text-slate-500 font-mono">
+                        Grand Total Monthly Debit to Projects:
+                      </td>
+                      <td className="py-3 px-4 text-center font-mono text-slate-900">
+                        {globalStats.activeCount} Beds
+                      </td>
+                      <td className="py-3 px-4 text-right font-black font-mono text-emerald-700 text-base">
+                        {totalInvoicedAmount.toLocaleString()} KWD
+                      </td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB 1: INTERACTIVE MAP WITH EDITABLE FLATS */}
         {activeTab === 'map' && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
-              <div className="flex flex-wrap items-center gap-3">
-                <span className="text-xs font-bold uppercase tracking-wider text-slate-500 mr-2">
-                  SELECT APARTMENT BUILDING:
-                </span>
+              <div className="flex flex-wrap items-center justify-between gap-3">
+                <div className="flex flex-wrap items-center gap-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-500 mr-2">
+                    SELECT CAMP BUILDING:
+                  </span>
 
-                {camps.map(camp => {
-                  let campBeds = 0;
-                  let campOcc = 0;
-                  let campFlats = 0;
-                  camp.floors.forEach(fl => {
-                    campFlats += fl.flats.length;
-                    fl.flats.forEach(ft => {
-                      ft.rooms.forEach(rm => {
-                        campBeds += rm.capacity;
-                        campOcc += rm.occupants.length;
+                  {camps.map(camp => {
+                    let campBeds = 0;
+                    let campOcc = 0;
+                    let campFlats = 0;
+                    camp.floors.forEach(fl => {
+                      campFlats += fl.flats.length;
+                      fl.flats.forEach(ft => {
+                        ft.rooms.forEach(rm => {
+                          campBeds += rm.capacity;
+                          campOcc += rm.occupants.length;
+                        });
                       });
                     });
-                  });
-                  const campFree = campBeds - campOcc;
-                  const isSelected = camp.id === activeCamp.id;
+                    const campFree = campBeds - campOcc;
+                    const isSelected = camp.id === activeCamp.id;
 
-                  return (
+                    return (
+                      <button
+                        key={camp.id}
+                        onClick={() => {
+                          setSelectedCampId(camp.id);
+                          setSelectedFloorNo(1);
+                        }}
+                        className={`text-left px-4 py-2.5 rounded-xl border transition-all cursor-pointer ${
+                          isSelected
+                            ? 'bg-slate-900 text-white border-slate-900 shadow-md'
+                            : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
+                        }`}
+                      >
+                        <div className="text-xs font-bold">
+                          {camp.campNo} <span className={isSelected ? 'text-cyan-300' : 'text-slate-500'}>• {camp.campArea}</span>
+                        </div>
+                        <div className={`text-[11px] mt-0.5 ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
+                          {camp.floors.length} Floors • {campFlats} Flats •{' '}
+                          <span className={isSelected ? 'text-emerald-400 font-bold' : 'text-emerald-600 font-bold'}>
+                            {campFree} Free
+                          </span>{' '}
+                          / {campBeds} Beds
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+
+                <div className="flex items-center gap-2">
+                  {canAddCamps && (
                     <button
-                      key={camp.id}
-                      onClick={() => {
-                        setSelectedCampId(camp.id);
-                        setSelectedFloorNo(1);
-                      }}
-                      className={`text-left px-4 py-2.5 rounded-xl border transition-all cursor-pointer ${
-                        isSelected
-                          ? 'bg-slate-900 text-white border-slate-900 shadow-md'
-                          : 'bg-slate-50 hover:bg-slate-100 text-slate-800 border-slate-200'
-                      }`}
+                      onClick={() => setEditingCampModal({ ...activeCamp })}
+                      className="px-3.5 py-2.5 rounded-xl border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 text-xs font-bold flex items-center gap-1.5 transition-all"
                     >
-                      <div className="text-xs font-bold">
-                        {camp.campNo} <span className={isSelected ? 'text-cyan-300' : 'text-slate-500'}>• {camp.campArea}</span>
-                      </div>
-                      <div className={`text-[11px] mt-0.5 ${isSelected ? 'text-slate-300' : 'text-slate-500'}`}>
-                        {camp.floors.length} Floors • {campFlats} Flats •{' '}
-                        <span className={isSelected ? 'text-emerald-400 font-bold' : 'text-emerald-600 font-bold'}>
-                          {campFree} Free
-                        </span>{' '}
-                        / {campBeds} Beds
-                      </div>
+                      <Edit3 className="w-3.5 h-3.5 text-slate-600" />
+                      <span>Edit Building Details</span>
                     </button>
-                  );
-                })}
-
-                {canAddCamps && (
-                  <button
-                    onClick={() => setShowAddCampModal(true)}
-                    className="px-4 py-3 rounded-xl border-2 border-dashed border-emerald-400 text-emerald-700 hover:bg-emerald-50 text-xs font-bold flex items-center gap-1.5 transition-all cursor-pointer"
-                  >
-                    <Plus className="w-4 h-4" />
-                    <span>+ Add New Apartment Building</span>
-                  </button>
-                )}
+                  )}
+                  {canAddCamps && (
+                    <button
+                      onClick={() => setShowAddCampModal(true)}
+                      className="px-4 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold flex items-center gap-1.5 transition-all"
+                    >
+                      <Plus className="w-4 h-4" />
+                      <span>Add Camp Building</span>
+                    </button>
+                  )}
+                </div>
               </div>
 
               <div className="flex items-center gap-4 pt-1">
@@ -1762,8 +1900,6 @@ export default function App() {
                 const flFree = flBeds - flOcc;
                 const flPct = flBeds > 0 ? Math.round((flOcc / flBeds) * 100) : 0;
                 const isFloorSelected = floor.floorNo === activeFloor.floorNo;
-                const sampleCap = floor.flats[0]?.rooms[0]?.capacity || 2;
-                const flatTotalCap = sampleCap * (floor.flats[0]?.rooms.length || 3);
 
                 return (
                   <div
@@ -1780,21 +1916,11 @@ export default function App() {
                         <span className="bg-slate-900 text-white text-xs font-bold px-2.5 py-1 rounded-lg">
                           Floor {floor.floorNo}
                         </span>
-                        <span className={`text-xs font-semibold px-2.5 py-0.5 rounded-md ${
-                          floor.floorNo === 1
-                            ? 'bg-cyan-50 text-cyan-700 border border-cyan-200'
-                            : floor.floorNo === 2
-                            ? 'bg-indigo-50 text-indigo-700 border border-indigo-200'
-                            : 'bg-amber-50 text-amber-700 border border-amber-200'
-                        }`}>
-                          {floor.floorGrade || (floor.floorNo === 1 ? 'Engineer' : 'Labor')}
+                        <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700">
+                          {floor.flats.length} Flats
                         </span>
                       </div>
                       <span className="text-xs font-bold text-emerald-600">{flFree} Free</span>
-                    </div>
-
-                    <div className="text-xs text-slate-600 font-medium mb-3">
-                      {floor.flats.length} Flats • {sampleCap} persons/room ({flatTotalCap}/flat)
                     </div>
 
                     <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden mb-2">
@@ -1802,7 +1928,7 @@ export default function App() {
                     </div>
 
                     <div className="flex items-center justify-between text-[11px] text-slate-500 font-medium">
-                      <span>Occupied: {flOcc} / {flBeds}</span>
+                      <span>Occupied: {flOcc} / {flBeds} Beds</span>
                       <span>{flPct}%</span>
                     </div>
                   </div>
@@ -1810,7 +1936,7 @@ export default function App() {
               })}
             </div>
 
-            {/* Flats & Rooms Grid */}
+            {/* Flats & Rooms Grid (With Per-Flat Grade Toggle) */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
               {activeFloor.flats.map(flat => {
                 let flatCap = 0;
@@ -1820,18 +1946,42 @@ export default function App() {
                   flatOcc += r.occupants.length;
                 });
 
+                const isEng = flat.roomGrade === 'Engineer';
+                const isForeman = flat.roomGrade === 'Foreman';
+
                 return (
                   <div key={flat.flatCode} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs flex flex-col">
                     <div className="bg-slate-900 text-white px-5 py-3.5 flex items-center justify-between">
                       <div>
-                        <div className="text-sm font-black tracking-tight">Flat {flat.flatCode}</div>
-                        <div className="text-[11px] text-slate-400">
-                          Floor {activeFloor.floorNo} • Flat #{flat.flatNo} ({flat.roomGrade})
+                        <div className="flex items-center gap-2">
+                          <span className="text-sm font-black tracking-tight">Flat {flat.flatCode}</span>
+                          <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
+                            isEng ? 'bg-cyan-500/20 text-cyan-300 border border-cyan-500/40' :
+                            isForeman ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40' :
+                            'bg-slate-700 text-slate-300'
+                          }`}>
+                            {flat.roomGrade} Grade
+                          </span>
+                        </div>
+                        <div className="text-[11px] text-slate-400 mt-0.5">
+                          Floor {activeFloor.floorNo} • Flat #{flat.flatNo} • {flat.rooms[0]?.capacity || 3} beds/rm
                         </div>
                       </div>
-                      <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-emerald-400 border border-slate-700">
-                        {flatOcc}/{flatCap} Occupied
-                      </span>
+
+                      <div className="flex items-center gap-2">
+                        {canAddCamps && (
+                          <button
+                            onClick={() => setEditingFlatModal({ ...flat })}
+                            className="p-1.5 hover:bg-slate-800 rounded-lg text-slate-400 hover:text-white transition-colors"
+                            title="Edit Flat Grade & Capacity"
+                          >
+                            <Settings className="w-4 h-4" />
+                          </button>
+                        )}
+                        <span className="text-xs font-bold px-2.5 py-1 rounded-lg bg-slate-800 text-emerald-400 border border-slate-700">
+                          {flatOcc}/{flatCap}
+                        </span>
+                      </div>
                     </div>
 
                     <div className="p-4 space-y-4 flex-1 bg-slate-50/40">
@@ -1910,7 +2060,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: OCCUPANTS LIST */}
+        {/* TAB 2: 31-COLUMN REGISTRY */}
         {activeTab === 'occupants' && (
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
@@ -1947,14 +2097,6 @@ export default function App() {
                     <option key={d} value={d}>{d}</option>
                   ))}
                 </select>
-
-                <button
-                  onClick={handleExportCSV}
-                  className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
-                >
-                  <Download className="w-3.5 h-3.5" />
-                  Export Dhow CSV
-                </button>
               </div>
             </div>
 
@@ -1975,13 +2117,10 @@ export default function App() {
                       <th className="py-3 px-3">Cost Center</th>
                       <th className="py-3 px-3">Nationality</th>
                       <th className="py-3 px-3">Title</th>
-                      <th className="py-3 px-3">Passport No</th>
-                      <th className="py-3 px-3">Civil ID</th>
                       <th className="py-3 px-3">Room Grade</th>
                       <th className="py-3 px-3">Flat Code</th>
                       <th className="py-3 px-3">Room #</th>
                       <th className="py-3 px-3">Status</th>
-                      <th className="py-3 px-3">Entry Date</th>
                       <th className="py-3 px-3">Actions</th>
                     </tr>
                   </thead>
@@ -2000,8 +2139,6 @@ export default function App() {
                         <td className="py-2.5 px-3 font-mono text-slate-600">{occ.costCenter}</td>
                         <td className="py-2.5 px-3 text-slate-700">{occ.nationality}</td>
                         <td className="py-2.5 px-3 text-slate-700">{occ.title}</td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600">{occ.passportNo}</td>
-                        <td className="py-2.5 px-3 font-mono text-slate-600">{occ.civilId}</td>
                         <td className="py-2.5 px-3">
                           <span className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-semibold text-[10px]">
                             {occ.roomGrade}
@@ -2011,12 +2148,11 @@ export default function App() {
                         <td className="py-2.5 px-3 font-mono font-bold text-cyan-600">{occ.roomNo}</td>
                         <td className="py-2.5 px-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            occ.employeeStatus === 'On Job' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : occ.employeeStatus === 'On Leave' ? 'bg-amber-100 text-amber-800' : 'bg-rose-50 text-rose-700'
+                            occ.employeeStatus === 'On Job' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-amber-100 text-amber-800'
                           }`}>
                             {occ.employeeStatus}
                           </span>
                         </td>
-                        <td className="py-2.5 px-3 font-mono text-slate-500">{occ.entryDate}</td>
                         <td className="py-2.5 px-3">
                           <button
                             onClick={() => setManageOccupantModal(occ)}
@@ -2057,7 +2193,7 @@ export default function App() {
                     <div key={camp.id} className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-2">
                       <div className="flex items-center justify-between text-xs font-bold">
                         <span>{camp.campNo} — {camp.campArea}</span>
-                        <span className="text-emerald-700">{free} Free / {beds} Total Beds ({pct}%)</span>
+                        <span className="text-emerald-700">{free} Free / {beds} Beds ({pct}%)</span>
                       </div>
                       <div className="w-full h-2.5 bg-slate-200 rounded-full overflow-hidden">
                         <div className="h-full bg-cyan-600 rounded-full" style={{ width: `${pct}%` }} />
@@ -2098,7 +2234,7 @@ export default function App() {
                   System Users & Role-Based Access Control (RBAC)
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Super Admins can directly assign or change user roles, camp scopes, and editing permissions, or reset passwords without viewing existing credentials.
+                  Super Admins can directly assign or change user roles, camp scopes, and editing permissions.
                 </p>
               </div>
               <button
@@ -2118,128 +2254,23 @@ export default function App() {
                       <th className="py-3.5 px-4">Staff ID</th>
                       <th className="py-3.5 px-4">Name & Title</th>
                       <th className="py-3.5 px-4">Email</th>
-                      <th className="py-3.5 px-4">Assign Role</th>
+                      <th className="py-3.5 px-4">Role</th>
                       <th className="py-3.5 px-4">Camp Scope</th>
-                      <th className="py-3.5 px-4">Editing Permissions (Click to Toggle)</th>
-                      <th className="py-3.5 px-4">Password Privacy</th>
                       <th className="py-3.5 px-4">Status</th>
-                      <th className="py-3.5 px-4 text-right">Admin Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
                     {users.map(u => (
-                      <tr key={u.id} className="hover:bg-slate-50/80 transition-colors">
+                      <tr key={u.id} className="hover:bg-slate-50 transition-colors">
                         <td className="py-3.5 px-4 font-mono font-bold text-cyan-600">{u.staffId}</td>
-                        <td className="py-3.5 px-4">
-                          <div className="font-bold text-slate-900">{u.name}</div>
-                          <div className="text-[11px] text-slate-400">{u.title || 'Staff Member'}</div>
-                        </td>
+                        <td className="py-3.5 px-4 font-bold text-slate-900">{u.name}</td>
                         <td className="py-3.5 px-4 text-slate-600">{u.email}</td>
+                        <td className="py-3.5 px-4 font-bold text-indigo-700">{u.role}</td>
+                        <td className="py-3.5 px-4 font-mono">{u.campScope}</td>
                         <td className="py-3.5 px-4">
-                          <select
-                            value={u.role}
-                            onChange={(e) => handleInlineRoleChange(u.id, e.target.value)}
-                            className={`text-[11px] font-bold uppercase px-2.5 py-1.5 rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all ${
-                              u.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800 border-purple-200' : u.role === 'CAMP_EDITOR' ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-slate-100 text-slate-700 border-slate-200'
-                            }`}
-                          >
-                            <option value="SUPER_ADMIN">SUPER_ADMIN</option>
-                            <option value="CAMP_EDITOR">CAMP_EDITOR</option>
-                            <option value="AUDITOR">AUDITOR (Read-Only)</option>
-                          </select>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <select
-                            value={u.campScope}
-                            onChange={(e) => handleInlineScopeChange(u.id, e.target.value)}
-                            className="bg-slate-50 border border-slate-200 text-slate-800 font-mono text-[11px] font-bold rounded-lg px-2.5 py-1.5 cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500"
-                          >
-                            <option value="ALL">ALL</option>
-                            {camps.map(c => (
-                              <option key={c.id} value={c.campNo}>{c.campNo}</option>
-                            ))}
-                          </select>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <div className="flex items-center gap-1.5">
-                            <button
-                              type="button"
-                              onClick={() => handleToggleUserPermission(u.id, 'canEditOccupants')}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canEditOccupants ? 'bg-emerald-50 text-emerald-700 border-emerald-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
-                              }`}
-                            >
-                              Edit Occupants
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleUserPermission(u.id, 'canAddCamps')}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canAddCamps ? 'bg-cyan-50 text-cyan-700 border-cyan-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
-                              }`}
-                            >
-                              Add Camps
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => handleToggleUserPermission(u.id, 'canExportReports')}
-                              className={`px-2 py-0.5 rounded text-[10px] font-bold border transition-all cursor-pointer ${
-                                u.permissions?.canExportReports ? 'bg-blue-50 text-blue-700 border-blue-200' : 'bg-slate-100 text-slate-400 border-slate-200 line-through'
-                              }`}
-                            >
-                              Export
-                            </button>
-                          </div>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className="inline-flex items-center gap-1.5 text-slate-400 font-mono text-xs">
-                            <Lock className="w-3.5 h-3.5 text-slate-400" />
-                            •••••••• (Encrypted)
-                          </span>
-                        </td>
-                        <td className="py-3.5 px-4">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            u.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-rose-50 text-rose-700 border border-rose-200'
-                          }`}>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200">
                             {u.status}
                           </span>
-                        </td>
-                        <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => setEditingUserModal({ ...u, permissions: { ...u.permissions } })}
-                              className="px-2.5 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg text-xs font-semibold border border-slate-200 flex items-center gap-1 cursor-pointer"
-                            >
-                              <Settings className="w-3.5 h-3.5 text-slate-600" />
-                              Edit Role
-                            </button>
-                            <button
-                              onClick={() => {
-                                setTargetUserForReset(u);
-                                setShowResetPasswordModal(true);
-                              }}
-                              className="px-2.5 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg text-xs font-semibold border border-cyan-200 flex items-center gap-1 cursor-pointer"
-                            >
-                              <KeyRound className="w-3.5 h-3.5" />
-                              Reset Password
-                            </button>
-                            {u.id !== currentUser.id && (
-                              <button
-                                onClick={() => handleToggleUserStatus(u.id)}
-                                className="px-2.5 py-1.5 bg-amber-50 hover:bg-amber-100 text-amber-800 rounded-lg text-xs font-semibold border border-amber-200 cursor-pointer"
-                              >
-                                {u.status === 'Active' ? 'Suspend' : 'Activate'}
-                              </button>
-                            )}
-                            {u.id !== currentUser.id && (
-                              <button
-                                onClick={() => handleDeleteUser(u.id)}
-                                className="p-1.5 bg-rose-50 hover:bg-rose-100 text-rose-600 rounded-lg border border-rose-200 cursor-pointer"
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
-                            )}
-                          </div>
                         </td>
                       </tr>
                     ))}
@@ -2251,7 +2282,356 @@ export default function App() {
         )}
       </main>
 
-      {/* MODALS */}
+      {/* ======================================================= */}
+      {/* MODAL 1: ITEMIZED INVOICE / DEBIT MEMO PRINT PREVIEW    */}
+      {/* ======================================================= */}
+      {selectedInvoiceView && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-2xl w-full max-h-[90vh] overflow-y-auto p-6 sm:p-8 space-y-6 shadow-2xl">
+            {/* Header Voucher */}
+            <div className="flex items-start justify-between border-b border-slate-200 pb-5">
+              <div>
+                <DhowLogo className="h-8 w-auto text-slate-900 mb-2" />
+                <div className="text-xs text-slate-500">
+                  Dhow Engineering General Trading & Contracting Co.<br />
+                  Accommodation Administration • Cost Center: 1ACD000
+                </div>
+              </div>
+              <div className="text-right">
+                <span className="text-xs font-mono font-bold px-2.5 py-1 rounded bg-slate-900 text-white">
+                  {selectedInvoiceView.invoiceNumber}
+                </span>
+                <div className="text-xs text-slate-500 mt-1.5">
+                  Cycle: <strong>{selectedInvoiceView.billingMonth}</strong>
+                </div>
+              </div>
+            </div>
+
+            {/* Project Details */}
+            <div className="grid grid-cols-2 gap-4 p-4 rounded-xl bg-slate-50 border border-slate-200 text-xs">
+              <div>
+                <div className="text-slate-400 font-medium">Billed To Project Cost Center:</div>
+                <div className="text-sm font-black text-slate-900 font-mono mt-0.5">
+                  {selectedInvoiceView.costCenter}
+                </div>
+                <div className="text-slate-600 mt-0.5">Division: {selectedInvoiceView.division}</div>
+              </div>
+              <div className="text-right">
+                <div className="text-slate-400 font-medium">Debit Memo Total:</div>
+                <div className="text-xl font-black text-emerald-700 font-mono mt-0.5">
+                  {selectedInvoiceView.amounts.totalAmount.toLocaleString()} KWD
+                </div>
+                <div className="text-[11px] text-slate-500">Total Billed: {selectedInvoiceView.totalOccupants} Beds</div>
+              </div>
+            </div>
+
+            {/* Itemized Table */}
+            <div>
+              <div className="text-xs font-bold text-slate-900 mb-2">Itemized Accommodation Fee Schedule:</div>
+              <table className="w-full text-left text-xs border border-slate-200 rounded-xl overflow-hidden">
+                <thead className="bg-slate-100 font-mono text-[10px] text-slate-600 uppercase">
+                  <tr>
+                    <th className="py-2 px-3">Grade Category</th>
+                    <th className="py-2 px-3 text-center">Occupants Count</th>
+                    <th className="py-2 px-3 text-right">Monthly Rate (KWD)</th>
+                    <th className="py-2 px-3 text-right">Subtotal (KWD)</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  <tr>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800">Engineer Grade Beds</td>
+                    <td className="py-2.5 px-3 text-center font-mono">{selectedInvoiceView.engineers.length}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{billingRates.engineer} KWD</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                      {selectedInvoiceView.amounts.engAmount} KWD
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800">Foreman Grade Beds</td>
+                    <td className="py-2.5 px-3 text-center font-mono">{selectedInvoiceView.foremen.length}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{billingRates.foreman} KWD</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                      {selectedInvoiceView.amounts.foremanAmount} KWD
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="py-2.5 px-3 font-semibold text-slate-800">Labor Grade Beds</td>
+                    <td className="py-2.5 px-3 text-center font-mono">{selectedInvoiceView.laborers.length}</td>
+                    <td className="py-2.5 px-3 text-right font-mono">{billingRates.labor} KWD</td>
+                    <td className="py-2.5 px-3 text-right font-mono font-bold text-slate-900">
+                      {selectedInvoiceView.amounts.laborAmount} KWD
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+
+            {/* List of occupants billed */}
+            <div>
+              <div className="text-xs font-bold text-slate-900 mb-2">Personnel Stationed at Camps:</div>
+              <div className="max-h-40 overflow-y-auto border border-slate-200 rounded-xl p-2 divide-y divide-slate-100 text-xs">
+                {[...selectedInvoiceView.engineers, ...selectedInvoiceView.foremen, ...selectedInvoiceView.laborers].map(o => (
+                  <div key={o.employeeId} className="py-1.5 px-2 flex items-center justify-between">
+                    <div>
+                      <span className="font-mono font-bold text-slate-900">#{o.employeeId}</span>{' '}
+                      <span className="text-slate-700">{o.employeeName}</span> ({o.title})
+                    </div>
+                    <div className="text-slate-500 font-mono text-[11px]">
+                      Room {o.roomNo} • {o.roomGrade}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Signatures */}
+            <div className="grid grid-cols-2 gap-8 pt-4 border-t border-slate-200 text-xs">
+              <div>
+                <div className="text-slate-500">Prepared By (Camp Admin):</div>
+                <div className="h-10 border-b border-dashed border-slate-300 mt-2"></div>
+                <div className="text-[11px] text-slate-400 mt-1">Lohith Kamineni / Camp Director</div>
+              </div>
+              <div>
+                <div className="text-slate-500">Approved By (Project Manager):</div>
+                <div className="h-10 border-b border-dashed border-slate-300 mt-2"></div>
+                <div className="text-[11px] text-slate-400 mt-1">Project Authorized Signatory</div>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                onClick={() => setSelectedInvoiceView(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold text-xs"
+              >
+                Close
+              </button>
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold text-xs flex items-center gap-1.5"
+              >
+                <Printer className="w-4 h-4" />
+                Print / Save PDF
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================= */}
+      {/* MODAL 2: ADJUST MONTHLY RATES (Super Admin)             */}
+      {/* ======================================================= */}
+      {showRatesModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-emerald-600" />
+                Configure Monthly Bed Allocation Rates
+              </h3>
+              <button onClick={() => setShowRatesModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Engineer Grade Rate (KWD / Bed / Month)
+                </label>
+                <input
+                  type="number"
+                  value={billingRates.engineer}
+                  onChange={(e) => setBillingRates({ ...billingRates, engineer: Number(e.target.value) })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold font-mono text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Foreman Grade Rate (KWD / Bed / Month)
+                </label>
+                <input
+                  type="number"
+                  value={billingRates.foreman}
+                  onChange={(e) => setBillingRates({ ...billingRates, foreman: Number(e.target.value) })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold font-mono text-slate-900"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  Labor Grade Rate (KWD / Bed / Month)
+                </label>
+                <input
+                  type="number"
+                  value={billingRates.labor}
+                  onChange={(e) => setBillingRates({ ...billingRates, labor: Number(e.target.value) })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold font-mono text-slate-900"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setShowRatesModal(false)}
+                  className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold"
+                >
+                  Save & Recalculate Invoices
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================= */}
+      {/* MODAL 3: EDIT FLAT GRADE & CAPACITY (Interactive Map)   */}
+      {/* ======================================================= */}
+      {editingFlatModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Settings className="w-5 h-5 text-cyan-600" />
+                Configure Flat Grade: {editingFlatModal.flatCode}
+              </h3>
+              <button onClick={() => setEditingFlatModal(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <div className="space-y-4 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Assign Room Grade for this Flat</label>
+                <select
+                  value={editingFlatModal.roomGrade}
+                  onChange={(e) => {
+                    const grade = e.target.value;
+                    const cap = grade === 'Engineer' ? 2 : 3;
+                    setEditingFlatModal({ ...editingFlatModal, roomGrade: grade, defaultCap: cap });
+                  }}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900"
+                >
+                  <option value="Engineer">Engineer Grade (Standard 2 Beds/Room)</option>
+                  <option value="Foreman">Foreman Grade (Standard 3 Beds/Room)</option>
+                  <option value="Labor">Labor Grade (Standard 3 Beds/Room)</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Bed Capacity Per Room</label>
+                <input
+                  type="number"
+                  min="1"
+                  max="6"
+                  value={editingFlatModal.defaultCap || (editingFlatModal.roomGrade === 'Engineer' ? 2 : 3)}
+                  onChange={(e) => setEditingFlatModal({ ...editingFlatModal, defaultCap: Number(e.target.value) })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold text-slate-900"
+                />
+              </div>
+
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-[11px] text-amber-800">
+                Changing this flat grade will update all rooms in Flat #{editingFlatModal.flatNo} and automatically adjust the monthly billing rates in the Invoicing module.
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditingFlatModal(null)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  onClick={() =>
+                    handleUpdateFlatGrade(
+                      editingFlatModal.flatCode,
+                      editingFlatModal.roomGrade,
+                      editingFlatModal.defaultCap || (editingFlatModal.roomGrade === 'Engineer' ? 2 : 3)
+                    )
+                  }
+                  className="px-4 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold"
+                >
+                  Apply Grade
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================= */}
+      {/* MODAL 4: EDIT CAMP DETAILS                              */}
+      {/* ======================================================= */}
+      {editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-slate-700" />
+                Edit Camp Details ({editingCampModal.campNo})
+              </h3>
+              <button onClick={() => setEditingCampModal(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateCampDetails} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Camp Code</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCampModal.campNo}
+                  onChange={(e) => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Camp Area / Location Name</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCampModal.campArea}
+                  onChange={(e) => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Master Cost Center</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCampModal.costCenter}
+                  onChange={(e) => setEditingCampModal({ ...editingCampModal, costCenter: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold font-mono"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingCampModal(null)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold shadow-md"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 5: ADD CAMP WIZARD */}
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl">
@@ -2339,35 +2719,28 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                <div className="font-bold text-cyan-700">Room Capacity Rules</div>
-                <div className="grid grid-cols-2 gap-3">
-                  <div>
-                    <label className="block text-slate-600 mb-1">Floor 1 (Engineer) Beds/Room</label>
-                    <input
-                      type="number"
-                      value={newCampForm.floor1Capacity}
-                      onChange={(e) => setNewCampForm({ ...newCampForm, floor1Capacity: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-slate-600 mb-1">Upper Floors Beds/Room</label>
-                    <input
-                      type="number"
-                      value={newCampForm.upperFloorCapacity}
-                      onChange={(e) => setNewCampForm({ ...newCampForm, upperFloorCapacity: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1.5"
-                    />
-                  </div>
-                </div>
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl">
+                <label className="block font-semibold text-slate-700 mb-1">
+                  How many Engineer Flats (2 beds/rm) to allocate?
+                </label>
+                <input
+                  type="number"
+                  min="0"
+                  max="10"
+                  value={newCampForm.engineerFlatsCount}
+                  onChange={(e) => setNewCampForm({ ...newCampForm, engineerFlatsCount: e.target.value })}
+                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-2 font-bold"
+                />
+                <p className="text-[11px] text-slate-500 mt-1">
+                  Remaining flats will automatically default to standard Labor/Foreman capacity (3 beds/rm).
+                </p>
               </div>
 
               <div className="flex justify-end gap-2 pt-2">
                 <button
                   type="button"
                   onClick={() => setShowAddCampModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
                 >
                   Cancel
                 </button>
@@ -2375,7 +2748,7 @@ export default function App() {
                   type="submit"
                   className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold shadow-md"
                 >
-                  Create Building in Database
+                  Create Building
                 </button>
               </div>
             </form>
@@ -2383,13 +2756,14 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL 6: CHECK IN */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <UserPlus className="w-5 h-5 text-cyan-600" />
-                Dhow Employee Room Assignment
+                Assign Employee to Bed
               </h3>
               <button onClick={() => setShowCheckInModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
@@ -2464,7 +2838,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Cost Center</label>
+                  <label className="block font-semibold text-slate-700 mb-1">Project Cost Center</label>
                   <input
                     type="text"
                     required
@@ -2489,7 +2863,7 @@ export default function App() {
                 <button
                   type="button"
                   onClick={() => setShowCheckInModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold"
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
                 >
                   Cancel
                 </button>
@@ -2497,7 +2871,7 @@ export default function App() {
                   type="submit"
                   className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold"
                 >
-                  Confirm Room Check-In
+                  Confirm Check-In
                 </button>
               </div>
             </form>
@@ -2505,6 +2879,7 @@ export default function App() {
         </div>
       )}
 
+      {/* MODAL 7: MANAGE OCCUPANT */}
       {manageOccupantModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
@@ -2547,301 +2922,6 @@ export default function App() {
                 </button>
               </div>
             </div>
-          </div>
-        </div>
-      )}
-
-      {showAddUserModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-cyan-600" />
-                Add System User Account
-              </h3>
-              <button onClick={() => setShowAddUserModal(false)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleCreateUser} className="space-y-3.5 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Staff ID</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="EDT-025"
-                    value={newUserForm.staffId}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, staffId: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="Full Name"
-                    value={newUserForm.name}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, name: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Email Address</label>
-                  <input
-                    type="email"
-                    required
-                    placeholder="user@al-dhow.com"
-                    value={newUserForm.email}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, email: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
-                  <input
-                    type="text"
-                    placeholder="e.g. Camp Boss"
-                    value={newUserForm.title}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, title: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Initial Password</label>
-                <input
-                  type="password"
-                  required
-                  placeholder="Min 8 characters"
-                  value={newUserForm.password}
-                  onChange={(e) => setNewUserForm({ ...newUserForm, password: e.target.value })}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Role</label>
-                  <select
-                    value={newUserForm.role}
-                    onChange={(e) => {
-                      const nextRole = e.target.value;
-                      setNewUserForm({ ...newUserForm, role: nextRole, ...getRoleDefaultPermissions(nextRole) });
-                    }}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  >
-                    <option value="CAMP_EDITOR">Camp Editor</option>
-                    <option value="AUDITOR">Auditor (View Only)</option>
-                    <option value="SUPER_ADMIN">Super Admin</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Camp Scope</label>
-                  <select
-                    value={newUserForm.campScope}
-                    onChange={(e) => setNewUserForm({ ...newUserForm, campScope: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  >
-                    <option value="ALL">ALL CAMPS</option>
-                    {camps.map(c => (
-                      <option key={c.id} value={c.campNo}>{c.campNo}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setShowAddUserModal(false)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold"
-                >
-                  Create User
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {editingUserModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Settings className="w-5 h-5 text-cyan-600" />
-                Edit User Role & Permissions ({editingUserModal.staffId})
-              </h3>
-              <button onClick={() => setEditingUserModal(null)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveEditedUser} className="space-y-4 text-xs">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Full Name</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingUserModal.name}
-                    onChange={(e) => setEditingUserModal({ ...editingUserModal, name: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
-                  <input
-                    type="text"
-                    value={editingUserModal.title || ''}
-                    onChange={(e) => setEditingUserModal({ ...editingUserModal, title: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Assigned Role</label>
-                  <select
-                    value={editingUserModal.role}
-                    onChange={(e) => {
-                      const nextRole = e.target.value;
-                      if (editingUserModal.id === currentUser.id && nextRole !== 'SUPER_ADMIN') {
-                        alert('You cannot demote your own active Super Admin account.');
-                        return;
-                      }
-                      setEditingUserModal({ ...editingUserModal, role: nextRole, permissions: getRoleDefaultPermissions(nextRole) });
-                    }}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold text-cyan-700"
-                  >
-                    <option value="SUPER_ADMIN">SUPER_ADMIN (Full Control)</option>
-                    <option value="CAMP_EDITOR">CAMP_EDITOR (Can Edit)</option>
-                    <option value="AUDITOR">AUDITOR (Read-Only)</option>
-                  </select>
-                </div>
-
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Assigned Camp Scope</label>
-                  <select
-                    value={editingUserModal.campScope}
-                    onChange={(e) => setEditingUserModal({ ...editingUserModal, campScope: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold"
-                  >
-                    <option value="ALL">ALL CAMPS</option>
-                    {camps.map(c => (
-                      <option key={c.id} value={c.campNo}>{c.campNo} — {c.campArea}</option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
-                <button
-                  type="button"
-                  onClick={() => setEditingUserModal(null)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold shadow-md"
-                >
-                  Save Role & Permissions
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showResetPasswordModal && targetUserForReset && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-cyan-600" />
-                Reset User Password
-              </h3>
-              <button
-                onClick={() => {
-                  setShowResetPasswordModal(false);
-                  setTargetUserForReset(null);
-                }}
-                className="text-slate-400 hover:text-slate-700"
-              >
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-              <div className="text-slate-500">Resetting password for:</div>
-              <div className="font-bold text-slate-900 mt-0.5">{targetUserForReset.name} ({targetUserForReset.email})</div>
-            </div>
-
-            {resetSuccessMessage ? (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs font-semibold flex items-center gap-2">
-                <CheckCircle2 className="w-4 h-4 text-emerald-600" />
-                {resetSuccessMessage}
-              </div>
-            ) : (
-              <form onSubmit={handleExecutePasswordReset} className="space-y-3.5 text-xs">
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">New Password</label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Min 8 characters"
-                    value={newPasswordValue}
-                    onChange={(e) => setNewPasswordValue(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Confirm New Password</label>
-                  <input
-                    type="password"
-                    required
-                    placeholder="Re-enter new password"
-                    value={confirmPasswordValue}
-                    onChange={(e) => setConfirmPasswordValue(e.target.value)}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setShowResetPasswordModal(false);
-                      setTargetUserForReset(null);
-                    }}
-                    className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="submit"
-                    className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold"
-                  >
-                    Update Password
-                  </button>
-                </div>
-              </form>
-            )}
           </div>
         </div>
       )}
