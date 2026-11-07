@@ -3160,7 +3160,7 @@ export default function App() {
       {/* ======================================================= */}
       {showManageCostCentersModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-4xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b border-slate-200 pb-3">
               <div className="flex items-center gap-2.5">
                 <div className="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center">
@@ -3231,9 +3231,9 @@ export default function App() {
               </div>
             </form>
 
-            {/* Existing Cost Centers Table */}
-            <div className="border border-slate-200 rounded-xl overflow-hidden">
-              <table className="w-full text-left text-xs whitespace-nowrap">
+            {/* Existing Cost Centers Table (Horizontal Scroll Enabled) */}
+            <div className="border border-slate-200 rounded-xl overflow-x-auto">
+              <table className="w-full min-w-[720px] text-left text-xs whitespace-nowrap">
                 <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b border-slate-200">
                   <tr>
                     <th className="py-2.5 px-3.5">Code</th>
@@ -3302,7 +3302,6 @@ export default function App() {
           </div>
         </div>
       )}
-
       {/* ======================================================= */}
       {/* MODAL: EDIT SPECIFIC COST CENTER                        */}
       {/* ======================================================= */}
