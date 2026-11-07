@@ -5,7 +5,7 @@ import {
   UserPlus, KeyRound, Bed, Home, RefreshCw, X, ChevronRight, UserCheck,
   Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings,
   Receipt, Printer, Edit3, SlidersHorizontal, ArrowRightLeft, History,
-  Clock, MapPin, AlertTriangle, Archive
+  Clock, MapPin, AlertTriangle, Archive, Tag, Briefcase
 } from 'lucide-react';
 import dhowLogoImg from './assets/dhow-logo.png';
 
@@ -55,7 +55,18 @@ function calculateTenure(startDateStr, endDateStr = null) {
 }
 
 // ==========================================
-// 3. INITIAL SYSTEM USERS (RBAC & AUTH)
+// 3. MASTER COST CENTERS REGISTRY
+// ==========================================
+const INITIAL_COST_CENTERS = [
+  { id: 'cc-1', code: '1IDS038-KIPIC', name: 'KIPIC Al-Zour Refinery Site', division: 'IDS', status: 'Active' },
+  { id: 'cc-2', code: '1IDS051-KNPC', name: 'KNPC Clean Fuels Project', division: 'IDS', status: 'Active' },
+  { id: 'cc-3', code: '1MEP019-KNPC', name: 'KNPC Electrical & Mechanical Maintenance', division: 'MEP', status: 'Active' },
+  { id: 'cc-4', code: '1CIV011-KOC', name: 'KOC Heavy Civil & Pipeline Works', division: 'CIVIL', status: 'Active' },
+  { id: 'cc-5', code: '1CIV014-MEW', name: 'MEW Substation Infrastructure', division: 'CIVIL', status: 'Active' }
+];
+
+// ==========================================
+// 4. INITIAL SYSTEM USERS (RBAC & AUTH)
 // ==========================================
 const INITIAL_USERS = [
   {
@@ -146,7 +157,7 @@ const getRoleDefaultPermissions = (role) => {
 };
 
 // ==========================================
-// 4. INITIAL CAMPS (PER-FLAT GRADE MODEL)
+// 5. INITIAL CAMPS (PER-FLAT GRADE MODEL)
 // ==========================================
 const INITIAL_CAMPS = [
   {
@@ -337,7 +348,7 @@ const INITIAL_CAMPS = [
 ];
 
 // ==========================================
-// 5. INITIAL OCCUPANTS WITH STAY HISTORIES
+// 6. INITIAL OCCUPANTS
 // ==========================================
 const INITIAL_OCCUPANTS = [
   {
@@ -756,23 +767,28 @@ export default function App() {
   // STATE PERSISTENCE & MANAGEMENT
   // ==========================================
   const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_users_v8');
+    const saved = localStorage.getItem('dhow_camp_users_v9');
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_session_v8');
+    const saved = localStorage.getItem('dhow_camp_session_v9');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [camps, setCamps] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_camps_v8');
+    const saved = localStorage.getItem('dhow_camp_camps_v9');
     return saved ? JSON.parse(saved) : INITIAL_CAMPS;
   });
 
   const [occupants, setOccupants] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_occupants_v8');
+    const saved = localStorage.getItem('dhow_camp_occupants_v9');
     return saved ? JSON.parse(saved) : INITIAL_OCCUPANTS;
+  });
+
+  const [costCenters, setCostCenters] = useState(() => {
+    const saved = localStorage.getItem('dhow_camp_cost_centers_v1');
+    return saved ? JSON.parse(saved) : INITIAL_COST_CENTERS;
   });
 
   // Navigation Tabs: 'map' | 'occupants' | 'invoicing' | 'reports' | 'admin'
@@ -793,6 +809,15 @@ export default function App() {
   const [universalSearchQuery, setUniversalSearchQuery] = useState('');
   const [isSearchDropdownOpen, setIsSearchDropdownOpen] = useState(false);
   const [viewingEmployeeDossier, setViewingEmployeeDossier] = useState(null);
+
+  // Cost Center Management States
+  const [showManageCostCentersModal, setShowManageCostCentersModal] = useState(false);
+  const [editingCostCenterModal, setEditingCostCenterModal] = useState(null);
+  const [newCostCenterForm, setNewCostCenterForm] = useState({
+    code: '',
+    name: '',
+    division: 'IDS'
+  });
 
   // Relocation Transfer Modal State
   const [relocatingOccupant, setRelocatingOccupant] = useState(null);
@@ -817,7 +842,7 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
 
-  // Modals
+  // Building & User Modals
   const [showAddCampModal, setShowAddCampModal] = useState(false);
   const [editingCampModal, setEditingCampModal] = useState(null);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
@@ -884,22 +909,26 @@ export default function App() {
 
   // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('dhow_camp_users_v8', JSON.stringify(users));
+    localStorage.setItem('dhow_camp_users_v9', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_camps_v8', JSON.stringify(camps));
+    localStorage.setItem('dhow_camp_camps_v9', JSON.stringify(camps));
   }, [camps]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_occupants_v8', JSON.stringify(occupants));
+    localStorage.setItem('dhow_camp_occupants_v9', JSON.stringify(occupants));
   }, [occupants]);
 
   useEffect(() => {
+    localStorage.setItem('dhow_camp_cost_centers_v1', JSON.stringify(costCenters));
+  }, [costCenters]);
+
+  useEffect(() => {
     if (currentUser && rememberMe) {
-      localStorage.setItem('dhow_camp_session_v8', JSON.stringify(currentUser));
+      localStorage.setItem('dhow_camp_session_v9', JSON.stringify(currentUser));
     } else if (!currentUser) {
-      localStorage.removeItem('dhow_camp_session_v8');
+      localStorage.removeItem('dhow_camp_session_v9');
     }
   }, [currentUser, rememberMe]);
 
@@ -953,7 +982,7 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('dhow_camp_session_v8');
+    localStorage.removeItem('dhow_camp_session_v9');
     setActiveTab('map');
   };
 
@@ -1043,8 +1072,8 @@ export default function App() {
   }, [occupants, searchTerm, statusFilter, divisionFilter]);
 
   const availableDivisions = useMemo(() => {
-    return Array.from(new Set(occupants.map(o => o.division))).filter(Boolean);
-  }, [occupants]);
+    return Array.from(new Set(costCenters.map(c => c.division))).filter(Boolean);
+  }, [costCenters]);
 
   // Monthly Invoicing Rollup
   const projectInvoicingData = useMemo(() => {
@@ -1054,9 +1083,11 @@ export default function App() {
     activeOccupants.forEach(occ => {
       const cc = occ.costCenter || 'Unassigned';
       if (!costCenterMap[cc]) {
+        const found = costCenters.find(c => c.code === cc);
         costCenterMap[cc] = {
           costCenter: cc,
-          division: occ.division || 'General',
+          projectName: found ? found.name : 'Direct Project Site',
+          division: occ.division || (found ? found.division : 'General'),
           totalOccupants: 0,
           engineerBeds: 0,
           foremanBeds: 0,
@@ -1092,7 +1123,76 @@ export default function App() {
       grandTotalKWD,
       totalBilledEmployees: activeOccupants.length
     };
-  }, [occupants, rates]);
+  }, [occupants, costCenters, rates]);
+
+  // =========================================================
+  // COST CENTER ADDITION & EDITING LOGIC
+  // =========================================================
+  const handleCreateCostCenter = (e) => {
+    e.preventDefault();
+    const cleanCode = newCostCenterForm.code.trim().toUpperCase();
+    if (!cleanCode) return;
+
+    if (costCenters.some(c => c.code === cleanCode)) {
+      alert(`Cost Center code "${cleanCode}" already exists.`);
+      return;
+    }
+
+    const newCC = {
+      id: `cc-${Date.now()}`,
+      code: cleanCode,
+      name: newCostCenterForm.name.trim() || 'Project Site',
+      division: newCostCenterForm.division,
+      status: 'Active'
+    };
+
+    setCostCenters(prev => [...prev, newCC]);
+    setNewCostCenterForm({ code: '', name: '', division: 'IDS' });
+  };
+
+  const handleSaveEditCostCenter = (e) => {
+    e.preventDefault();
+    if (!editingCostCenterModal) return;
+
+    const oldCC = costCenters.find(c => c.id === editingCostCenterModal.id);
+    const oldCode = oldCC?.code;
+    const newCode = editingCostCenterModal.code.trim().toUpperCase();
+    const newDivision = editingCostCenterModal.division;
+
+    // Cascade update to occupants if cost center code changed
+    if (oldCode && oldCode !== newCode) {
+      setOccupants(prev =>
+        prev.map(occ => {
+          if (occ.costCenter === oldCode) {
+            return { ...occ, costCenter: newCode, division: newDivision };
+          }
+          return occ;
+        })
+      );
+    }
+
+    setCostCenters(prev =>
+      prev.map(c => (c.id === editingCostCenterModal.id ? {
+        ...editingCostCenterModal,
+        code: newCode,
+        name: editingCostCenterModal.name.trim()
+      } : c))
+    );
+
+    setEditingCostCenterModal(null);
+  };
+
+  const handleToggleCostCenterStatus = (id) => {
+    setCostCenters(prev =>
+      prev.map(c => {
+        if (c.id === id) {
+          const nextStatus = c.status === 'Active' ? 'Inactive' : 'Active';
+          return { ...c, status: nextStatus };
+        }
+        return c;
+      })
+    );
+  };
 
   // Granular Flat Grade Switcher
   const handleFlatGradeChange = (campId, floorNo, flatCode, newGrade) => {
@@ -1211,9 +1311,7 @@ export default function App() {
     }));
   };
 
-  // =========================================================
-  // SAFE CAMP DECOMMISSIONING WITH ZERO-OCCUPANCY LOCKOUT
-  // =========================================================
+  // Safe Camp Decommissioning
   const handleAttemptDecommissionCamp = (camp) => {
     const remainingOccupants = occupants.filter(
       o => o.campNo === camp.campNo && o.employeeStatus !== 'Exited'
@@ -1240,9 +1338,7 @@ export default function App() {
     }
   };
 
-  // =========================================================
-  // 1-CLICK BED RELOCATION ENGINE
-  // =========================================================
+  // 1-Click Bed Relocation Engine
   const handleOpenRelocateModal = (occ) => {
     const defaultCamp = activeCamps[0] || camps[0];
     const defaultFloor = defaultCamp.floors[0];
@@ -1291,7 +1387,6 @@ export default function App() {
       previousStayRecord
     ];
 
-    // Vacate previous room and assign target room
     setCamps(prevCamps =>
       prevCamps.map(c => ({
         ...c,
@@ -1313,7 +1408,6 @@ export default function App() {
       }))
     );
 
-    // Update occupant record
     const updatedOccupant = {
       ...relocatingOccupant,
       campNo: targetCamp.campNo,
@@ -1407,6 +1501,9 @@ export default function App() {
       alert('Read-Only Access: You do not have permission to check in employees.');
       return;
     }
+    const activeCCs = costCenters.filter(c => c.status === 'Active');
+    const defaultCC = activeCCs[0] || { code: '1IDS038-KIPIC', division: 'IDS' };
+
     setCheckInForm({
       ...checkInForm,
       campId: camp.id,
@@ -1414,6 +1511,8 @@ export default function App() {
       flatCode: flat.flatCode,
       roomNo: room.roomNo,
       roomGrade: flat.roomGrade,
+      costCenter: defaultCC.code,
+      division: defaultCC.division,
       afrEntryRef: `AFR-2026-${Math.floor(100 + Math.random() * 900)}`
     });
     setShowCheckInModal(true);
@@ -1737,12 +1836,12 @@ export default function App() {
 
   const handleExportInvoicingCSV = () => {
     const headers = [
-      'Project Cost Center', 'Division', 'Billing Period', 'Credited Cost Center',
+      'Project Cost Center', 'Project Name', 'Division', 'Billing Period', 'Credited Cost Center',
       'Engineer Beds', 'Foreman Beds', 'Labor Beds', 'Total Active Employees', 'Total Recharge Amount (KWD)'
     ];
 
     const rows = projectInvoicingData.items.map(item => [
-      `"${item.costCenter}"`, `"${item.division}"`, `"${billingPeriod}"`, `"1ACD000"`,
+      `"${item.costCenter}"`, `"${item.projectName}"`, `"${item.division}"`, `"${billingPeriod}"`, `"1ACD000"`,
       item.engineerBeds, item.foremanBeds, item.laborBeds, item.totalOccupants, `${item.totalAmountKWD.toFixed(3)} KWD`
     ]);
 
@@ -1939,7 +2038,6 @@ export default function App() {
 
           {/* UNIVERSAL SEARCH BAR & QUICK ACTIONS */}
           <div className="flex flex-wrap items-center gap-3">
-            {/* Universal Typeahead Search Bar */}
             <div className="relative w-full sm:w-72">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
@@ -1973,7 +2071,6 @@ export default function App() {
                 )}
               </div>
 
-              {/* Autocomplete Dropdown */}
               {isSearchDropdownOpen && universalSearchResults.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
                   <div className="p-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 bg-slate-950">
@@ -2120,13 +2217,20 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
+            <button
+              onClick={() => setShowManageCostCentersModal(true)}
+              className="text-cyan-700 hover:text-cyan-900 font-bold flex items-center gap-1 cursor-pointer"
+            >
+              <Tag className="w-3.5 h-3.5" />
+              <span>Manage Project Cost Centers ({costCenters.length})</span>
+            </button>
             {isSuperAdmin && (
               <button
                 onClick={() => setActiveTab('admin')}
-                className="text-cyan-600 hover:text-cyan-800 font-semibold flex items-center gap-1 cursor-pointer"
+                className="text-slate-600 hover:text-slate-900 font-semibold cursor-pointer"
               >
-                <span>Manage Users & Role Permissions →</span>
+                <span>User Roles & RBAC →</span>
               </button>
             )}
           </div>
@@ -2672,7 +2776,7 @@ export default function App() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <select
                     value={billingPeriod}
                     onChange={(e) => setBillingPeriod(e.target.value)}
@@ -2682,6 +2786,14 @@ export default function App() {
                     <option value="October 2026">Billing Period: October 2026</option>
                     <option value="December 2026">Billing Period: December 2026</option>
                   </select>
+
+                  <button
+                    onClick={() => setShowManageCostCentersModal(true)}
+                    className="bg-slate-900 hover:bg-slate-800 text-white text-xs font-bold px-3.5 py-2 rounded-xl flex items-center gap-1.5 shadow-xs cursor-pointer"
+                  >
+                    <Tag className="w-3.5 h-3.5 text-cyan-400" />
+                    Manage Cost Centers
+                  </button>
 
                   <button
                     onClick={handleExportInvoicingCSV}
@@ -2753,8 +2865,8 @@ export default function App() {
                   <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b border-slate-200">
                     <tr>
                       <th className="py-3.5 px-4">Debit Project Cost Center</th>
+                      <th className="py-3.5 px-4">Project Name / Site</th>
                       <th className="py-3.5 px-4">Division</th>
-                      <th className="py-3.5 px-4">Credited Master</th>
                       <th className="py-3.5 px-4">Billed Occupants</th>
                       <th className="py-3.5 px-4">Engineer Beds ({rates.engineer} KWD)</th>
                       <th className="py-3.5 px-4">Foreman Beds ({rates.foreman} KWD)</th>
@@ -2767,12 +2879,12 @@ export default function App() {
                     {projectInvoicingData.items.map(item => (
                       <tr key={item.costCenter} className="hover:bg-slate-50">
                         <td className="py-3.5 px-4 font-mono font-bold text-cyan-600">{item.costCenter}</td>
+                        <td className="py-3.5 px-4 font-medium text-slate-700">{item.projectName}</td>
                         <td className="py-3.5 px-4">
                           <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 font-bold text-[10px]">
                             {item.division}
                           </span>
                         </td>
-                        <td className="py-3.5 px-4 font-mono text-slate-500">1ACD000</td>
                         <td className="py-3.5 px-4 font-bold text-slate-800">{item.totalOccupants} Employees</td>
                         <td className="py-3.5 px-4 font-mono text-cyan-700 font-bold">{item.engineerBeds}</td>
                         <td className="py-3.5 px-4 font-mono text-indigo-700 font-bold">{item.foremanBeds}</td>
@@ -2884,13 +2996,22 @@ export default function App() {
                   Super Admins can directly assign user roles, camp scopes, editing permissions, or reset passwords.
                 </p>
               </div>
-              <button
-                onClick={() => setShowAddUserModal(true)}
-                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 self-start sm:self-auto cursor-pointer"
-              >
-                <UserPlus className="w-4 h-4" />
-                Add System User
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setShowManageCostCentersModal(true)}
+                  className="bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs font-bold px-3.5 py-2.5 rounded-xl border border-slate-200 flex items-center gap-1.5 transition-all cursor-pointer"
+                >
+                  <Tag className="w-4 h-4 text-cyan-600" />
+                  <span>Cost Center Registry</span>
+                </button>
+                <button
+                  onClick={() => setShowAddUserModal(true)}
+                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  Add User
+                </button>
+              </div>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
@@ -3035,6 +3156,231 @@ export default function App() {
       </main>
 
       {/* ======================================================= */}
+      {/* MODAL: MANAGE MASTER COST CENTERS (ADD / EDIT)          */}
+      {/* ======================================================= */}
+      {showManageCostCentersModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-3xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center">
+                  <Tag className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Project Cost Center Registry</h3>
+                  <p className="text-xs text-slate-500 font-medium">
+                    Configure master project billing codes used across room check-in, bed transfers, and monthly recharges.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowManageCostCentersModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Quick Add Form */}
+            <form onSubmit={handleCreateCostCenter} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs">
+              <div className="font-bold text-slate-800 flex items-center gap-1.5">
+                <Plus className="w-4 h-4 text-cyan-600" /> Add New Project Cost Center
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Cost Center Code</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 1IDS040-KOC"
+                    value={newCostCenterForm.code}
+                    onChange={(e) => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-mono uppercase font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Project Name / Site Description</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Substation Expansion Phase 2"
+                    value={newCostCenterForm.name}
+                    onChange={(e) => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5"
+                  />
+                </div>
+                <div>
+                  <label className="block text-slate-600 font-medium mb-1">Division</label>
+                  <div className="flex items-center gap-2">
+                    <select
+                      value={newCostCenterForm.division}
+                      onChange={(e) => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-slate-800"
+                    >
+                      <option value="IDS">IDS</option>
+                      <option value="MEP">MEP</option>
+                      <option value="CIVIL">CIVIL</option>
+                      <option value="OIL & GAS">OIL & GAS</option>
+                      <option value="MARINE">MARINE</option>
+                    </select>
+                    <button
+                      type="submit"
+                      className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg shrink-0 shadow-xs cursor-pointer"
+                    >
+                      Add
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </form>
+
+            {/* Existing Cost Centers Table */}
+            <div className="border border-slate-200 rounded-xl overflow-hidden">
+              <table className="w-full text-left text-xs whitespace-nowrap">
+                <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b border-slate-200">
+                  <tr>
+                    <th className="py-2.5 px-3.5">Code</th>
+                    <th className="py-2.5 px-3.5">Project / Client Name</th>
+                    <th className="py-2.5 px-3.5">Division</th>
+                    <th className="py-2.5 px-3.5">Active Occupants</th>
+                    <th className="py-2.5 px-3.5">Status</th>
+                    <th className="py-2.5 px-3.5 text-right">Actions</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {costCenters.map(cc => {
+                    const activeCount = occupants.filter(o => o.costCenter === cc.code && o.employeeStatus !== 'Exited').length;
+                    return (
+                      <tr key={cc.id} className="hover:bg-slate-50">
+                        <td className="py-2.5 px-3.5 font-mono font-bold text-cyan-700">{cc.code}</td>
+                        <td className="py-2.5 px-3.5 font-semibold text-slate-900">{cc.name}</td>
+                        <td className="py-2.5 px-3.5">
+                          <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 font-bold text-[10px]">
+                            {cc.division}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3.5 font-bold text-slate-700">
+                          {activeCount} Bed{activeCount !== 1 ? 's' : ''} Assigned
+                        </td>
+                        <td className="py-2.5 px-3.5">
+                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                            cc.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
+                          }`}>
+                            {cc.status}
+                          </span>
+                        </td>
+                        <td className="py-2.5 px-3.5 text-right">
+                          <div className="flex items-center justify-end gap-2">
+                            <button
+                              onClick={() => setEditingCostCenterModal({ ...cc })}
+                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-xs"
+                            >
+                              Edit
+                            </button>
+                            <button
+                              onClick={() => handleToggleCostCenterStatus(cc.id)}
+                              className={`px-2.5 py-1 rounded-md font-bold text-xs ${
+                                cc.status === 'Active' ? 'bg-amber-50 text-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                              }`}
+                            >
+                              {cc.status === 'Active' ? 'Deactivate' : 'Activate'}
+                            </button>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex justify-end pt-2 border-t border-slate-200">
+              <button
+                onClick={() => setShowManageCostCentersModal(false)}
+                className="px-4 py-2 bg-slate-900 text-white rounded-xl text-xs font-bold"
+              >
+                Done
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================= */}
+      {/* MODAL: EDIT SPECIFIC COST CENTER                        */}
+      {/* ======================================================= */}
+      {editingCostCenterModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-slate-200 rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl">
+            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Tag className="w-5 h-5 text-cyan-600" />
+                Edit Cost Center
+              </h3>
+              <button onClick={() => setEditingCostCenterModal(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveEditCostCenter} className="space-y-3.5 text-xs">
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Cost Center Code</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCostCenterModal.code}
+                  onChange={(e) => setEditingCostCenterModal({ ...editingCostCenterModal, code: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono uppercase font-bold"
+                />
+                <span className="text-[10px] text-slate-400 mt-1 block">
+                  Renaming will automatically update all existing occupant records tied to this code.
+                </span>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Project Name / Site</label>
+                <input
+                  type="text"
+                  required
+                  value={editingCostCenterModal.name}
+                  onChange={(e) => setEditingCostCenterModal({ ...editingCostCenterModal, name: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Division</label>
+                <select
+                  value={editingCostCenterModal.division}
+                  onChange={(e) => setEditingCostCenterModal({ ...editingCostCenterModal, division: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2 font-bold"
+                >
+                  <option value="IDS">IDS</option>
+                  <option value="MEP">MEP</option>
+                  <option value="CIVIL">CIVIL</option>
+                  <option value="OIL & GAS">OIL & GAS</option>
+                  <option value="MARINE">MARINE</option>
+                </select>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
+                <button
+                  type="button"
+                  onClick={() => setEditingCostCenterModal(null)}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold"
+                >
+                  Save Changes
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* ======================================================= */}
       {/* MODAL: EMPLOYEE DOSSIER, LIVE TENURE & RELOCATION LEDGER*/}
       {/* ======================================================= */}
       {viewingEmployeeDossier && (
@@ -3122,7 +3468,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Action Toolbar Inside Dossier */}
               <div className="flex items-center justify-end gap-2 pt-1">
                 <button
                   onClick={() => handleOpenRelocateModal(viewingEmployeeDossier)}
@@ -3142,7 +3487,6 @@ export default function App() {
               </h4>
 
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50/50 space-y-4">
-                {/* Active Stay Node */}
                 <div className="relative pl-6 pb-2 border-l-2 border-cyan-500">
                   <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-cyan-500 border-2 border-white" />
                   <div className="flex items-center justify-between text-xs">
@@ -3154,11 +3498,10 @@ export default function App() {
                     </span>
                   </div>
                   <div className="text-[11px] text-slate-600 mt-1">
-                    Flat {viewingEmployeeDossier.flatCode} ({viewingEmployeeDossier.roomGrade} Grade) • Charged to Cost Center: {viewingEmployeeDossier.costCenter}
+                    Flat {viewingEmployeeDossier.flatCode} ({viewingEmployeeDossier.roomGrade} Grade) • Cost Center: {viewingEmployeeDossier.costCenter}
                   </div>
                 </div>
 
-                {/* Historical Relocation Nodes */}
                 {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
                   viewingEmployeeDossier.stayHistory.map((hist, idx) => (
                     <div key={idx} className="relative pl-6 pb-2 border-l-2 border-slate-300">
@@ -3418,7 +3761,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* MODAL 1: EDIT CAMP BUILDING DETAILS (WITH DECOMMISSION) */}
+      {/* MODAL 1: EDIT CAMP BUILDING DETAILS                     */}
       {/* ======================================================= */}
       {editingCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3496,7 +3839,7 @@ export default function App() {
                 </p>
               </div>
 
-              {/* DANGEROUS ACTION: DECOMMISSION FACILITY */}
+              {/* DECOMMISSION FACILITY */}
               {currentUser.permissions.canDeleteCamps && (
                 <div className="p-3.5 bg-rose-50/60 border border-rose-200 rounded-xl flex items-center justify-between">
                   <div>
@@ -3684,7 +4027,8 @@ export default function App() {
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1">
                 <div className="text-slate-500">Debited Project Cost Center:</div>
                 <div className="text-sm font-black text-cyan-700">{selectedInvoiceModal.costCenter}</div>
-                <div className="font-semibold text-slate-700">Division: {selectedInvoiceModal.division}</div>
+                <div className="font-semibold text-slate-700">Site: {selectedInvoiceModal.projectName}</div>
+                <div className="text-slate-500">Division: {selectedInvoiceModal.division}</div>
               </div>
 
               <div className="p-3 bg-slate-50 rounded-xl border border-slate-200 space-y-1 text-right">
@@ -3780,7 +4124,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* MODAL 4: AFR ROOM CHECK-IN                              */}
+      {/* MODAL 4: AFR ROOM CHECK-IN (WITH COST CENTER SELECTOR)  */}
       {/* ======================================================= */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3852,36 +4196,49 @@ export default function App() {
               </div>
 
               <div className="grid grid-cols-3 gap-3">
+                <div className="col-span-2">
+                  <label className="block font-semibold text-slate-700 mb-1">Project Cost Center</label>
+                  <select
+                    required
+                    value={checkInForm.costCenter}
+                    onChange={(e) => {
+                      const selectedCode = e.target.value;
+                      const found = costCenters.find(c => c.code === selectedCode);
+                      setCheckInForm({
+                        ...checkInForm,
+                        costCenter: selectedCode,
+                        division: found ? found.division : checkInForm.division
+                      });
+                    }}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-900"
+                  >
+                    {costCenters.filter(c => c.status === 'Active').map(cc => (
+                      <option key={cc.id} value={cc.code}>
+                        {cc.code} — {cc.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
                 <div>
                   <label className="block font-semibold text-slate-700 mb-1">Division</label>
                   <input
                     type="text"
-                    required
+                    readOnly
                     value={checkInForm.division}
-                    onChange={(e) => setCheckInForm({ ...checkInForm, division: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                    className="w-full border border-slate-200 bg-slate-100 text-slate-600 font-bold rounded-xl px-3 py-2 cursor-not-allowed"
                   />
                 </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Project Cost Center</label>
-                  <input
-                    type="text"
-                    required
-                    value={checkInForm.costCenter}
-                    onChange={(e) => setCheckInForm({ ...checkInForm, costCenter: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
-                  <input
-                    type="text"
-                    required
-                    value={checkInForm.title}
-                    onChange={(e) => setCheckInForm({ ...checkInForm, title: e.target.value })}
-                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                  />
-                </div>
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
+                <input
+                  type="text"
+                  required
+                  value={checkInForm.title}
+                  onChange={(e) => setCheckInForm({ ...checkInForm, title: e.target.value })}
+                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
