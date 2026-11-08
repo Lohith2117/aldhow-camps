@@ -5,7 +5,7 @@ import {
   UserPlus, KeyRound, Bed, Home, RefreshCw, X, ChevronRight, UserCheck,
   Calendar, Layers, FileSpreadsheet, BarChart3, Plane, Settings,
   Receipt, Printer, Edit3, SlidersHorizontal, ArrowRightLeft, History,
-  Clock, MapPin, AlertTriangle, Archive, Tag, Briefcase
+  Clock, MapPin, AlertTriangle, Archive, Tag, Phone
 } from 'lucide-react';
 import dhowLogoImg from './assets/dhow-logo.png';
 
@@ -767,27 +767,27 @@ export default function App() {
   // STATE PERSISTENCE & MANAGEMENT
   // ==========================================
   const [users, setUsers] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_users_v9');
+    const saved = localStorage.getItem('dhow_camp_users_v10');
     return saved ? JSON.parse(saved) : INITIAL_USERS;
   });
 
   const [currentUser, setCurrentUser] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_session_v9');
+    const saved = localStorage.getItem('dhow_camp_session_v10');
     return saved ? JSON.parse(saved) : null;
   });
 
   const [camps, setCamps] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_camps_v9');
+    const saved = localStorage.getItem('dhow_camp_camps_v10');
     return saved ? JSON.parse(saved) : INITIAL_CAMPS;
   });
 
   const [occupants, setOccupants] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_occupants_v9');
+    const saved = localStorage.getItem('dhow_camp_occupants_v10');
     return saved ? JSON.parse(saved) : INITIAL_OCCUPANTS;
   });
 
   const [costCenters, setCostCenters] = useState(() => {
-    const saved = localStorage.getItem('dhow_camp_cost_centers_v1');
+    const saved = localStorage.getItem('dhow_camp_cost_centers_v2');
     return saved ? JSON.parse(saved) : INITIAL_COST_CENTERS;
   });
 
@@ -842,7 +842,7 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
   const [showForgotModal, setShowForgotModal] = useState(false);
 
-  // Building & User Modals
+  // Modals
   const [showAddCampModal, setShowAddCampModal] = useState(false);
   const [editingCampModal, setEditingCampModal] = useState(null);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
@@ -871,7 +871,7 @@ export default function App() {
     floor1EngineerFlats: 1
   });
 
-  // Check-In Form State
+  // Check-In Form State (WITH MOBILE NUMBER)
   const [checkInForm, setCheckInForm] = useState({
     campId: 'camp-1',
     floorNo: 1,
@@ -909,26 +909,26 @@ export default function App() {
 
   // Sync to localStorage
   useEffect(() => {
-    localStorage.setItem('dhow_camp_users_v9', JSON.stringify(users));
+    localStorage.setItem('dhow_camp_users_v10', JSON.stringify(users));
   }, [users]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_camps_v9', JSON.stringify(camps));
+    localStorage.setItem('dhow_camp_camps_v10', JSON.stringify(camps));
   }, [camps]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_occupants_v9', JSON.stringify(occupants));
+    localStorage.setItem('dhow_camp_occupants_v10', JSON.stringify(occupants));
   }, [occupants]);
 
   useEffect(() => {
-    localStorage.setItem('dhow_camp_cost_centers_v1', JSON.stringify(costCenters));
+    localStorage.setItem('dhow_camp_cost_centers_v2', JSON.stringify(costCenters));
   }, [costCenters]);
 
   useEffect(() => {
     if (currentUser && rememberMe) {
-      localStorage.setItem('dhow_camp_session_v9', JSON.stringify(currentUser));
+      localStorage.setItem('dhow_camp_session_v10', JSON.stringify(currentUser));
     } else if (!currentUser) {
-      localStorage.removeItem('dhow_camp_session_v9');
+      localStorage.removeItem('dhow_camp_session_v10');
     }
   }, [currentUser, rememberMe]);
 
@@ -982,16 +982,14 @@ export default function App() {
 
   const handleLogout = () => {
     setCurrentUser(null);
-    localStorage.removeItem('dhow_camp_session_v9');
+    localStorage.removeItem('dhow_camp_session_v10');
     setActiveTab('map');
   };
 
-  // Only active camps appear on interactive map
   const activeCamps = useMemo(() => {
     return camps.filter(c => c.status !== 'Decommissioned');
   }, [camps]);
 
-  // Global Bed & Occupant Computations
   const globalStats = useMemo(() => {
     let totalFlats = 0;
     let totalRooms = 0;
@@ -1048,7 +1046,8 @@ export default function App() {
       occ.employeeId.toLowerCase().includes(q) ||
       occ.employeeName.toLowerCase().includes(q) ||
       occ.civilId.toString().includes(q) ||
-      occ.passportNo.toLowerCase().includes(q)
+      occ.passportNo.toLowerCase().includes(q) ||
+      (occ.mobileNo && occ.mobileNo.includes(q))
     ).slice(0, 8);
   }, [occupants, universalSearchQuery]);
 
@@ -1061,6 +1060,7 @@ export default function App() {
         occ.employeeId.toLowerCase().includes(q) ||
         occ.civilId.toString().includes(q) ||
         occ.passportNo.toLowerCase().includes(q) ||
+        (occ.mobileNo && occ.mobileNo.toLowerCase().includes(q)) ||
         occ.flatCode.toLowerCase().includes(q) ||
         occ.roomNo.toLowerCase().includes(q);
 
@@ -1125,9 +1125,7 @@ export default function App() {
     };
   }, [occupants, costCenters, rates]);
 
-  // =========================================================
-  // COST CENTER ADDITION & EDITING LOGIC
-  // =========================================================
+  // Cost Center Actions
   const handleCreateCostCenter = (e) => {
     e.preventDefault();
     const cleanCode = newCostCenterForm.code.trim().toUpperCase();
@@ -1159,7 +1157,6 @@ export default function App() {
     const newCode = editingCostCenterModal.code.trim().toUpperCase();
     const newDivision = editingCostCenterModal.division;
 
-    // Cascade update to occupants if cost center code changed
     if (oldCode && oldCode !== newCode) {
       setOccupants(prev =>
         prev.map(occ => {
@@ -1255,7 +1252,7 @@ export default function App() {
     );
   };
 
-  // Staged Floor Editing (Draft Safe)
+  // Staged Floor Editing
   const handleSaveCampEdits = (e) => {
     e.preventDefault();
     if (!editingCampModal) return;
@@ -1311,7 +1308,7 @@ export default function App() {
     }));
   };
 
-  // Safe Camp Decommissioning
+  // Safe Decommissioning
   const handleAttemptDecommissionCamp = (camp) => {
     const remainingOccupants = occupants.filter(
       o => o.campNo === camp.campNo && o.employeeStatus !== 'Exited'
@@ -1513,6 +1510,7 @@ export default function App() {
       roomGrade: flat.roomGrade,
       costCenter: defaultCC.code,
       division: defaultCC.division,
+      mobileNo: '+965 ',
       afrEntryRef: `AFR-2026-${Math.floor(100 + Math.random() * 900)}`
     });
     setShowCheckInModal(true);
@@ -1591,7 +1589,8 @@ export default function App() {
       employeeId: '',
       employeeName: '',
       passportNo: '',
-      civilId: ''
+      civilId: '',
+      mobileNo: '+965 '
     });
   };
 
@@ -1818,7 +1817,7 @@ export default function App() {
       `"${o.employeeId}"`, `"${o.afrEntryRef}"`, `"${o.employeeName}"`, `"${o.nationality}"`,
       `"${o.title}"`, `"${o.productivityType}"`, `"${o.entryDate}"`, `"${o.passportNo}"`,
       `"${o.civilId}"`, `"${o.roomGrade}"`, `"${o.campArea}"`, o.floorNo, o.flatNo,
-      `"${o.flatCode}"`, `"${o.roomNo}"`, `"${o.employeeStatus}"`, `"${o.mobileNo}"`,
+      `"${o.flatCode}"`, `"${o.roomNo}"`, `"${o.employeeStatus}"`, `"${o.mobileNo || ''}"`,
       `"${o.leaveStartDate}"`, `"${o.leaveEndDate}"`, `"${o.leaveReturnDate}"`,
       `"${o.afrLogNo}"`, `"${o.residencyCompany}"`, `"${o.reallocationCostCenter}"`,
       `"${o.exitDate}"`, `"${o.afrExitRef}"`, `"${o.remarks}"`
@@ -2043,7 +2042,7 @@ export default function App() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Search Emp ID (e.g. 5838) / Name..."
+                  placeholder="Search Emp ID / Name / Phone..."
                   value={universalSearchQuery}
                   onFocus={() => setIsSearchDropdownOpen(true)}
                   onChange={(e) => {
@@ -2093,7 +2092,7 @@ export default function App() {
                             <span className="font-semibold text-white text-xs truncate">{occ.employeeName}</span>
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • {occ.division}
+                            {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • Tel: {occ.mobileNo || 'N/A'}
                           </div>
                         </div>
                         <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-cyan-950 text-cyan-300 border border-cyan-800 shrink-0">
@@ -2625,7 +2624,7 @@ export default function App() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
-                  placeholder="Search by ID, Name, Civil ID, Passport, Flat, Room..."
+                  placeholder="Search by ID, Name, Mobile, Civil ID, Passport, Flat, Room..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-xs text-slate-900 placeholder-slate-400 focus:outline-none focus:ring-2 focus:ring-cyan-600"
@@ -2678,6 +2677,7 @@ export default function App() {
                       <th className="py-3 px-3">CAMP #</th>
                       <th className="py-3 px-3">ID</th>
                       <th className="py-3 px-3">Employee Name</th>
+                      <th className="py-3 px-3">Mobile No.</th>
                       <th className="py-3 px-3">Division</th>
                       <th className="py-3 px-3">Cost Center</th>
                       <th className="py-3 px-3">Room Grade</th>
@@ -2710,6 +2710,7 @@ export default function App() {
                             {occ.employeeName}
                           </button>
                         </td>
+                        <td className="py-2.5 px-3 font-mono text-cyan-700 font-semibold">{occ.mobileNo || 'N/A'}</td>
                         <td className="py-2.5 px-3">
                           <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 font-mono text-[10px] font-bold">
                             {occ.division}
@@ -3156,7 +3157,7 @@ export default function App() {
       </main>
 
       {/* ======================================================= */}
-      {/* MODAL: MANAGE MASTER COST CENTERS (ADD / EDIT)          */}
+      {/* MODAL: MANAGE MASTER COST CENTERS (SLIDING TABLE FIXED) */}
       {/* ======================================================= */}
       {showManageCostCentersModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3231,7 +3232,7 @@ export default function App() {
               </div>
             </form>
 
-            {/* Existing Cost Centers Table (Horizontal Scroll Enabled) */}
+            {/* Existing Cost Centers Table (Horizontal Sliding Enabled) */}
             <div className="border border-slate-200 rounded-xl overflow-x-auto">
               <table className="w-full min-w-[720px] text-left text-xs whitespace-nowrap">
                 <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b border-slate-200">
@@ -3302,6 +3303,7 @@ export default function App() {
           </div>
         </div>
       )}
+
       {/* ======================================================= */}
       {/* MODAL: EDIT SPECIFIC COST CENTER                        */}
       {/* ======================================================= */}
@@ -3380,7 +3382,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* MODAL: EMPLOYEE DOSSIER, LIVE TENURE & RELOCATION LEDGER*/}
+      {/* MODAL: EMPLOYEE DOSSIER, LIVE TENURE & CONTACT DETAILS  */}
       {/* ======================================================= */}
       {viewingEmployeeDossier && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3402,8 +3404,8 @@ export default function App() {
               </button>
             </div>
 
-            {/* Quick Profile Cards */}
-            <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
+            {/* Profile Cards with Phone Number */}
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 text-xs">
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
                 <div className="text-slate-400 font-medium">Civil ID</div>
                 <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId}</div>
@@ -3411,6 +3413,12 @@ export default function App() {
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
                 <div className="text-slate-400 font-medium">Passport #</div>
                 <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
+                <div className="text-slate-400 font-medium flex items-center gap-1">
+                  <Phone className="w-3 h-3 text-cyan-600" /> Mobile No.
+                </div>
+                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
               </div>
               <div className="p-3 bg-slate-50 border border-slate-200 rounded-xl">
                 <div className="text-slate-400 font-medium">Nationality</div>
@@ -3456,7 +3464,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Dynamic Live Tenure Display */}
               <div className="p-3 bg-white/90 border border-cyan-200 rounded-xl flex items-center justify-between gap-3 text-xs">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-cyan-600 shrink-0" />
@@ -3478,7 +3485,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Chronological Relocation History Timeline */}
+            {/* Relocation History Timeline */}
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
                 <History className="w-4 h-4 text-slate-600" />
@@ -4123,7 +4130,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* MODAL 4: AFR ROOM CHECK-IN (WITH COST CENTER SELECTOR)  */}
+      {/* MODAL 4: AFR ROOM CHECK-IN (WITH MOBILE NUMBER INPUT)   */}
       {/* ======================================================= */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -4194,6 +4201,34 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Mobile Number & Job Title Row */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                    <Phone className="w-3.5 h-3.5 text-cyan-600" /> Mobile Number
+                  </label>
+                  <input
+                    type="tel"
+                    required
+                    placeholder="+965 9xxxxxxx"
+                    value={checkInForm.mobileNo}
+                    onChange={(e) => setCheckInForm({ ...checkInForm, mobileNo: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2 font-mono"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. Site Engineer"
+                    value={checkInForm.title}
+                    onChange={(e) => setCheckInForm({ ...checkInForm, title: e.target.value })}
+                    className="w-full border border-slate-300 rounded-xl px-3 py-2"
+                  />
+                </div>
+              </div>
+
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
                   <label className="block font-semibold text-slate-700 mb-1">Project Cost Center</label>
@@ -4229,17 +4264,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold text-slate-700 mb-1">Job Title</label>
-                <input
-                  type="text"
-                  required
-                  value={checkInForm.title}
-                  onChange={(e) => setCheckInForm({ ...checkInForm, title: e.target.value })}
-                  className="w-full border border-slate-300 rounded-xl px-3 py-2"
-                />
-              </div>
-
               <div className="flex justify-end gap-2 pt-3 border-t border-slate-200">
                 <button
                   type="button"
@@ -4261,7 +4285,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* MODAL 5: MANAGE OCCUPANT                                */}
+      {/* MODAL 5: MANAGE OCCUPANT (WITH PHONE CONTACT LINE)      */}
       {/* ======================================================= */}
       {manageOccupantModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -4276,7 +4300,9 @@ export default function App() {
             <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-200 text-xs space-y-1">
               <div className="font-bold text-slate-900 text-sm">{manageOccupantModal.employeeName}</div>
               <div className="text-slate-600">{manageOccupantModal.title} • {manageOccupantModal.division} ({manageOccupantModal.costCenter})</div>
-              <div className="text-slate-500 font-mono">Room: {manageOccupantModal.roomNo} | Civil ID: {manageOccupantModal.civilId}</div>
+              <div className="text-slate-500 font-mono">
+                Room: {manageOccupantModal.roomNo} | Civil ID: {manageOccupantModal.civilId} | Tel: <strong className="text-cyan-700">{manageOccupantModal.mobileNo || 'N/A'}</strong>
+              </div>
             </div>
 
             <div className="space-y-2 text-xs">
