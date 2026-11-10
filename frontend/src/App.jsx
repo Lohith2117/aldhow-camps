@@ -1,11 +1,13 @@
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Building2, Users, ShieldCheck, Eye, EyeOff, Lock, LogOut, Plus, Search,
   Download, CheckCircle2, AlertCircle, Trash2, UserPlus, KeyRound, Bed,
   Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane, Settings,
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
-  Archive, Tag, Phone, Clock, SlidersHorizontal, Layers, CheckSquare, Globe
+  Archive, Tag, Phone, Clock, SlidersHorizontal, Layers, CheckSquare, Globe,
+  Upload, FileUp, Filter
 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import dhowLogoImg from './assets/dhow-logo.png';
 import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
 import {
@@ -25,20 +27,21 @@ const DhowLogo = ({ className = "h-8 w-auto" }) => (
 
 export default function App() {
   // ==========================================
-  // STATE PERSISTENCE (13 NORMALIZED TABLES)
+  // STATE PERSISTENCE (14 TABLES / ENTITIES)
   // ==========================================
-  const [users, setUsers] = useState(() => JSON.parse(localStorage.getItem('dhow_users_v13')) || INITIAL_USERS);
-  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('dhow_session_v13')) || null);
-  const [camps, setCamps] = useState(() => JSON.parse(localStorage.getItem('dhow_camps_v13')) || INITIAL_CAMPS);
-  const [occupants, setOccupants] = useState(() => JSON.parse(localStorage.getItem('dhow_occupants_v13')) || INITIAL_OCCUPANTS);
-  const [costCenters, setCostCenters] = useState(() => JSON.parse(localStorage.getItem('dhow_cc_v13')) || INITIAL_COST_CENTERS);
-  const [leaveLogs, setLeaveLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_leave_v13')) || INITIAL_LEAVE_LOGS);
-  const [rtdLogs, setRtdLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_rtd_v13')) || INITIAL_RTD_LOGS);
-  const [transferRequests, setTransferRequests] = useState(() => JSON.parse(localStorage.getItem('dhow_tr_v13')) || INITIAL_TRANSFER_REQUESTS);
-  const [otherCosts, setOtherCosts] = useState(() => JSON.parse(localStorage.getItem('dhow_others_v13')) || INITIAL_BILLING_OTHER_COSTS);
-  const [activityLogs, setActivityLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_act_v13')) || INITIAL_ACTIVITY_LOGS);
+  const [users, setUsers] = useState(() => JSON.parse(localStorage.getItem('dhow_users_v14')) || INITIAL_USERS);
+  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('dhow_session_v14')) || null);
+  const [camps, setCamps] = useState(() => JSON.parse(localStorage.getItem('dhow_camps_v14')) || INITIAL_CAMPS);
+  const [occupants, setOccupants] = useState(() => JSON.parse(localStorage.getItem('dhow_occupants_v14')) || INITIAL_OCCUPANTS);
+  const [costCenters, setCostCenters] = useState(() => JSON.parse(localStorage.getItem('dhow_cc_v14')) || INITIAL_COST_CENTERS);
+  const [divisions, setDivisions] = useState(() => JSON.parse(localStorage.getItem('dhow_div_v14')) || ['IDS', 'MEP', 'CIVIL', 'OIL & GAS', 'MARINE']);
+  const [leaveLogs, setLeaveLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_leave_v14')) || INITIAL_LEAVE_LOGS);
+  const [rtdLogs, setRtdLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_rtd_v14')) || INITIAL_RTD_LOGS);
+  const [transferRequests, setTransferRequests] = useState(() => JSON.parse(localStorage.getItem('dhow_tr_v14')) || INITIAL_TRANSFER_REQUESTS);
+  const [otherCosts, setOtherCosts] = useState(() => JSON.parse(localStorage.getItem('dhow_others_v14')) || INITIAL_BILLING_OTHER_COSTS);
+  const [activityLogs, setActivityLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_act_v14')) || INITIAL_ACTIVITY_LOGS);
 
-  // Navigation Tabs: 'map' | 'occupants' | 'invoicing' | 'reports' | 'activity_logs' | 'approvals' | 'admin'
+  // Navigation
   const [activeTab, setActiveTab] = useState('map');
   const [selectedCampId, setSelectedCampId] = useState(INITIAL_CAMPS[0].id);
   const [selectedFloorNo, setSelectedFloorNo] = useState(1);
@@ -69,6 +72,20 @@ export default function App() {
   const [showManageCostCentersModal, setShowManageCostCentersModal] = useState(false);
   const [editingCostCenterModal, setEditingCostCenterModal] = useState(null);
   const [decommissionLockoutModal, setDecommissionLockoutModal] = useState(null);
+
+  // Phase 1: New Floor Configurator sub-modal inside Edit Camp
+  const [showAddFloorConfigModal, setShowAddFloorConfigModal] = useState(false);
+  const [newFloorDraft, setNewFloorDraft] = useState({ flatsCount: 3, nonManualFlats: 1 });
+
+  // Phase 2: Dynamic Divisions
+  const [newDivisionInput, setNewDivisionInput] = useState('');
+
+  // Phase 3: Excel Roster Import
+  const [showExcelImportModal, setShowExcelImportModal] = useState(false);
+  const [excelParsedRows, setExcelParsedRows] = useState([]);
+  const [excelImportFileName, setExcelImportFileName] = useState('');
+  const [excelImportStats, setExcelImportStats] = useState({ total: 0, valid: 0, errors: 0 });
+  const excelFileInputRef = useRef(null);
 
   // User Management Modals (RBAC)
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -114,7 +131,7 @@ export default function App() {
   });
   const [newCostCenterForm, setNewCostCenterForm] = useState({ code: '', name: '', division: 'IDS' });
 
-  // Add Camp Wizard: Dynamic Per-Floor Flat Configuration
+  // Add Camp Wizard: Floor-by-floor configuration
   const [newCampForm, setNewCampForm] = useState({
     campNo: 'CAMP-04', campArea: 'Ahmadi Sector 4', campDigit: '4', campStartDate: '2026-11-09',
     floorsCount: 3, roomsPerFlat: 3,
@@ -132,18 +149,19 @@ export default function App() {
   });
 
   // LocalStorage Sync
-  useEffect(() => { localStorage.setItem('dhow_users_v13', JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem('dhow_camps_v13', JSON.stringify(camps)); }, [camps]);
-  useEffect(() => { localStorage.setItem('dhow_occupants_v13', JSON.stringify(occupants)); }, [occupants]);
-  useEffect(() => { localStorage.setItem('dhow_cc_v13', JSON.stringify(costCenters)); }, [costCenters]);
-  useEffect(() => { localStorage.setItem('dhow_leave_v13', JSON.stringify(leaveLogs)); }, [leaveLogs]);
-  useEffect(() => { localStorage.setItem('dhow_rtd_v13', JSON.stringify(rtdLogs)); }, [rtdLogs]);
-  useEffect(() => { localStorage.setItem('dhow_tr_v13', JSON.stringify(transferRequests)); }, [transferRequests]);
-  useEffect(() => { localStorage.setItem('dhow_others_v13', JSON.stringify(otherCosts)); }, [otherCosts]);
-  useEffect(() => { localStorage.setItem('dhow_act_v13', JSON.stringify(activityLogs)); }, [activityLogs]);
+  useEffect(() => { localStorage.setItem('dhow_users_v14', JSON.stringify(users)); }, [users]);
+  useEffect(() => { localStorage.setItem('dhow_camps_v14', JSON.stringify(camps)); }, [camps]);
+  useEffect(() => { localStorage.setItem('dhow_occupants_v14', JSON.stringify(occupants)); }, [occupants]);
+  useEffect(() => { localStorage.setItem('dhow_cc_v14', JSON.stringify(costCenters)); }, [costCenters]);
+  useEffect(() => { localStorage.setItem('dhow_div_v14', JSON.stringify(divisions)); }, [divisions]);
+  useEffect(() => { localStorage.setItem('dhow_leave_v14', JSON.stringify(leaveLogs)); }, [leaveLogs]);
+  useEffect(() => { localStorage.setItem('dhow_rtd_v14', JSON.stringify(rtdLogs)); }, [rtdLogs]);
+  useEffect(() => { localStorage.setItem('dhow_tr_v14', JSON.stringify(transferRequests)); }, [transferRequests]);
+  useEffect(() => { localStorage.setItem('dhow_others_v14', JSON.stringify(otherCosts)); }, [otherCosts]);
+  useEffect(() => { localStorage.setItem('dhow_act_v14', JSON.stringify(activityLogs)); }, [activityLogs]);
   useEffect(() => {
-    if (currentUser && rememberMe) localStorage.setItem('dhow_session_v13', JSON.stringify(currentUser));
-    else if (!currentUser) localStorage.removeItem('dhow_session_v13');
+    if (currentUser && rememberMe) localStorage.setItem('dhow_session_v14', JSON.stringify(currentUser));
+    else if (!currentUser) localStorage.removeItem('dhow_session_v14');
   }, [currentUser, rememberMe]);
 
   const logActivity = (category, actionTitle, details, campNo = 'ALL') => {
@@ -188,7 +206,7 @@ export default function App() {
   const handleLogout = () => {
     logActivity('AUTH', 'User Sign Out', `${currentUser?.name} logged out`);
     setCurrentUser(null);
-    localStorage.removeItem('dhow_session_v13');
+    localStorage.removeItem('dhow_session_v14');
     setActiveTab('map');
   };
 
@@ -196,7 +214,7 @@ export default function App() {
   const activeCamp = useMemo(() => activeCamps.find(c => c.id === selectedCampId) || activeCamps[0] || camps[0], [activeCamps, camps, selectedCampId]);
   const activeFloor = useMemo(() => activeCamp?.floors.find(f => f.floorNo === selectedFloorNo) || activeCamp?.floors[0], [activeCamp, selectedFloorNo]);
 
-  // Global Bed Telemetry
+  // Global Telemetry
   const globalStats = useMemo(() => {
     let totalFlats = 0;
     let totalRooms = 0;
@@ -263,10 +281,6 @@ export default function App() {
     });
   }, [occupants, searchTerm, statusFilter, divisionFilter]);
 
-  const availableDivisions = useMemo(() => {
-    return Array.from(new Set(costCenters.map(c => c.division))).filter(Boolean);
-  }, [costCenters]);
-
   const projectInvoicingData = useMemo(() => {
     const activeOccupants = occupants.filter(o => !o.employeeStatus.startsWith('RTD'));
     const costCenterMap = {};
@@ -322,8 +336,133 @@ export default function App() {
   }, [occupants, costCenters, rates, otherCosts]);
 
   // =========================================================
-  // 1. INLINE FLAT GRADE SWITCHER (NON-MANUAL VS MANUAL)
+  // PHASE 1: UPGRADED EDIT CAMP & FLOOR CONFIGURATION
   // =========================================================
+  const handleOpenAddFloorConfig = () => {
+    setNewFloorDraft({ flatsCount: 3, nonManualFlats: 1 });
+    setShowAddFloorConfigModal(true);
+  };
+
+  const handleCommitNewFloorToCamp = (e) => {
+    e.preventDefault();
+    if (!editingCampModal) return;
+
+    const nextFloorNo = editingCampModal.floors.length + 1;
+    const campDigit = editingCampModal.campDigit || editingCampModal.campNo.replace(/\D/g, '') || '1';
+    const flStr = String(nextFloorNo).padStart(2, '0');
+    const totalFlats = parseInt(newFloorDraft.flatsCount, 10) || 3;
+    const nmFlats = parseInt(newFloorDraft.nonManualFlats, 10) || 0;
+
+    const newFlats = [];
+    for (let fl = 1; fl <= totalFlats; fl++) {
+      const flatStr = String(fl).padStart(2, '0');
+      const isNM = fl <= nmFlats;
+      const flatGrade = isNM ? 'Non-Manual' : 'Manual';
+      const gradeInitial = isNM ? 'NM' : 'M';
+      const roomCapacity = isNM ? 2 : 3;
+
+      newFlats.push({
+        flatNo: fl,
+        flatCode: `${campDigit}-${flStr}-${flatStr}-${gradeInitial}`,
+        roomGrade: flatGrade,
+        rooms: [
+          { roomNo: `${campDigit}-${flStr}-${flatStr}-A`, capacity: roomCapacity, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-${flatStr}-B`, capacity: roomCapacity, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-${flatStr}-C`, capacity: roomCapacity, occupants: [] },
+        ]
+      });
+    }
+
+    setEditingCampModal(prev => ({
+      ...prev,
+      floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }]
+    }));
+    setShowAddFloorConfigModal(false);
+  };
+
+  const handleRemoveTopFloorDraft = () => {
+    if (!editingCampModal || editingCampModal.floors.length <= 1) return;
+    const lastFloor = editingCampModal.floors[editingCampModal.floors.length - 1];
+
+    let hasOccupants = false;
+    lastFloor.flats.forEach(fl => {
+      fl.rooms.forEach(rm => {
+        if (rm.occupants && rm.occupants.length > 0) hasOccupants = true;
+      });
+    });
+
+    if (hasOccupants) {
+      alert(`Cannot remove Floor ${lastFloor.floorNo} because it contains active occupants. Please relocate them first.`);
+      return;
+    }
+
+    setEditingCampModal(prev => ({
+      ...prev,
+      floors: prev.floors.slice(0, -1)
+    }));
+  };
+
+  const handleAddFlatWithGrade = (floorNo, grade) => {
+    if (!editingCampModal) return;
+    const targetFloor = editingCampModal.floors.find(f => f.floorNo === floorNo);
+    if (!targetFloor) return;
+
+    const nextFlatNo = targetFloor.flats.length + 1;
+    const campDigit = editingCampModal.campDigit || '1';
+    const flStr = String(floorNo).padStart(2, '0');
+    const flatStr = String(nextFlatNo).padStart(2, '0');
+    const isNM = grade === 'Non-Manual';
+    const gradeInitial = isNM ? 'NM' : 'M';
+    const capacity = isNM ? 2 : 3;
+
+    const newFlat = {
+      flatNo: nextFlatNo,
+      flatCode: `${campDigit}-${flStr}-${flatStr}-${gradeInitial}`,
+      roomGrade: grade,
+      rooms: [
+        { roomNo: `${campDigit}-${flStr}-${flatStr}-A`, capacity, occupants: [] },
+        { roomNo: `${campDigit}-${flStr}-${flatStr}-B`, capacity, occupants: [] },
+        { roomNo: `${campDigit}-${flStr}-${flatStr}-C`, capacity, occupants: [] },
+      ]
+    };
+
+    setEditingCampModal(prev => ({
+      ...prev,
+      floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: [...f.flats, newFlat] } : f)
+    }));
+  };
+
+  const handleRemoveFlatFromFloor = (floorNo) => {
+    if (!editingCampModal) return;
+    const targetFloor = editingCampModal.floors.find(f => f.floorNo === floorNo);
+    if (!targetFloor || targetFloor.flats.length <= 1) return;
+
+    const lastFlat = targetFloor.flats[targetFloor.flats.length - 1];
+    let hasOccupants = false;
+    lastFlat.rooms.forEach(rm => {
+      if (rm.occupants && rm.occupants.length > 0) hasOccupants = true;
+    });
+
+    if (hasOccupants) {
+      alert(`Cannot remove Flat ${lastFlat.flatCode} because it has active occupants.`);
+      return;
+    }
+
+    setEditingCampModal(prev => ({
+      ...prev,
+      floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: f.flats.slice(0, -1) } : f)
+    }));
+  };
+
+  const handleSaveCampEdits = (e) => {
+    e.preventDefault();
+    if (!editingCampModal) return;
+    setCamps(prev => prev.map(c => c.id === editingCampModal.id ? editingCampModal : c));
+    logActivity('CAMP_CONFIG', `Updated Camp ${editingCampModal.campNo}`, `Updated floor geometry for ${editingCampModal.campNo}`, editingCampModal.campNo);
+    setEditingCampModal(null);
+  };
+
+  // Inline Grade Switcher in Map
   const handleFlatGradeChange = (campId, floorNo, flatCode, newGrade) => {
     const newCapacity = newGrade === 'Non-Manual' ? 2 : 3;
     const targetCamp = camps.find(c => c.id === campId);
@@ -332,10 +471,9 @@ export default function App() {
 
     if (!targetFlat) return;
 
-    // Check capacity constraints
     const overCapacityRoom = targetFlat.rooms.find(r => r.occupants.length > newCapacity);
     if (overCapacityRoom) {
-      alert(`Capacity Conflict: Room ${overCapacityRoom.roomNo} currently has ${overCapacityRoom.occupants.length} occupants. You cannot switch this flat to ${newGrade} (${newCapacity} beds/room) until excess occupants are relocated.`);
+      alert(`Capacity Conflict: Room ${overCapacityRoom.roomNo} currently has ${overCapacityRoom.occupants.length} occupants. You cannot switch to ${newGrade} (${newCapacity} beds/room) until excess occupants are relocated.`);
       return;
     }
 
@@ -374,168 +512,237 @@ export default function App() {
     setOccupants(prevOccs =>
       prevOccs.map(occ => {
         if (occ.campNo === targetCamp.campNo && occ.floorNo === floorNo && occ.flatCode === flatCode) {
-          return {
-            ...occ,
-            flatCode: newFlatCode,
-            roomGrade: newGrade
-          };
+          return { ...occ, flatCode: newFlatCode, roomGrade: newGrade };
         }
         return occ;
       })
     );
 
-    logActivity('CAMP_CONFIG', `Changed Grade of Flat ${flatCode}`, `Changed Flat ${flatCode} to ${newGrade} (${newCapacity} beds/room) in ${targetCamp.campNo}`, targetCamp.campNo);
+    logActivity('CAMP_CONFIG', `Changed Grade of Flat ${flatCode}`, `Switched Flat ${flatCode} to ${newGrade} in ${targetCamp.campNo}`, targetCamp.campNo);
   };
 
   // =========================================================
-  // 2. DYNAMIC FLOOR-BY-FLOOR FLAT MANAGEMENT
+  // PHASE 2: DYNAMIC DIVISION MANAGEMENT
   // =========================================================
-  const handleFloorsCountChange = (count) => {
-    const num = Math.max(1, Math.min(20, parseInt(count, 10) || 1));
-    setNewCampForm(prev => {
-      const currentConfigs = [...prev.floorConfigs];
-      const newConfigs = [];
-      for (let i = 1; i <= num; i++) {
-        const existing = currentConfigs.find(c => c.floorNo === i);
-        newConfigs.push(existing || { floorNo: i, flatsCount: 3, nonManualFlats: 0 });
-      }
-      return { ...prev, floorsCount: num, floorConfigs: newConfigs };
-    });
-  };
-
-  const updateFloorConfig = (floorNo, field, val) => {
-    setNewCampForm(prev => ({
-      ...prev,
-      floorConfigs: prev.floorConfigs.map(f => f.floorNo === floorNo ? { ...f, [field]: parseInt(val, 10) || 0 } : f)
-    }));
-  };
-
-  const handleCreateCamp = (e) => {
+  const handleAddDivision = (e) => {
     e.preventDefault();
-    const campDigit = newCampForm.campDigit || String(camps.length + 1);
-    const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
+    const cleanDiv = newDivisionInput.trim().toUpperCase();
+    if (!cleanDiv) return;
+    if (divisions.includes(cleanDiv)) {
+      alert(`Division "${cleanDiv}" already exists.`);
+      return;
+    }
+    const updated = [...divisions, cleanDiv];
+    setDivisions(updated);
+    logActivity('DIVISION_MGMT', `Added Division ${cleanDiv}`, `Added new operating division: ${cleanDiv}`);
+    setNewDivisionInput('');
+  };
 
-    const generatedFloors = newCampForm.floorConfigs.map(fc => {
-      const floorStr = String(fc.floorNo).padStart(2, '0');
-      const floorFlats = [];
+  const handleRemoveDivision = (divToRemove) => {
+    const inUseCostCenter = costCenters.some(c => c.division === divToRemove);
+    const inUseOccupant = occupants.some(o => o.division === divToRemove && !o.employeeStatus.startsWith('RTD'));
 
-      for (let fl = 1; fl <= fc.flatsCount; fl++) {
-        const flatStr = String(fl).padStart(2, '0');
-        const isNM = fl <= fc.nonManualFlats;
-        const flatGrade = isNM ? 'Non-Manual' : 'Manual';
-        const gradeInitial = isNM ? 'NM' : 'M';
-        const roomCapacity = isNM ? 2 : 3;
+    if (inUseCostCenter || inUseOccupant) {
+      alert(`Cannot remove Division "${divToRemove}" because it is currently assigned to active cost centers or occupants.`);
+      return;
+    }
 
-        const flatRooms = [];
-        const roomLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
-        for (let r = 0; r < roomsPerFl; r++) {
-          const letter = roomLetters[r] || `R${r + 1}`;
-          flatRooms.push({
-            roomNo: `${campDigit}-${floorStr}-${flatStr}-${letter}`,
-            capacity: roomCapacity,
-            occupants: []
-          });
+    if (confirm(`Remove division "${divToRemove}"?`)) {
+      setDivisions(prev => prev.filter(d => d !== divToRemove));
+      logActivity('DIVISION_MGMT', `Removed Division ${divToRemove}`, `Archived division ${divToRemove}`);
+    }
+  };
+
+  // =========================================================
+  // PHASE 3: EXCEL ROSTER IMPORT ENGINE (`Book1.xlsx`)
+  // =========================================================
+  const handleExcelFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    setExcelImportFileName(file.name);
+    const reader = new FileReader();
+
+    reader.onload = (evt) => {
+      try {
+        const bstr = evt.target.result;
+        const wb = XLSX.read(bstr, { type: 'binary' });
+        const wsName = wb.SheetNames[0];
+        const ws = wb.Sheets[wsName];
+        const rawJson = XLSX.utils.sheet_to_json(ws, { defval: '' });
+
+        if (!rawJson || rawJson.length === 0) {
+          alert('Spreadsheet is empty or could not be read.');
+          return;
         }
 
-        floorFlats.push({
-          flatNo: fl,
-          flatCode: `${campDigit}-${floorStr}-${flatStr}-${gradeInitial}`,
-          roomGrade: flatGrade,
-          rooms: flatRooms
-        });
-      }
+        // Normalize Column Headers
+        const parsedRows = rawJson.map((row, idx) => {
+          const keys = Object.keys(row);
+          const getVal = (candidates) => {
+            for (const c of candidates) {
+              const matchedKey = keys.find(k => k.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === c.toLowerCase().replace(/[^a-z0-9]/g, ''));
+              if (matchedKey && row[matchedKey] !== undefined) return String(row[matchedKey]).trim();
+            }
+            return '';
+          };
 
-      return {
-        floorNo: fc.floorNo,
-        flats: floorFlats
+          const empId = getVal(['Employee ID', 'Emp ID', 'ID', 'Staff ID', 'EmpID', 'Badge']);
+          const empName = getVal(['Employee Name', 'Name', 'Full Name', 'Staff Name']);
+          const civilId = getVal(['Kuwait Civil ID', 'Civil ID', 'CivilID', 'QID']);
+          const passportNo = getVal(['Passport Number', 'Passport No', 'Passport', 'PP No']);
+          const nationality = getVal(['Nationality', 'Country', 'Nation']) || 'India';
+          const mobileNo = getVal(['Mobile Number', 'Mobile', 'Phone', 'Tel', 'Contact']) || '+965 ';
+          const title = getVal(['Job Title', 'Title', 'Designation', 'Position']) || 'Worker';
+          const campNo = getVal(['Camp No', 'Camp', 'Building', 'Camp Code']) || (activeCamp?.campNo || 'CAMP-01');
+          const flatCode = getVal(['Flat Code', 'Flat', 'Flat No']) || '';
+          const roomNo = getVal(['Room No', 'Room', 'Room Number']) || '';
+          const roomGrade = getVal(['Room Grade', 'Grade', 'Category']) || 'Manual';
+          const division = getVal(['Division', 'Dept', 'Department']) || 'IDS';
+          const costCenter = getVal(['Project Cost Center', 'Cost Center', 'CostCenter', 'CC']) || '1IDS038-KIPIC';
+          const entryDate = getVal(['Entry Date', 'Check In Date', 'Start Date']) || '2026-11-09';
+          const emContact = getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact';
+          const emPhone = getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ';
+
+          // Validation & Conflict Check
+          const errors = [];
+          if (!empId) errors.push('Missing Employee ID');
+          if (!empName) errors.push('Missing Name');
+          if (!roomNo) errors.push('Missing Room Number');
+
+          const isDuplicate = occupants.some(o => o.employeeId === empId && !o.employeeStatus.startsWith('RTD'));
+          if (isDuplicate) errors.push('Employee ID already active in camp');
+
+          const targetCamp = camps.find(c => c.campNo === campNo);
+          let targetRoom = null;
+          if (targetCamp) {
+            targetCamp.floors.forEach(fl => {
+              fl.flats.forEach(ft => {
+                ft.rooms.forEach(rm => {
+                  if (rm.roomNo === roomNo) targetRoom = rm;
+                });
+              });
+            });
+          }
+
+          if (roomNo && !targetRoom) {
+            errors.push(`Room ${roomNo} not found in ${campNo}`);
+          } else if (targetRoom && targetRoom.occupants.length >= targetRoom.capacity) {
+            errors.push(`Room ${roomNo} is full (${targetRoom.occupants.length}/${targetRoom.capacity})`);
+          }
+
+          return {
+            rowIdx: idx + 2,
+            employeeId: empId,
+            employeeName: empName,
+            civilId,
+            passportNo,
+            nationality,
+            mobileNo,
+            title,
+            campNo,
+            flatCode,
+            roomNo,
+            roomGrade,
+            division,
+            costCenter,
+            entryDate,
+            emergencyContactName: emContact,
+            emergencyContactPhone: emPhone,
+            errors,
+            status: errors.length === 0 ? 'VALID' : 'ERROR'
+          };
+        });
+
+        const validCount = parsedRows.filter(r => r.status === 'VALID').length;
+        const errorCount = parsedRows.filter(r => r.status === 'ERROR').length;
+
+        setExcelParsedRows(parsedRows);
+        setExcelImportStats({ total: parsedRows.length, valid: validCount, errors: errorCount });
+        setShowExcelImportModal(true);
+      } catch (err) {
+        alert(`Failed to parse Excel file: ${err.message}`);
+      }
+    };
+
+    reader.readAsBinaryString(file);
+    e.target.value = '';
+  };
+
+  const handleCommitExcelImport = () => {
+    const validRows = excelParsedRows.filter(r => r.status === 'VALID');
+    if (validRows.length === 0) {
+      alert('No valid rows available to import.');
+      return;
+    }
+
+    const newOccupantsList = [...occupants];
+    let updatedCamps = [...camps];
+
+    validRows.forEach((row, i) => {
+      const newOcc = {
+        srNo: newOccupantsList.length + 1,
+        campNo: row.campNo,
+        campArea: camps.find(c => c.campNo === row.campNo)?.campArea || 'Camp Facility',
+        status: 'Permanent',
+        division: row.division,
+        costCenter: row.costCenter,
+        employeeId: row.employeeId,
+        employeeName: row.employeeName,
+        nationality: row.nationality,
+        title: row.title,
+        productivityType: 'DE',
+        entryDate: row.entryDate,
+        passportNo: row.passportNo,
+        civilId: row.civilId,
+        mobileNo: row.mobileNo,
+        emergencyContactName: row.emergencyContactName,
+        emergencyContactPhone: row.emergencyContactPhone,
+        homeCountryAddress: 'Permanent Address on File',
+        roomGrade: row.roomGrade,
+        floorNo: Number(row.flatCode.split('-')[1] || 1),
+        flatNo: Number(row.flatCode.split('-')[2] || 1),
+        flatCode: row.flatCode,
+        roomNo: row.roomNo,
+        employeeStatus: 'On Job',
+        leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
+        rtdType: '', rtdDate: '',
+        afrEntryRef: 'EXCEL-IMPORT-BOOK1',
+        afrLogNo: `LOG-${row.employeeId}`,
+        residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
+        reallocationCostCenter: row.costCenter.split('-')[0],
+        exitDate: '', afrExitRef: '', remarks: `Imported via ${excelImportFileName}`,
+        stayHistory: []
       };
+
+      newOccupantsList.push(newOcc);
+
+      // Assign to matching room slot
+      updatedCamps = updatedCamps.map(c => {
+        if (c.campNo !== row.campNo) return c;
+        return {
+          ...c,
+          floors: c.floors.map(fl => ({
+            ...fl,
+            flats: fl.flats.map(ft => ({
+              ...ft,
+              rooms: ft.rooms.map(rm => {
+                if (rm.roomNo === row.roomNo && !rm.occupants.includes(row.employeeId)) {
+                  return { ...rm, occupants: [...rm.occupants, row.employeeId] };
+                }
+                return rm;
+              })
+            }))
+          }))
+        };
+      });
     });
 
-    const newCampObj = {
-      id: `camp-${Date.now()}`,
-      campNo: newCampForm.campNo,
-      campArea: newCampForm.campArea,
-      costCenter: '1ACD000',
-      campDigit,
-      campStartDate: newCampForm.campStartDate,
-      status: 'Active',
-      floors: generatedFloors
-    };
-
-    setCamps(prev => [...prev, newCampObj]);
-    setSelectedCampId(newCampObj.id);
-    setSelectedFloorNo(1);
-    setShowAddCampModal(false);
-    logActivity('CAMP_CONFIG', `Created Building ${newCampObj.campNo}`, `Created ${newCampObj.campNo} (${newCampObj.campArea}) with ${generatedFloors.length} floors configured floor-by-floor.`, newCampObj.campNo);
-  };
-
-  // Edit Camp Modal: Add/Remove Flat on Specific Floor
-  const handleAddFlatToSpecificFloor = (floorNo) => {
-    if (!editingCampModal) return;
-    const targetFloor = editingCampModal.floors.find(f => f.floorNo === floorNo);
-    if (!targetFloor) return;
-
-    const nextFlatNo = targetFloor.flats.length + 1;
-    const campDigit = editingCampModal.campDigit || '1';
-    const flStr = String(floorNo).padStart(2, '0');
-    const flatStr = String(nextFlatNo).padStart(2, '0');
-
-    const newFlat = {
-      flatNo: nextFlatNo,
-      flatCode: `${campDigit}-${flStr}-${flatStr}-M`,
-      roomGrade: 'Manual',
-      rooms: [
-        { roomNo: `${campDigit}-${flStr}-${flatStr}-A`, capacity: 3, occupants: [] },
-        { roomNo: `${campDigit}-${flStr}-${flatStr}-B`, capacity: 3, occupants: [] },
-        { roomNo: `${campDigit}-${flStr}-${flatStr}-C`, capacity: 3, occupants: [] },
-      ]
-    };
-
-    setEditingCampModal(prev => ({
-      ...prev,
-      floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: [...f.flats, newFlat] } : f)
-    }));
-  };
-
-  const handleRemoveFlatFromSpecificFloor = (floorNo) => {
-    if (!editingCampModal) return;
-    const targetFloor = editingCampModal.floors.find(f => f.floorNo === floorNo);
-    if (!targetFloor || targetFloor.flats.length <= 1) return;
-
-    const lastFlat = targetFloor.flats[targetFloor.flats.length - 1];
-    let hasOccupants = false;
-    lastFlat.rooms.forEach(rm => { if (rm.occupants.length > 0) hasOccupants = true; });
-
-    if (hasOccupants) {
-      alert(`Cannot remove Flat ${lastFlat.flatCode} on Floor ${floorNo} because it has active occupants.`);
-      return;
-    }
-
-    setEditingCampModal(prev => ({
-      ...prev,
-      floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: f.flats.slice(0, -1) } : f)
-    }));
-  };
-
-  const handleSaveCampEdits = (e) => {
-    e.preventDefault();
-    if (!editingCampModal) return;
-    setCamps(prev => prev.map(c => c.id === editingCampModal.id ? editingCampModal : c));
-    logActivity('CAMP_CONFIG', `Updated Camp ${editingCampModal.campNo}`, `Saved floor structure and metadata for ${editingCampModal.campNo}`, editingCampModal.campNo);
-    setEditingCampModal(null);
-  };
-
-  const handleAttemptDecommissionCamp = (camp) => {
-    const activeStaffInCamp = occupants.filter(o => o.campNo === camp.campNo && !o.employeeStatus.startsWith('RTD'));
-    if (activeStaffInCamp.length > 0) {
-      setDecommissionLockoutModal({ camp, occupants: activeStaffInCamp });
-      return;
-    }
-    if (confirm(`Confirm decommissioning of ${camp.campNo}? It will be safely archived from the active map.`)) {
-      setCamps(prev => prev.map(c => c.id === camp.id ? { ...c, status: 'Decommissioned' } : c));
-      logActivity('CAMP_DECOMMISSION', `Decommissioned ${camp.campNo}`, `Camp ${camp.campNo} (${camp.campArea}) archived safely with zero active occupants`);
-      setEditingCampModal(null);
-    }
+    setOccupants(newOccupantsList);
+    setCamps(updatedCamps);
+    logActivity('EXCEL_IMPORT', `Bulk Imported ${validRows.length} Occupants`, `Successfully imported roster from ${excelImportFileName}`);
+    setShowExcelImportModal(false);
+    alert(`Success: ${validRows.length} occupants imported and assigned to camp rooms.`);
   };
 
   // Cost Center Actions
@@ -556,7 +763,7 @@ export default function App() {
     };
     setCostCenters(prev => [...prev, newCC]);
     logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
-    setNewCostCenterForm({ code: '', name: '', division: 'IDS' });
+    setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
   };
 
   const handleSaveEditCostCenter = (e) => {
@@ -591,7 +798,7 @@ export default function App() {
     }));
   };
 
-  // Occupant Operational Handlers
+  // Occupant Actions
   const handleCheckInSubmit = (e) => {
     e.preventDefault();
     const empId = checkInForm.employeeId.trim();
@@ -627,7 +834,7 @@ export default function App() {
       employeeStatus: 'On Job',
       leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
       rtdType: '', rtdDate: '',
-      afrEntryRef: checkInForm.afrEntryRef,
+      afrEntryRef: 'AFR-MANUAL',
       afrLogNo: `LOG-${empId}`,
       residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
       reallocationCostCenter: checkInForm.costCenter.split('-')[0],
@@ -648,7 +855,7 @@ export default function App() {
     }));
 
     setShowCheckInModal(false);
-    logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${newOcc.employeeName} (${newOcc.nationality} • ${newOcc.title}) assigned to ${targetCamp.campNo} Flat ${checkInForm.flatCode} Room ${checkInForm.roomNo}`, targetCamp.campNo);
+    logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${newOcc.employeeName} (${newOcc.nationality}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo}`, targetCamp.campNo);
   };
 
   const handleLeaveSubmit = (e) => {
@@ -674,7 +881,7 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
     setLeaveLogs(prev => [newLeaveLog, ...prev]);
-    logActivity('LEAVE_START', `Marked #${emp.employeeId} On Leave`, `${emp.employeeName} on vacation from ${leaveForm.startDate} to ${leaveForm.expectedEndDate} (Bed held in ${emp.campNo} Room ${emp.roomNo})`, emp.campNo);
+    logActivity('LEAVE_START', `Marked #${emp.employeeId} On Leave`, `${emp.employeeName} on vacation from ${leaveForm.startDate} to ${leaveForm.expectedEndDate}`, emp.campNo);
     setShowLeaveModal(null);
     setManageOccupantModal(null);
   };
@@ -687,10 +894,10 @@ export default function App() {
     } : o));
 
     setLeaveLogs(prev => prev.map(l => (l.employeeId === emp.employeeId && l.status === 'Active Leave') ? {
-      ...l, actualReturnDate: returnJobForm.actualReturnDate, status: 'Returned', remarks: `${l.remarks} • Return Note: ${returnJobForm.remarks}`
+      ...l, actualReturnDate: returnJobForm.actualReturnDate, status: 'Returned', remarks: `${l.remarks} • Note: ${returnJobForm.remarks}`
     } : l));
 
-    logActivity('LEAVE_RETURN', `Marked #${emp.employeeId} Returned to Job`, `${emp.employeeName} returned on Actual Return Date: ${returnJobForm.actualReturnDate} (${emp.campNo} Room ${emp.roomNo})`, emp.campNo);
+    logActivity('LEAVE_RETURN', `Marked #${emp.employeeId} Returned`, `${emp.employeeName} returned on ${returnJobForm.actualReturnDate}`, emp.campNo);
     setShowReturnJobModal(null);
     setManageOccupantModal(null);
   };
@@ -733,7 +940,7 @@ export default function App() {
       createdAt: new Date().toISOString()
     };
     setRtdLogs(prev => [newRtdLog, ...prev]);
-    logActivity('RTD_EXIT', `Processed RTD (${rtdForm.rtdType}) for #${emp.employeeId}`, `${emp.employeeName} vacated bed in ${emp.campNo} Room ${emp.roomNo} effective ${rtdForm.rtdDate}`, emp.campNo);
+    logActivity('RTD_EXIT', `Processed RTD (${rtdForm.rtdType}) for #${emp.employeeId}`, `${emp.employeeName} vacated room ${emp.roomNo}`, emp.campNo);
     setShowRtdModal(null);
     setManageOccupantModal(null);
   };
@@ -748,8 +955,8 @@ export default function App() {
       setOccupants(prev => prev.map(o => o.employeeId === emp.employeeId ? {
         ...o, costCenter: transferRequestForm.toCostCenter, division: toDiv
       } : o));
-      logActivity('COST_CENTER_TRANSFER', `Direct Transfer #${emp.employeeId}`, `Moved #${emp.employeeId} (${emp.employeeName}) from ${emp.costCenter} to ${transferRequestForm.toCostCenter} directly by ${currentUser.name}`);
-      alert(`Cost center for #${emp.employeeId} successfully updated to ${transferRequestForm.toCostCenter}!`);
+      logActivity('COST_CENTER_TRANSFER', `Direct Transfer #${emp.employeeId}`, `Moved #${emp.employeeId} to ${transferRequestForm.toCostCenter}`);
+      alert(`Cost center for #${emp.employeeId} updated to ${transferRequestForm.toCostCenter}!`);
     } else {
       const newReq = {
         id: `tr-${Date.now()}`,
@@ -767,8 +974,8 @@ export default function App() {
         reviewedBy: '', reviewDate: '', reviewRemarks: ''
       };
       setTransferRequests(prev => [newReq, ...prev]);
-      logActivity('COST_CENTER_REQUEST', `Requested Transfer for #${emp.employeeId}`, `Editor ${currentUser.name} requested transfer to ${transferRequestForm.toCostCenter}. Awaiting approval.`);
-      alert(`Transfer request submitted! Awaiting Super Admin or Auditor approval.`);
+      logActivity('COST_CENTER_REQUEST', `Requested Transfer #${emp.employeeId}`, `Requested move to ${transferRequestForm.toCostCenter}`);
+      alert(`Transfer request submitted for approval.`);
     }
     setShowTransferRequestModal(null);
     setManageOccupantModal(null);
@@ -782,9 +989,9 @@ export default function App() {
       setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
         ...o, costCenter: req.toCostCenter, division: req.toDivision
       } : o));
-      logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move of #${req.employeeId} (${req.employeeName}) to ${req.toCostCenter}`);
+      logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
     } else {
-      logActivity('COST_CENTER_REJECTION', `Rejected Transfer #${req.employeeId}`, `Rejected transfer of #${req.employeeId} to ${req.toCostCenter}`);
+      logActivity('COST_CENTER_REJECTION', `Rejected Transfer #${req.employeeId}`, `Rejected move to ${req.toCostCenter}`);
     }
 
     setTransferRequests(prev => prev.map(r => r.id === reqId ? {
@@ -879,7 +1086,7 @@ export default function App() {
       setViewingEmployeeDossier(updatedOccupant);
     }
 
-    logActivity('RELOCATION', `Relocated #${relocatingOccupant.employeeId} to ${targetCamp.campNo} Room ${targetRoom.roomNo}`, `${relocatingOccupant.employeeName} transferred from ${relocatingOccupant.campNo} Room ${relocatingOccupant.roomNo} to ${targetCamp.campNo} Room ${targetRoom.roomNo}. Reason: ${relocationForm.reason}`, targetCamp.campNo);
+    logActivity('RELOCATION', `Relocated #${relocatingOccupant.employeeId} to Room ${targetRoom.roomNo}`, `${relocatingOccupant.employeeName} moved to ${targetCamp.campNo} Room ${targetRoom.roomNo}`, targetCamp.campNo);
     setRelocatingOccupant(null);
     alert(`Successfully relocated #${relocatingOccupant.employeeId} to ${targetCamp.campNo} Room ${targetRoom.roomNo}!`);
   };
@@ -909,7 +1116,7 @@ export default function App() {
 
     setUsers(prev => [...prev, newUser]);
     setShowAddUserModal(false);
-    logActivity('USER_MGMT', `Created User Account ${newUser.staffId}`, `Created ${newUser.name} with role ${newUser.role}`);
+    logActivity('USER_MGMT', `Created User ${newUser.staffId}`, `Created ${newUser.name} with role ${newUser.role}`);
     setNewUserForm({
       staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR',
       campScope: 'ALL', canManageUsers: false, canAddCamps: false, canDeleteCamps: true,
@@ -929,7 +1136,7 @@ export default function App() {
     }
     setUsers(prev => prev.map(u => u.id === targetUserForReset.id ? { ...u, passwordHash: newPasswordValue } : u));
     setResetSuccessMessage(`Password updated for ${targetUserForReset.name}.`);
-    logActivity('USER_MGMT', `Reset Password for ${targetUserForReset.staffId}`, `Super Admin reset password for ${targetUserForReset.name}`);
+    logActivity('USER_MGMT', `Reset Password for ${targetUserForReset.staffId}`, `Updated password for ${targetUserForReset.name}`);
     setTimeout(() => {
       setShowResetPasswordModal(false);
       setTargetUserForReset(null);
@@ -939,7 +1146,7 @@ export default function App() {
     }, 1400);
   };
 
-  // Sign-In Screen
+  // Auth Screen
   if (!currentUser) {
     return (
       <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col justify-between p-4 sm:p-6 font-sans">
@@ -1034,6 +1241,15 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
+      {/* Hidden File Input for Excel Import */}
+      <input
+        type="file"
+        ref={excelFileInputRef}
+        onChange={handleExcelFileUpload}
+        accept=".xlsx, .xls, .csv"
+        className="hidden"
+      />
+
       {/* Top Header */}
       <header className="bg-[#0f172a] text-white shadow-lg sticky top-0 z-40">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 pt-4 pb-3 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
@@ -1051,7 +1267,7 @@ export default function App() {
                 </span>
               </div>
               <p className="text-xs text-slate-400 mt-0.5">
-                Accommodation Registry • Floor-by-Floor Topology • Non-Manual & Manual
+                Accommodation Registry • Floor-by-Floor Topology • Engineering vs Manual Roster
               </p>
             </div>
           </div>
@@ -1063,7 +1279,7 @@ export default function App() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Search Emp ID / Name / Nationality / Mobile..."
+                  placeholder="Search ID / Name / Nationality / Mobile..."
                   value={universalSearchQuery}
                   onFocus={() => setIsSearchDropdownOpen(true)}
                   onChange={(e) => {
@@ -1099,7 +1315,7 @@ export default function App() {
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-cyan-400 font-bold text-xs">#{occ.employeeId}</span>
                             <span className="font-semibold text-white text-xs truncate">{occ.employeeName}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300 font-medium">({occ.nationality})</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">({occ.nationality})</span>
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 truncate">
                             {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • Tel: {occ.mobileNo || 'N/A'}
@@ -1134,7 +1350,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 7 MAIN TABS */}
+        {/* 7 Navigation Tabs */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 overflow-x-auto border-t border-slate-800/80 pt-2">
           <button
             onClick={() => setActiveTab('map')}
@@ -1245,7 +1461,7 @@ export default function App() {
               className="text-cyan-700 hover:text-cyan-900 font-bold flex items-center gap-1 cursor-pointer"
             >
               <Tag className="w-3.5 h-3.5" />
-              <span>Manage Project Cost Centers ({costCenters.length})</span>
+              <span>Project Cost Centers & Divisions ({costCenters.length} CCs • {divisions.length} Divs)</span>
             </button>
             {isSuperAdmin && (
               <button
@@ -1261,7 +1477,7 @@ export default function App() {
 
       {/* Main Content Area */}
       <main className="max-w-7xl w-full mx-auto px-4 sm:px-6 py-6 space-y-6 flex-1">
-        {/* 6 Global KPI Metric Cards */}
+        {/* 6 Global Telemetry Metric Cards */}
         <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3.5">
           <div className="bg-white border border-slate-200 rounded-2xl p-4 shadow-xs">
             <div className="flex items-center justify-between text-xs text-slate-500 font-medium">
@@ -1303,7 +1519,7 @@ export default function App() {
             </div>
             <div className="text-2xl font-black text-emerald-700 mt-1.5">{globalStats.freeBeds}</div>
             <div className="text-[11px] text-emerald-700/80 mt-1">
-              Ready for immediate check-in
+              Ready for check-in
             </div>
           </div>
 
@@ -1330,9 +1546,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* ======================================================= */}
-        {/* TAB 1: INTERACTIVE CAMP MAP WITH FLAT GRADE DROPDOWN    */}
-        {/* ======================================================= */}
+        {/* TAB 1: INTERACTIVE CAMP MAP */}
         {activeTab === 'map' && activeCamp && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
@@ -1464,7 +1678,7 @@ export default function App() {
               })}
             </div>
 
-            {/* Flats & Rooms Grid (With the requested dropdown in the flat card header) */}
+            {/* Flats & Rooms Grid */}
             {activeFloor && (
               <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
                 {activeFloor.flats.map(flat => {
@@ -1485,7 +1699,7 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Flat Grade Dropdown Selector directly in the flat card header */}
+                        {/* Flat Grade Dropdown Selector */}
                         <div className="flex items-center gap-2">
                           <select
                             value={flat.roomGrade}
@@ -1495,7 +1709,6 @@ export default function App() {
                                 ? 'bg-cyan-950 text-cyan-300 border-cyan-700 hover:bg-cyan-900'
                                 : 'bg-amber-950 text-amber-300 border-amber-700 hover:bg-amber-900'
                             }`}
-                            title="Change Flat Grade (Non-Manual: 2 beds/rm, Manual: 3 beds/rm)"
                           >
                             <option value="Non-Manual">Non-Manual (2/rm)</option>
                             <option value="Manual">Manual (3/rm)</option>
@@ -1608,7 +1821,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: Book1 31-Column Occupant List (With Nationality Column) */}
+        {/* TAB 2: Book1 31-Column Occupant List (With Excel Import Trigger) */}
         {activeTab === 'occupants' && (
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
@@ -1643,8 +1856,17 @@ export default function App() {
                   className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2"
                 >
                   <option value="ALL">All Divisions</option>
-                  {availableDivisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
+
+                {/* Excel Import Button */}
+                <button
+                  onClick={() => excelFileInputRef.current?.click()}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <FileUp className="w-4 h-4" />
+                  <span>Import Excel Roster</span>
+                </button>
               </div>
             </div>
 
@@ -1857,7 +2079,223 @@ export default function App() {
       </main>
 
       {/* ======================================================= */}
-      {/* 3. MODAL: MANAGE MASTER COST CENTERS (ADD / EDIT)       */}
+      {/* PHASE 1: MODAL - EDIT CAMP WITH FLOOR RATIO CONTROLS    */}
+      {/* ======================================================= */}
+      {editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-cyan-600" />
+                Edit Camp Details & Floor Flats ({editingCampModal.campNo})
+              </h3>
+              <button onClick={() => setEditingCampModal(null)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            <form onSubmit={handleSaveCampEdits} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Camp Code</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingCampModal.campNo}
+                    onChange={(e) => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-bold"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Camp Area Location</label>
+                  <input
+                    type="text"
+                    required
+                    value={editingCampModal.campArea}
+                    onChange={(e) => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2"
+                  />
+                </div>
+              </div>
+
+              {/* Floor Management Toolbar */}
+              <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-xl flex items-center justify-between">
+                <div>
+                  <div className="font-bold text-slate-900 text-xs">Total Floors in Building</div>
+                  <div className="text-[11px] text-slate-500">Currently {editingCampModal.floors.length} Floors configured</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  {editingCampModal.floors.length > 1 && (
+                    <button
+                      type="button"
+                      onClick={handleRemoveTopFloorDraft}
+                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold cursor-pointer"
+                    >
+                      - Remove Top Floor
+                    </button>
+                  )}
+                  <button
+                    type="button"
+                    onClick={handleOpenAddFloorConfig}
+                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1"
+                  >
+                    <Plus className="w-3.5 h-3.5" />
+                    + Add New Floor
+                  </button>
+                </div>
+              </div>
+
+              {/* Per-Floor Flat Controls with Engineering Breakdown */}
+              <div className="p-4 bg-slate-50 border rounded-xl space-y-3">
+                <div className="font-bold text-slate-900">Per-Floor Flat & Grade Ratios:</div>
+                <div className="space-y-2">
+                  {editingCampModal.floors.map(fl => {
+                    const nmCount = fl.flats.filter(ft => ft.roomGrade === 'Non-Manual').length;
+                    const mCount = fl.flats.filter(ft => ft.roomGrade === 'Manual').length;
+
+                    return (
+                      <div key={fl.floorNo} className="p-3 bg-white border rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+                        <div>
+                          <div className="font-bold text-slate-900">Floor {fl.floorNo}</div>
+                          <div className="text-[11px] text-slate-500">
+                            {fl.flats.length} Flats ({nmCount} Non-Manual • {mCount} Manual)
+                          </div>
+                        </div>
+                        <div className="flex items-center gap-1.5">
+                          {fl.flats.length > 1 && (
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveFlatFromFloor(fl.floorNo)}
+                              className="px-2 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-semibold"
+                            >
+                              - Remove Flat
+                            </button>
+                          )}
+                          <button
+                            type="button"
+                            onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')}
+                            className="px-2 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 rounded text-xs font-bold"
+                          >
+                            + Add NM Flat
+                          </button>
+                          <button
+                            type="button"
+                            onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')}
+                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded text-xs font-bold"
+                          >
+                            + Add M Flat
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* Decommission Action */}
+              {currentUser.permissions?.canDeleteCamps && (
+                <div className="p-3.5 bg-rose-50/60 border border-rose-200 rounded-xl flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-rose-900">Decommission Camp Facility</div>
+                    <div className="text-[11px] text-rose-700">Safely archives this building once zero occupants remain.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const activeStaff = occupants.filter(o => o.campNo === editingCampModal.campNo && !o.employeeStatus.startsWith('RTD'));
+                      if (activeStaff.length > 0) {
+                        setDecommissionLockoutModal({ camp: editingCampModal, occupants: activeStaff });
+                        return;
+                      }
+                      if (confirm(`Confirm decommissioning of ${editingCampModal.campNo}?`)) {
+                        setCamps(prev => prev.map(c => c.id === editingCampModal.id ? { ...c, status: 'Decommissioned' } : c));
+                        setEditingCampModal(null);
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Decommission
+                  </button>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button
+                  type="button"
+                  onClick={() => setEditingCampModal(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer"
+                >
+                  Save Camp Details
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Add New Floor Configuration Modal */}
+      {showAddFloorConfigModal && editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-60 flex items-center justify-center p-4">
+          <form onSubmit={handleCommitNewFloorToCamp} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+              <Plus className="w-5 h-5 text-emerald-600" />
+              Configure New Floor {editingCampModal.floors.length + 1}
+            </h3>
+            <div>
+              <label className="block font-semibold mb-1">Total Flats on this Floor</label>
+              <input
+                type="number"
+                min="1"
+                max="10"
+                required
+                value={newFloorDraft.flatsCount}
+                onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })}
+                className="w-full border rounded-xl px-3 py-2 font-bold"
+              />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1">Number of Non-Manual / Engineering Flats (2 beds/rm)</label>
+              <input
+                type="number"
+                min="0"
+                max={newFloorDraft.flatsCount}
+                required
+                value={newFloorDraft.nonManualFlats}
+                onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })}
+                className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700"
+              />
+              <span className="text-[11px] text-slate-500 mt-1 block">
+                Remaining {Math.max(0, newFloorDraft.flatsCount - newFloorDraft.nonManualFlats)} flats will default to Manual (3 beds/rm).
+              </span>
+            </div>
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button
+                type="button"
+                onClick={() => setShowAddFloorConfigModal(false)}
+                className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer"
+              >
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer"
+              >
+                Add Floor to Draft
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ======================================================= */}
+      {/* PHASE 2: COST CENTER & DYNAMIC DIVISION MANAGEMENT MODAL */}
       {/* ======================================================= */}
       {showManageCostCentersModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -1868,9 +2306,9 @@ export default function App() {
                   <Tag className="w-5 h-5" />
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">Project Cost Center Registry</h3>
+                  <h3 className="text-base font-bold text-slate-900">Project Cost Centers & Operating Divisions</h3>
                   <p className="text-slate-500 font-medium">
-                    Configure master project billing codes used across room check-in, bed transfers, and monthly recharges.
+                    Configure master billing codes and dynamic company divisions used across check-in, bed transfers, and recharges.
                   </p>
                 </div>
               </div>
@@ -1879,7 +2317,48 @@ export default function App() {
               </button>
             </div>
 
-            {/* Quick Add Form */}
+            {/* Division Management Section */}
+            <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-bold text-blue-900 flex items-center gap-1.5">
+                  <Layers className="w-4 h-4 text-blue-600" /> Company Operating Divisions ({divisions.length})
+                </span>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {divisions.map(div => (
+                  <span
+                    key={div}
+                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-300 rounded-lg text-blue-900 font-bold text-xs shadow-2xs"
+                  >
+                    {div}
+                    <button
+                      type="button"
+                      onClick={() => handleRemoveDivision(div)}
+                      className="text-slate-400 hover:text-rose-600 font-bold ml-1"
+                    >
+                      ×
+                    </button>
+                  </span>
+                ))}
+              </div>
+              <form onSubmit={handleAddDivision} className="flex items-center gap-2 pt-1">
+                <input
+                  type="text"
+                  placeholder="Enter new Division (e.g. FACILITIES, HVAC, INSTRUMENTATION)..."
+                  value={newDivisionInput}
+                  onChange={e => setNewDivisionInput(e.target.value)}
+                  className="bg-white border border-blue-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 uppercase font-semibold flex-1 max-w-sm"
+                />
+                <button
+                  type="submit"
+                  className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white font-bold rounded-lg cursor-pointer text-xs"
+                >
+                  + Add Division
+                </button>
+              </form>
+            </div>
+
+            {/* Add Cost Center Form */}
             <form onSubmit={handleCreateCostCenter} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
               <div className="font-bold text-slate-800 flex items-center gap-1.5">
                 <Plus className="w-4 h-4 text-cyan-600" /> Add New Project Cost Center
@@ -1915,11 +2394,7 @@ export default function App() {
                       onChange={(e) => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })}
                       className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-slate-800"
                     >
-                      <option value="IDS">IDS</option>
-                      <option value="MEP">MEP</option>
-                      <option value="CIVIL">CIVIL</option>
-                      <option value="OIL & GAS">OIL & GAS</option>
-                      <option value="MARINE">MARINE</option>
+                      {divisions.map(d => <option key={d} value={d}>{d}</option>)}
                     </select>
                     <button
                       type="submit"
@@ -2004,172 +2479,208 @@ export default function App() {
         </div>
       )}
 
-      {/* Edit Cost Center Modal */}
-      {editingCostCenterModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Tag className="w-5 h-5 text-cyan-600" />
-                Edit Cost Center
-              </h3>
-              <button onClick={() => setEditingCostCenterModal(null)} className="text-slate-400 hover:text-slate-700">
+      {/* ======================================================= */}
+      {/* PHASE 3: MODAL - EXCEL ROSTER IMPORT PREVIEW & COMMIT   */}
+      {/* ======================================================= */}
+      {showExcelImportModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-5xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between border-b pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Import Preview: {excelImportFileName}
+                  </h3>
+                  <p className="text-slate-500 font-medium">
+                    Review and validate employee bed allocations before committing to the database.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowExcelImportModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleSaveEditCostCenter} className="space-y-3.5">
-              <div>
-                <label className="block font-semibold mb-1">Cost Center Code</label>
-                <input
-                  type="text"
-                  required
-                  value={editingCostCenterModal.code}
-                  onChange={(e) => setEditingCostCenterModal({ ...editingCostCenterModal, code: e.target.value })}
-                  className="w-full border rounded-xl px-3 py-2 font-mono uppercase font-bold"
-                />
-                <span className="text-[10px] text-slate-400 mt-1 block">
-                  Renaming will automatically update all existing occupant records tied to this code.
-                </span>
+            {/* Import Telemetry Bar */}
+            <div className="grid grid-cols-3 gap-3 shrink-0">
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <span className="text-slate-500 font-medium">Total Rows Parsed:</span>
+                <div className="text-xl font-black text-slate-900 mt-0.5">{excelImportStats.total}</div>
               </div>
-
-              <div>
-                <label className="block font-semibold mb-1">Project Name / Description</label>
-                <input
-                  type="text"
-                  required
-                  value={editingCostCenterModal.name}
-                  onChange={(e) => setEditingCostCenterModal({ ...editingCostCenterModal, name: e.target.value })}
-                  className="w-full border rounded-xl px-3 py-2"
-                />
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <span className="text-emerald-800 font-medium">Ready to Commit:</span>
+                <div className="text-xl font-black text-emerald-700 mt-0.5">{excelImportStats.valid}</div>
               </div>
-
-              <div>
-                <label className="block font-semibold mb-1">Division</label>
-                <select
-                  value={editingCostCenterModal.division}
-                  onChange={(e) => setEditingCostCenterModal({ ...editingCostCenterModal, division: e.target.value })}
-                  className="w-full border rounded-xl px-3 py-2 font-bold"
-                >
-                  <option value="IDS">IDS</option>
-                  <option value="MEP">MEP</option>
-                  <option value="CIVIL">CIVIL</option>
-                  <option value="OIL & GAS">OIL & GAS</option>
-                  <option value="MARINE">MARINE</option>
-                </select>
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+                <span className="text-rose-800 font-medium">Conflict / Errors:</span>
+                <div className="text-xl font-black text-rose-700 mt-0.5">{excelImportStats.errors}</div>
               </div>
+            </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t">
+            {/* Table of Parsed Rows */}
+            <div className="border border-slate-200 rounded-xl overflow-x-auto flex-1 max-h-96">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b sticky top-0">
+                  <tr>
+                    <th className="p-2.5">Row</th>
+                    <th className="p-2.5">Status</th>
+                    <th className="p-2.5">ID</th>
+                    <th className="p-2.5">Name</th>
+                    <th className="p-2.5">Nationality</th>
+                    <th className="p-2.5">Camp & Room</th>
+                    <th className="p-2.5">Grade</th>
+                    <th className="p-2.5">Division / Cost Center</th>
+                    <th className="p-2.5">Validation Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {excelParsedRows.map(row => (
+                    <tr key={row.rowIdx} className={row.status === 'ERROR' ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
+                      <td className="p-2.5 font-mono text-slate-500">#{row.rowIdx}</td>
+                      <td className="p-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row.status === 'VALID' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="p-2.5 font-mono font-bold text-cyan-600">#{row.employeeId || 'N/A'}</td>
+                      <td className="p-2.5 font-semibold text-slate-900">{row.employeeName || 'N/A'}</td>
+                      <td className="p-2.5">{row.nationality}</td>
+                      <td className="p-2.5 font-mono">{row.campNo} ({row.roomNo})</td>
+                      <td className="p-2.5 font-bold text-[10px]">{row.roomGrade}</td>
+                      <td className="p-2.5">{row.division} ({row.costCenter})</td>
+                      <td className="p-2.5 font-medium">
+                        {row.errors.length > 0 ? (
+                          <span className="text-rose-600 font-semibold">{row.errors.join('; ')}</span>
+                        ) : (
+                          <span className="text-emerald-600 font-semibold">Ready for import</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Only valid rows without capacity or ID conflicts will be committed to the camp database.
+              </span>
+              <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => setEditingCostCenterModal(null)}
-                  className="px-4 py-2 bg-slate-100 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                  onClick={() => setShowExcelImportModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
                 >
                   Cancel
                 </button>
                 <button
-                  type="submit"
-                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer"
+                  type="button"
+                  disabled={excelImportStats.valid === 0}
+                  onClick={handleCommitExcelImport}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold cursor-pointer"
                 >
-                  Save Changes
+                  Confirm & Batch Import ({excelImportStats.valid} Occupants)
                 </button>
               </div>
-            </form>
+            </div>
           </div>
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* 4. MODAL: ADD BUILDING (FLOOR-BY-FLOOR CONFIGURATION)   */}
-      {/* ======================================================= */}
+      {/* Add Building Wizard */}
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-emerald-600" />
-                Add Building (Configured Floor-by-Floor)
+                Add Building (Floor-by-Floor Configuration)
               </h3>
               <button onClick={() => setShowAddCampModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
               </button>
             </div>
 
-            <form onSubmit={handleCreateCamp} className="space-y-4">
+            <form onSubmit={e => {
+              e.preventDefault();
+              const campDigit = newCampForm.campDigit || String(camps.length + 1);
+              const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
+
+              const generatedFloors = newCampForm.floorConfigs.map(fc => {
+                const floorStr = String(fc.floorNo).padStart(2, '0');
+                const floorFlats = [];
+
+                for (let fl = 1; fl <= fc.flatsCount; fl++) {
+                  const flatStr = String(fl).padStart(2, '0');
+                  const isNM = fl <= fc.nonManualFlats;
+                  const flatGrade = isNM ? 'Non-Manual' : 'Manual';
+                  const gradeInitial = isNM ? 'NM' : 'M';
+                  const roomCapacity = isNM ? 2 : 3;
+
+                  const flatRooms = [];
+                  const roomLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
+                  for (let r = 0; r < roomsPerFl; r++) {
+                    const letter = roomLetters[r] || `R${r + 1}`;
+                    flatRooms.push({
+                      roomNo: `${campDigit}-${floorStr}-${flatStr}-${letter}`,
+                      capacity: roomCapacity,
+                      occupants: []
+                    });
+                  }
+
+                  floorFlats.push({
+                    flatNo: fl,
+                    flatCode: `${campDigit}-${floorStr}-${flatStr}-${gradeInitial}`,
+                    roomGrade: flatGrade,
+                    rooms: flatRooms
+                  });
+                }
+
+                return { floorNo: fc.floorNo, flats: floorFlats };
+              });
+
+              const newCampObj = {
+                id: `camp-${Date.now()}`,
+                campNo: newCampForm.campNo,
+                campArea: newCampForm.campArea,
+                costCenter: '1ACD000',
+                campDigit,
+                campStartDate: newCampForm.campStartDate,
+                status: 'Active',
+                floors: generatedFloors
+              };
+
+              setCamps(prev => [...prev, newCampObj]);
+              setSelectedCampId(newCampObj.id);
+              setSelectedFloorNo(1);
+              setShowAddCampModal(false);
+              logActivity('CAMP_CONFIG', `Created ${newCampObj.campNo}`, `Created building with ${generatedFloors.length} floors.`);
+            }} className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Camp Code</label>
-                  <input
-                    type="text"
-                    required
-                    value={newCampForm.campNo}
-                    onChange={(e) => setNewCampForm({ ...newCampForm, campNo: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 text-slate-900"
-                  />
+                  <input type="text" required value={newCampForm.campNo} onChange={e => setNewCampForm({ ...newCampForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Building Digit Prefix</label>
-                  <input
-                    type="text"
-                    required
-                    value={newCampForm.campDigit}
-                    onChange={(e) => setNewCampForm({ ...newCampForm, campDigit: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 text-slate-900"
-                  />
+                  <input type="text" required value={newCampForm.campDigit} onChange={e => setNewCampForm({ ...newCampForm, campDigit: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Camp Area Location</label>
-                  <input
-                    type="text"
-                    required
-                    value={newCampForm.campArea}
-                    onChange={(e) => setNewCampForm({ ...newCampForm, campArea: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 text-slate-900"
-                  />
+                  <label className="block font-semibold mb-1">Camp Area</label>
+                  <input type="text" required value={newCampForm.campArea} onChange={e => setNewCampForm({ ...newCampForm, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Camp Start Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={newCampForm.campStartDate}
-                    onChange={(e) => setNewCampForm({ ...newCampForm, campStartDate: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 font-mono text-slate-900"
-                  />
+                  <input type="date" required value={newCampForm.campStartDate} onChange={e => setNewCampForm({ ...newCampForm, campStartDate: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
               </div>
 
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Total Floors in Building</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="20"
-                    required
-                    value={newCampForm.floorsCount}
-                    onChange={(e) => handleFloorsCountChange(e.target.value)}
-                    className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Rooms per Flat</label>
-                  <input
-                    type="number"
-                    min="1"
-                    max="6"
-                    required
-                    value={newCampForm.roomsPerFlat}
-                    onChange={(e) => setNewCampForm({ ...newCampForm, roomsPerFlat: parseInt(e.target.value, 10) || 3 })}
-                    className="w-full border rounded-xl px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              {/* Floor-by-Floor Flat Configurator Table */}
               <div className="p-4 bg-slate-50 border rounded-xl space-y-2.5">
                 <div className="font-bold text-slate-900">Floor-by-Floor Flat Topology:</div>
                 <div className="border border-slate-200 rounded-lg overflow-hidden">
@@ -2192,7 +2703,13 @@ export default function App() {
                               min="1"
                               max="10"
                               value={fc.flatsCount}
-                              onChange={(e) => updateFloorConfig(fc.floorNo, 'flatsCount', e.target.value)}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10) || 1;
+                                setNewCampForm(prev => ({
+                                  ...prev,
+                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, flatsCount: val } : f)
+                                }));
+                              }}
                               className="w-20 border rounded px-2 py-1 text-center font-bold"
                             />
                           </td>
@@ -2202,7 +2719,13 @@ export default function App() {
                               min="0"
                               max={fc.flatsCount}
                               value={fc.nonManualFlats}
-                              onChange={(e) => updateFloorConfig(fc.floorNo, 'nonManualFlats', e.target.value)}
+                              onChange={e => {
+                                const val = parseInt(e.target.value, 10) || 0;
+                                setNewCampForm(prev => ({
+                                  ...prev,
+                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: val } : f)
+                                }));
+                              }}
                               className="w-20 border rounded px-2 py-1 text-center font-bold text-cyan-700"
                             />
                           </td>
@@ -2217,139 +2740,15 @@ export default function App() {
               </div>
 
               <div className="flex justify-end gap-2 pt-2 border-t">
-                <button
-                  type="button"
-                  onClick={() => setShowAddCampModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer"
-                >
-                  Create Building in Database
-                </button>
+                <button type="button" onClick={() => setShowAddCampModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer">Create Building</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* 5. MODAL: EDIT CAMP (ADD / REMOVE FLATS PER FLOOR)      */}
-      {/* ======================================================= */}
-      {editingCampModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-cyan-600" />
-                Edit Camp Details & Floor Flats ({editingCampModal.campNo})
-              </h3>
-              <button onClick={() => setEditingCampModal(null)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={handleSaveCampEdits} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Camp Code</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingCampModal.campNo}
-                    onChange={(e) => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Camp Area Location</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingCampModal.campArea}
-                    onChange={(e) => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              {/* Floor-by-Floor Flat Adder/Remover */}
-              <div className="p-4 bg-slate-50 border rounded-xl space-y-3">
-                <div className="font-bold text-slate-900">Per-Floor Flat Controls:</div>
-                <div className="space-y-2">
-                  {editingCampModal.floors.map(fl => (
-                    <div key={fl.floorNo} className="p-2.5 bg-white border rounded-lg flex items-center justify-between gap-3">
-                      <div>
-                        <span className="font-bold text-slate-900">Floor {fl.floorNo}</span>
-                        <span className="text-slate-500 ml-2">({fl.flats.length} Flats currently)</span>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {fl.flats.length > 1 && (
-                          <button
-                            type="button"
-                            onClick={() => handleRemoveFlatFromSpecificFloor(fl.floorNo)}
-                            className="px-2.5 py-1 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded text-xs font-bold"
-                          >
-                            - Remove Flat
-                          </button>
-                        )}
-                        <button
-                          type="button"
-                          onClick={() => handleAddFlatToSpecificFloor(fl.floorNo)}
-                          className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-500 text-white rounded text-xs font-bold"
-                        >
-                          + Add Flat
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </div>
-
-              {/* Decommission Action */}
-              {currentUser.permissions?.canDeleteCamps && (
-                <div className="p-3.5 bg-rose-50/60 border border-rose-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-rose-900">Decommission Camp Facility</div>
-                    <div className="text-[11px] text-rose-700">Safely archives this building once zero occupants remain.</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => handleAttemptDecommissionCamp(editingCampModal)}
-                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                    Decommission
-                  </button>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button
-                  type="button"
-                  onClick={() => setEditingCampModal(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer"
-                >
-                  Save Camp Details
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================= */}
-      {/* 6. MODAL: ITEMISED PROJECT INVOICE                      */}
-      {/* ======================================================= */}
+      {/* Itemized Project Invoice Modal */}
       {selectedInvoiceModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
@@ -2360,9 +2759,7 @@ export default function App() {
                   INV-{selectedInvoiceModal.costCenter}-{billingPeriod.replace(' ', '-')}
                 </span>
               </div>
-              <button onClick={() => setSelectedInvoiceModal(null)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setSelectedInvoiceModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -2386,8 +2783,8 @@ export default function App() {
                   <tr>
                     <th className="py-2.5 px-3">Staff ID</th>
                     <th className="py-2.5 px-3">Employee Name</th>
-                    <th className="py-2.5 px-3">Civil ID</th>
-                    <th className="py-2.5 px-3">Room / Flat</th>
+                    <th className="py-2.5 px-3">Nationality</th>
+                    <th className="py-2.5 px-3">Room</th>
                     <th className="py-2.5 px-3">Grade</th>
                     <th className="py-2.5 px-3 text-right">Charge (KWD)</th>
                   </tr>
@@ -2399,7 +2796,7 @@ export default function App() {
                       <tr key={occ.employeeId}>
                         <td className="py-2 px-3 font-mono font-bold text-cyan-600">#{occ.employeeId}</td>
                         <td className="py-2 px-3 font-semibold text-slate-900">{occ.employeeName}</td>
-                        <td className="py-2 px-3 font-mono text-slate-500">{occ.civilId}</td>
+                        <td className="py-2 px-3">{occ.nationality}</td>
                         <td className="py-2 px-3 font-mono text-slate-700">{occ.roomNo}</td>
                         <td className="py-2 px-3 font-bold text-[10px]">
                           <span className={`px-2 py-0.5 rounded ${
@@ -2418,11 +2815,9 @@ export default function App() {
                   {selectedInvoiceModal.otherCostKWD > 0 && (
                     <tr className="bg-purple-50/70 font-semibold text-purple-900">
                       <td colSpan={3} className="py-2.5 px-3">
-                        <strong>Others (Miscellaneous Camp Cost):</strong> {selectedInvoiceModal.otherCostDesc || 'General camp support'}
+                        <strong>Others (Misc Camp Cost):</strong> {selectedInvoiceModal.otherCostDesc || 'Allocated recharge'}
                       </td>
-                      <td colSpan={2} className="py-2.5 px-3 text-right">
-                        Allocated Recharge
-                      </td>
+                      <td colSpan={2} className="py-2.5 px-3 text-right">Allocated Recharge</td>
                       <td className="py-2.5 px-3 text-right font-mono font-black text-purple-800">
                         {selectedInvoiceModal.otherCostKWD.toFixed(3)}
                       </td>
@@ -2431,9 +2826,7 @@ export default function App() {
                 </tbody>
                 <tfoot className="bg-slate-50 border-t font-bold text-xs">
                   <tr>
-                    <td colSpan={5} className="py-2.5 px-3 text-right uppercase">
-                      Total Invoice Amount:
-                    </td>
+                    <td colSpan={5} className="py-2.5 px-3 text-right uppercase">Total Invoice:</td>
                     <td className="py-2.5 px-3 text-right font-black text-sm text-emerald-700">
                       {selectedInvoiceModal.totalAmountKWD.toFixed(3)} KWD
                     </td>
@@ -2443,24 +2836,12 @@ export default function App() {
             </div>
 
             <div className="flex items-center justify-between pt-2 border-t">
-              <span className="text-[11px] text-slate-400">
-                Generated from Dhow Camp Management Registry • Verified by Camp Director
-              </span>
-
+              <span className="text-[11px] text-slate-400">Dhow Camp Management Registry</span>
               <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => window.print()}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" />
-                  Print / Save PDF
+                <button type="button" onClick={() => window.print()} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
+                  <Printer className="w-3.5 h-3.5" /> Print Invoice
                 </button>
-                <button
-                  type="button"
-                  onClick={() => setSelectedInvoiceModal(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
-                >
+                <button type="button" onClick={() => setSelectedInvoiceModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer">
                   Close
                 </button>
               </div>
@@ -2469,9 +2850,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* 7. MODAL: EMPLOYEE DOSSIER                              */}
-      {/* ======================================================= */}
+      {/* Employee Dossier Modal */}
       {viewingEmployeeDossier && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
@@ -2487,12 +2866,9 @@ export default function App() {
                   </p>
                 </div>
               </div>
-              <button onClick={() => setViewingEmployeeDossier(null)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setViewingEmployeeDossier(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
 
-            {/* Profile Cards */}
             <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
               <div className="p-3 bg-slate-50 border rounded-xl">
                 <div className="text-slate-400 font-medium">Civil ID</div>
@@ -2503,15 +2879,11 @@ export default function App() {
                 <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo}</div>
               </div>
               <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium flex items-center gap-1">
-                  <Phone className="w-3 h-3 text-cyan-600" /> Mobile
-                </div>
+                <div className="text-slate-400 font-medium flex items-center gap-1"><Phone className="w-3 h-3 text-cyan-600" /> Mobile</div>
                 <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
               </div>
               <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium flex items-center gap-1">
-                  <Globe className="w-3 h-3 text-cyan-600" /> Nationality
-                </div>
+                <div className="text-slate-400 font-medium flex items-center gap-1"><Globe className="w-3 h-3 text-cyan-600" /> Nationality</div>
                 <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
               </div>
               <div className="p-3 bg-slate-50 border rounded-xl">
@@ -2526,7 +2898,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* Current Room Allocation & Live Duration Clock */}
+            {/* Current Room Allocation & Duration */}
             <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
               <div className="flex items-center justify-between">
                 <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
@@ -2544,9 +2916,7 @@ export default function App() {
                 </div>
                 <div>
                   <span className="text-slate-500">Room:</span>
-                  <div className="font-bold text-cyan-700 font-mono">
-                    Flat {viewingEmployeeDossier.flatCode} • Room {viewingEmployeeDossier.roomNo}
-                  </div>
+                  <div className="font-bold text-cyan-700 font-mono">Flat {viewingEmployeeDossier.flatCode} • Room {viewingEmployeeDossier.roomNo}</div>
                 </div>
                 <div>
                   <span className="text-slate-500">Entry Date:</span>
@@ -2573,17 +2943,15 @@ export default function App() {
                   }}
                   className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
                 >
-                  <ArrowRightLeft className="w-3.5 h-3.5" />
-                  Relocate / Transfer Bed
+                  <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate / Transfer Bed
                 </button>
               </div>
             </div>
 
-            {/* Relocation History Timeline */}
+            {/* Relocation History */}
             <div className="space-y-3">
               <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <History className="w-4 h-4 text-slate-600" />
-                Accommodation & Relocation History Ledger
+                <History className="w-4 h-4 text-slate-600" /> Accommodation & Relocation History Ledger
               </h4>
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-4">
                 <div className="relative pl-6 pb-2 border-l-2 border-cyan-500">
@@ -2592,9 +2960,7 @@ export default function App() {
                     <span className="font-bold text-cyan-800">● Active Stay: {viewingEmployeeDossier.campNo} (Room {viewingEmployeeDossier.roomNo})</span>
                     <span className="font-mono text-slate-500 text-[11px]">{viewingEmployeeDossier.entryDate} – Present</span>
                   </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5">
-                    Grade: {viewingEmployeeDossier.roomGrade} • Cost Center: {viewingEmployeeDossier.costCenter}
-                  </div>
+                  <div className="text-[11px] text-slate-600 mt-0.5">Grade: {viewingEmployeeDossier.roomGrade} • Cost Center: {viewingEmployeeDossier.costCenter}</div>
                 </div>
 
                 {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
@@ -2602,7 +2968,7 @@ export default function App() {
                     <div key={idx} className="relative pl-6 pb-2 border-l-2 border-slate-300">
                       <div className="absolute -left-[7px] top-0.5 w-3 h-3 rounded-full bg-slate-400 border border-white" />
                       <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-700">{hist.campNo} ({hist.campArea}) — Room {hist.roomNo}</span>
+                        <span className="font-bold text-slate-700">{hist.campNo} — Room {hist.roomNo}</span>
                         <span className="font-mono text-slate-500 text-[11px]">{hist.startDate} – {hist.endDate}</span>
                       </div>
                       <div className="text-[11px] text-slate-500 mt-0.5">Stayed: {calculateTenure(hist.startDate, hist.endDate)}</div>
@@ -2624,20 +2990,15 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* 8. MODAL: 1-CLICK BED RELOCATION ENGINE                 */}
-      {/* ======================================================= */}
+      {/* Bed Relocation Modal */}
       {relocatingOccupant && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <ArrowRightLeft className="w-5 h-5 text-cyan-600" />
-                Relocate Occupant #{relocatingOccupant.employeeId}
+                <ArrowRightLeft className="w-5 h-5 text-cyan-600" /> Relocate Occupant #{relocatingOccupant.employeeId}
               </h3>
-              <button onClick={() => setRelocatingOccupant(null)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setRelocatingOccupant(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
 
             <form onSubmit={handleExecuteRelocation} className="space-y-3.5">
@@ -2665,7 +3026,6 @@ export default function App() {
                     {activeCamps.map(c => <option key={c.id} value={c.id}>{c.campNo} ({c.campArea})</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label className="block font-semibold mb-1">Target Floor</label>
                   <select
@@ -2703,11 +3063,7 @@ export default function App() {
                       const fl = c?.floors.find(f => f.floorNo === Number(relocationForm.targetFloorNo));
                       const ft = fl?.flats.find(f => f.flatCode === ftCode);
                       const rm = ft?.rooms.find(r => r.occupants.length < r.capacity) || ft?.rooms[0];
-                      setRelocationForm({
-                        ...relocationForm,
-                        targetFlatCode: ftCode,
-                        targetRoomNo: rm?.roomNo || ''
-                      });
+                      setRelocationForm({ ...relocationForm, targetFlatCode: ftCode, targetRoomNo: rm?.roomNo || '' });
                     }}
                     className="w-full border rounded-xl px-3 py-2 font-mono font-bold"
                   >
@@ -2717,7 +3073,6 @@ export default function App() {
                       ?.flats.map(ft => <option key={ft.flatCode} value={ft.flatCode}>Flat {ft.flatCode} ({ft.roomGrade})</option>)}
                   </select>
                 </div>
-
                 <div>
                   <label className="block font-semibold mb-1">Target Room</label>
                   <select
@@ -2740,43 +3095,25 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Effective Transfer Date</label>
-                  <input
-                    type="date"
-                    required
-                    value={relocationForm.transferDate}
-                    onChange={(e) => setRelocationForm({ ...relocationForm, transferDate: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 font-mono"
-                  />
+                  <label className="block font-semibold mb-1">Transfer Date</label>
+                  <input type="date" required value={relocationForm.transferDate} onChange={e => setRelocationForm({ ...relocationForm, transferDate: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Reason for Transfer</label>
-                  <input
-                    type="text"
-                    required
-                    value={relocationForm.reason}
-                    onChange={(e) => setRelocationForm({ ...relocationForm, reason: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2"
-                  />
+                  <label className="block font-semibold mb-1">Transfer Reason</label>
+                  <input type="text" required value={relocationForm.reason} onChange={e => setRelocationForm({ ...relocationForm, reason: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <button type="button" onClick={() => setRelocatingOccupant(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">
-                  Cancel
-                </button>
-                <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer">
-                  Confirm Relocation
-                </button>
+                <button type="button" onClick={() => setRelocatingOccupant(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer">Confirm Relocation</button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* 9. MODAL: AFR ROOM CHECK-IN (WITH NATIONALITY)          */}
-      {/* ======================================================= */}
+      {/* Check-In Modal with Dynamic Divisions */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
@@ -2849,11 +3186,6 @@ export default function App() {
                 </div>
               </div>
 
-              <div>
-                <label className="block font-semibold mb-1">Address in Home Country</label>
-                <input type="text" placeholder="Full residential home address" value={checkInForm.homeCountryAddress} onChange={e => setCheckInForm({ ...checkInForm, homeCountryAddress: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-              </div>
-
               <div className="grid grid-cols-3 gap-3">
                 <div className="col-span-2">
                   <label className="block font-semibold mb-1">Project Cost Center</label>
@@ -2872,7 +3204,13 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Division</label>
-                  <input type="text" readOnly value={checkInForm.division} className="w-full border bg-slate-100 font-bold rounded-xl px-3 py-2 cursor-not-allowed" />
+                  <select
+                    value={checkInForm.division}
+                    onChange={e => setCheckInForm({ ...checkInForm, division: e.target.value })}
+                    className="w-full border font-bold rounded-xl px-3 py-2"
+                  >
+                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
                 </div>
               </div>
 
@@ -2885,9 +3223,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* 10. QUICK MANAGE MODAL: LEAVE, RETURN, RTD, & TRANSFER  */}
-      {/* ======================================================= */}
+      {/* Quick Manage Modal */}
       {manageOccupantModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
@@ -2899,7 +3235,6 @@ export default function App() {
               <div><strong>Nationality:</strong> <span className="font-semibold text-slate-800">{manageOccupantModal.nationality}</span></div>
               <div><strong>Mobile:</strong> {manageOccupantModal.mobileNo || 'N/A'}</div>
               <div><strong>Emergency:</strong> {manageOccupantModal.emergencyContactName} ({manageOccupantModal.emergencyContactPhone})</div>
-              <div><strong>Home Address:</strong> {manageOccupantModal.homeCountryAddress || 'N/A'}</div>
               <div><strong>Status:</strong> <span className="font-bold text-cyan-700">{manageOccupantModal.employeeStatus}</span></div>
             </div>
 
@@ -2943,7 +3278,7 @@ export default function App() {
               <input type="date" required value={leaveForm.expectedEndDate} onChange={e => setLeaveForm({ ...leaveForm, expectedEndDate: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div>
-              <label className="block font-bold mb-1">AFR Log / Leave Ref</label>
+              <label className="block font-bold mb-1">AFR Log / Vacation Ref</label>
               <input type="text" required value={leaveForm.afrLogNo} onChange={e => setLeaveForm({ ...leaveForm, afrLogNo: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
@@ -2964,7 +3299,7 @@ export default function App() {
               <input type="date" required value={returnJobForm.actualReturnDate} onChange={e => setReturnJobForm({ ...returnJobForm, actualReturnDate: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div>
-              <label className="block font-bold mb-1">Return Remarks</label>
+              <label className="block font-bold mb-1">Remarks</label>
               <input type="text" value={returnJobForm.remarks} onChange={e => setReturnJobForm({ ...returnJobForm, remarks: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
@@ -2989,7 +3324,7 @@ export default function App() {
               </select>
             </div>
             <div>
-              <label className="block font-bold mb-1">Effective Date</label>
+              <label className="block font-bold mb-1">Exit Date</label>
               <input type="date" required value={rtdForm.rtdDate} onChange={e => setRtdForm({ ...rtdForm, rtdDate: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div>
