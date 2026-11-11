@@ -5,7 +5,7 @@ import {
   Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane, Settings,
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
   Archive, Tag, Phone, Clock, SlidersHorizontal, Layers, CheckSquare, Globe,
-  Upload, FileUp, Filter
+  Upload, FileUp, Filter, Wrench, ShieldAlert
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import dhowLogoImg from './assets/dhow-logo.png';
@@ -16,6 +16,16 @@ import {
   INITIAL_BILLING_OTHER_COSTS, INITIAL_ACTIVITY_LOGS
 } from './data/initialDatabase';
 
+import {
+  exportCampOccupancySummary,
+  exportDailyOccupancyReport,
+  exportMaterialIssuanceForm,
+  exportOccupantsRelocationForm,
+  exportAccommodationMisconductReport,
+  exportMisconductLog,
+  exportMaintenanceLog
+} from './utils/reportGenerators';
+
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
 import ActivityLogTab from './components/ActivityLogTab';
@@ -24,6 +34,54 @@ import ApprovalsAndTablesTab from './components/ApprovalsAndTablesTab';
 const DhowLogo = ({ className = "h-8 w-auto" }) => (
   <img src={dhowLogoImg} alt="Dhow Engineering" className={className} />
 );
+
+// Fallback initial data for Disciplinary & Maintenance Logs
+const DEFAULT_MISCONDUCT_LOGS = [
+  {
+    id: 'disc-1',
+    employeeId: '5912',
+    employeeName: 'Syed Tanveer Hussain',
+    title: 'QA/QC Inspector',
+    incidentDate: '2026-10-15',
+    incidentTime: '22:30',
+    incidentLocation: 'CAMP-01, Flat 1-01-02-M, Room B',
+    typeOfViolation: 'Cooking inside bedroom against fire safety policy',
+    docRef: 'DISC-5912-01',
+    costCenter: '1CIV011-KOC',
+    division: 'CIVIL',
+    campNo: 'CAMP-01',
+    roomNo: '1-01-02-B',
+    contactNo: '+965 99882211',
+    reportedBy: 'Tariq Al-Mansoor',
+    witnessName: 'Amr Mohamed Ali',
+    witnessId: '5838',
+    witnessRoom: '1-01-01-A',
+    witnessPhone: '+965 98765432',
+    description: 'Use of high-voltage electric hotplate inside sleeping quarters.',
+    remarks: 'First written warning issued by HR.'
+  }
+];
+
+const DEFAULT_MAINTENANCE_LOGS = [
+  {
+    id: 'MNT-101',
+    date: '2026-11-02',
+    month: 'November',
+    issueDetails: 'Split A/C cooling compressor failure and water leakage',
+    reportedByEmpId: '6410',
+    employeeName: 'Kamineni Lohith',
+    floorNo: 1,
+    flatCode: '1-01-01-NM',
+    roomNo: '1-01-01-B',
+    areaFacility: 'Bedroom AC',
+    inspectedBy: 'Facilities Supervisor',
+    actionTakenBy: 'HVAC Maintenance Team',
+    status: 'Completed',
+    replacedMaterialCost: '18.500',
+    chargeToEmpId: 'N/A (Wear & Tear)',
+    remarks: 'Replaced fan motor and cleared drain pipe.'
+  }
+];
 
 export default function App() {
   // ==========================================
@@ -40,6 +98,8 @@ export default function App() {
   const [transferRequests, setTransferRequests] = useState(() => JSON.parse(localStorage.getItem('dhow_tr_v14')) || INITIAL_TRANSFER_REQUESTS);
   const [otherCosts, setOtherCosts] = useState(() => JSON.parse(localStorage.getItem('dhow_others_v14')) || INITIAL_BILLING_OTHER_COSTS);
   const [activityLogs, setActivityLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_act_v14')) || INITIAL_ACTIVITY_LOGS);
+  const [maintenanceLogs, setMaintenanceLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_mnt_v14')) || DEFAULT_MAINTENANCE_LOGS);
+  const [misconductLogs, setMisconductLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_disc_v14')) || DEFAULT_MISCONDUCT_LOGS);
 
   // Navigation
   const [activeTab, setActiveTab] = useState('map');
@@ -57,6 +117,7 @@ export default function App() {
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('ALL');
   const [divisionFilter, setDivisionFilter] = useState('ALL');
+  const [productiveTypeFilter, setProductiveTypeFilter] = useState('ALL');
 
   // Modals & Drawers
   const [viewingEmployeeDossier, setViewingEmployeeDossier] = useState(null);
@@ -73,19 +134,39 @@ export default function App() {
   const [editingCostCenterModal, setEditingCostCenterModal] = useState(null);
   const [decommissionLockoutModal, setDecommissionLockoutModal] = useState(null);
 
-  // Phase 1: New Floor Configurator sub-modal inside Edit Camp
+  // Floor Configurator sub-modal inside Edit Camp
   const [showAddFloorConfigModal, setShowAddFloorConfigModal] = useState(false);
   const [newFloorDraft, setNewFloorDraft] = useState({ flatsCount: 3, nonManualFlats: 1 });
 
-  // Phase 2: Dynamic Divisions
+  // Dynamic Divisions
   const [newDivisionInput, setNewDivisionInput] = useState('');
 
-  // Phase 3: Excel Roster Import
+  // Excel Roster Import
   const [showExcelImportModal, setShowExcelImportModal] = useState(false);
   const [excelParsedRows, setExcelParsedRows] = useState([]);
   const [excelImportFileName, setExcelImportFileName] = useState('');
   const [excelImportStats, setExcelImportStats] = useState({ total: 0, valid: 0, errors: 0 });
   const excelFileInputRef = useRef(null);
+
+  // Misconduct Report Modal
+  const [showMisconductModal, setShowMisconductModal] = useState(false);
+  const [misconductForm, setMisconductForm] = useState({
+    employeeId: '', employeeName: '', title: '', division: '', costCenter: '',
+    campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: '2026-11-10',
+    incidentTime: '14:00', incidentLocation: 'Accommodation Quarters',
+    typeOfViolation: 'Camp Quiet Hours & Residential Safety Violation',
+    description: '', witnessName: '', witnessId: '', witnessRoom: '', witnessPhone: '+965 ',
+    reportedBy: 'Camp Supervisor', remarks: 'Referred to HR Disciplinary Committee'
+  });
+
+  // Maintenance Log Modal
+  const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
+  const [maintenanceForm, setMaintenanceForm] = useState({
+    date: '2026-11-10', month: 'November', issueDetails: '', reportedByEmpId: '',
+    employeeName: '', floorNo: 1, flatCode: '', roomNo: '', areaFacility: 'Bedroom AC / Electrical',
+    inspectedBy: 'Camp Facilities Supervisor', actionTakenBy: 'Maintenance Team',
+    status: 'Pending', replacedMaterialCost: '0.000', chargeToEmpId: 'N/A (Wear & Tear)', remarks: ''
+  });
 
   // User Management Modals (RBAC)
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -106,7 +187,9 @@ export default function App() {
   // Forms
   const [checkInForm, setCheckInForm] = useState({
     campId: 'camp-1', floorNo: 1, flatCode: '1-01-01-NM', roomNo: '1-01-01-B',
-    roomGrade: 'Non-Manual', employeeId: '', employeeName: '', nationality: 'India',
+    roomGrade: 'Non-Manual', productiveType: 'Direct Employee (DE)',
+    arrivalType: 'Local Residency Transfer',
+    employeeId: '', employeeName: '', nationality: 'India',
     title: 'Site Engineer', division: 'IDS', costCenter: '1IDS038-KIPIC',
     passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '',
     emergencyContactPhone: '+965 ', homeCountryAddress: '', entryDate: '2026-11-09'
@@ -159,6 +242,8 @@ export default function App() {
   useEffect(() => { localStorage.setItem('dhow_tr_v14', JSON.stringify(transferRequests)); }, [transferRequests]);
   useEffect(() => { localStorage.setItem('dhow_others_v14', JSON.stringify(otherCosts)); }, [otherCosts]);
   useEffect(() => { localStorage.setItem('dhow_act_v14', JSON.stringify(activityLogs)); }, [activityLogs]);
+  useEffect(() => { localStorage.setItem('dhow_mnt_v14', JSON.stringify(maintenanceLogs)); }, [maintenanceLogs]);
+  useEffect(() => { localStorage.setItem('dhow_disc_v14', JSON.stringify(misconductLogs)); }, [misconductLogs]);
   useEffect(() => {
     if (currentUser && rememberMe) localStorage.setItem('dhow_session_v14', JSON.stringify(currentUser));
     else if (!currentUser) localStorage.removeItem('dhow_session_v14');
@@ -257,7 +342,8 @@ export default function App() {
       occ.civilId.toString().includes(q) ||
       occ.passportNo.toLowerCase().includes(q) ||
       (occ.nationality && occ.nationality.toLowerCase().includes(q)) ||
-      (occ.mobileNo && occ.mobileNo.includes(q))
+      (occ.mobileNo && occ.mobileNo.includes(q)) ||
+      (occ.productiveType && occ.productiveType.toLowerCase().includes(q))
     ).slice(0, 8);
   }, [occupants, universalSearchQuery]);
 
@@ -276,10 +362,11 @@ export default function App() {
 
       const matchesStatus = statusFilter === 'ALL' || occ.employeeStatus === statusFilter;
       const matchesDivision = divisionFilter === 'ALL' || occ.division === divisionFilter;
+      const matchesProductiveType = productiveTypeFilter === 'ALL' || (occ.productiveType || 'Direct Employee (DE)') === productiveTypeFilter;
 
-      return matchesSearch && matchesStatus && matchesDivision;
+      return matchesSearch && matchesStatus && matchesDivision && matchesProductiveType;
     });
-  }, [occupants, searchTerm, statusFilter, divisionFilter]);
+  }, [occupants, searchTerm, statusFilter, divisionFilter, productiveTypeFilter]);
 
   const projectInvoicingData = useMemo(() => {
     const activeOccupants = occupants.filter(o => !o.employeeStatus.startsWith('RTD'));
@@ -336,7 +423,7 @@ export default function App() {
   }, [occupants, costCenters, rates, otherCosts]);
 
   // =========================================================
-  // PHASE 1: UPGRADED EDIT CAMP & FLOOR CONFIGURATION
+  // FLOOR MANAGEMENT HANDLERS (EDIT CAMP)
   // =========================================================
   const handleOpenAddFloorConfig = () => {
     setNewFloorDraft({ flatsCount: 3, nonManualFlats: 1 });
@@ -522,7 +609,7 @@ export default function App() {
   };
 
   // =========================================================
-  // PHASE 2: DYNAMIC DIVISION MANAGEMENT
+  // DYNAMIC DIVISION MANAGEMENT
   // =========================================================
   const handleAddDivision = (e) => {
     e.preventDefault();
@@ -554,7 +641,7 @@ export default function App() {
   };
 
   // =========================================================
-  // PHASE 3: EXCEL ROSTER IMPORT ENGINE (`Book1.xlsx`)
+  // EXCEL ROSTER IMPORT ENGINE (`Book1.xlsx`)
   // =========================================================
   const handleExcelFileUpload = (e) => {
     const file = e.target.files[0];
@@ -594,6 +681,7 @@ export default function App() {
           const nationality = getVal(['Nationality', 'Country', 'Nation']) || 'India';
           const mobileNo = getVal(['Mobile Number', 'Mobile', 'Phone', 'Tel', 'Contact']) || '+965 ';
           const title = getVal(['Job Title', 'Title', 'Designation', 'Position']) || 'Worker';
+          const productiveType = getVal(['Employee Productive Type', 'Productive Type', 'Productivity Type', 'Productivity', 'Type', 'Emp Type']) || 'Direct Employee (DE)';
           const campNo = getVal(['Camp No', 'Camp', 'Building', 'Camp Code']) || (activeCamp?.campNo || 'CAMP-01');
           const flatCode = getVal(['Flat Code', 'Flat', 'Flat No']) || '';
           const roomNo = getVal(['Room No', 'Room', 'Room Number']) || '';
@@ -640,6 +728,7 @@ export default function App() {
             nationality,
             mobileNo,
             title,
+            productiveType,
             campNo,
             flatCode,
             roomNo,
@@ -679,7 +768,7 @@ export default function App() {
     const newOccupantsList = [...occupants];
     let updatedCamps = [...camps];
 
-    validRows.forEach((row, i) => {
+    validRows.forEach((row) => {
       const newOcc = {
         srNo: newOccupantsList.length + 1,
         campNo: row.campNo,
@@ -691,7 +780,7 @@ export default function App() {
         employeeName: row.employeeName,
         nationality: row.nationality,
         title: row.title,
-        productivityType: 'DE',
+        productiveType: row.productiveType || 'Direct Employee (DE)',
         entryDate: row.entryDate,
         passportNo: row.passportNo,
         civilId: row.civilId,
@@ -818,7 +907,7 @@ export default function App() {
       employeeName: checkInForm.employeeName,
       nationality: checkInForm.nationality,
       title: checkInForm.title,
-      productivityType: 'DE',
+      productiveType: checkInForm.productiveType || 'Direct Employee (DE)',
       entryDate: checkInForm.entryDate,
       passportNo: checkInForm.passportNo,
       civilId: checkInForm.civilId,
@@ -855,7 +944,12 @@ export default function App() {
     }));
 
     setShowCheckInModal(false);
-    logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${newOcc.employeeName} (${newOcc.nationality}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo}`, targetCamp.campNo);
+    logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${newOcc.employeeName} (${newOcc.nationality} • ${newOcc.productiveType}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo}`, targetCamp.campNo);
+
+    // Offer instant export of Material Issuance Form (Doc Ref 150-04)
+    if (confirm(`Check-In complete for #${empId}! Would you like to export the Employee New Arrival - Material Issuance Voucher (Doc. Ref: 150-04) now?`)) {
+      exportMaterialIssuanceForm(newOcc, checkInForm.arrivalType);
+    }
   };
 
   const handleLeaveSubmit = (e) => {
@@ -1087,8 +1181,50 @@ export default function App() {
     }
 
     logActivity('RELOCATION', `Relocated #${relocatingOccupant.employeeId} to Room ${targetRoom.roomNo}`, `${relocatingOccupant.employeeName} moved to ${targetCamp.campNo} Room ${targetRoom.roomNo}`, targetCamp.campNo);
+    
+    // Auto-generate Template 4: Occupants Relocation Form
+    exportOccupantsRelocationForm({
+      employeeId: relocatingOccupant.employeeId,
+      employeeName: relocatingOccupant.employeeName,
+      title: relocatingOccupant.title,
+      fromRoom: `${relocatingOccupant.campNo} - ${relocatingOccupant.roomNo}`,
+      toRoom: `${targetCamp.campNo} - ${targetRoom.roomNo}`,
+      relocationDate: relocationForm.transferDate,
+      reason: relocationForm.reason
+    });
+
     setRelocatingOccupant(null);
-    alert(`Successfully relocated #${relocatingOccupant.employeeId} to ${targetCamp.campNo} Room ${targetRoom.roomNo}!`);
+    alert(`Successfully relocated #${relocatingOccupant.employeeId} to ${targetCamp.campNo} Room ${targetRoom.roomNo}! Official Relocation Form (.xlsx) has been downloaded.`);
+  };
+
+  // Misconduct Report Action
+  const handleSaveMisconduct = (e) => {
+    e.preventDefault();
+    const newEntry = {
+      id: `disc-${Date.now()}`,
+      ...misconductForm,
+      docRef: `DISC-${misconductForm.employeeId}-${Date.now().toString().slice(-4)}`
+    };
+
+    setMisconductLogs(prev => [newEntry, ...prev]);
+    logActivity('DISCIPLINARY', `Filed Misconduct for #${newEntry.employeeId}`, `${newEntry.employeeName}: ${newEntry.typeOfViolation}`);
+    exportAccommodationMisconductReport(newEntry);
+    setShowMisconductModal(false);
+    alert(`Misconduct Log recorded and Accommodation Misconduct Report (.xlsx) generated.`);
+  };
+
+  // Maintenance Log Action
+  const handleSaveMaintenance = (e) => {
+    e.preventDefault();
+    const newEntry = {
+      id: `MNT-${Math.floor(100 + Math.random() * 900)}`,
+      ...maintenanceForm
+    };
+
+    setMaintenanceLogs(prev => [newEntry, ...prev]);
+    logActivity('MAINTENANCE', `Logged Work Order for Room ${newEntry.roomNo}`, `${newEntry.issueDetails} (Status: ${newEntry.status})`);
+    setShowMaintenanceModal(false);
+    alert(`Maintenance issue logged in register.`);
   };
 
   const handleCreateUser = (e) => {
@@ -1279,7 +1415,7 @@ export default function App() {
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Search ID / Name / Nationality / Mobile..."
+                  placeholder="Search ID / Name / Type / Mobile..."
                   value={universalSearchQuery}
                   onFocus={() => setIsSearchDropdownOpen(true)}
                   onChange={(e) => {
@@ -1315,7 +1451,7 @@ export default function App() {
                           <div className="flex items-center gap-1.5">
                             <span className="font-mono text-cyan-400 font-bold text-xs">#{occ.employeeId}</span>
                             <span className="font-semibold text-white text-xs truncate">{occ.employeeName}</span>
-                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-slate-300">({occ.nationality})</span>
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-medium">{occ.productiveType || 'DE'}</span>
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 truncate">
                             {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • Tel: {occ.mobileNo || 'N/A'}
@@ -1398,7 +1534,7 @@ export default function App() {
             }`}
           >
             <BarChart3 className="w-4 h-4 text-slate-400" />
-            <span>Reports (Daily/Weekly/Monthly)</span>
+            <span>Reports & 7 Templates</span>
           </button>
 
           <button
@@ -1421,7 +1557,7 @@ export default function App() {
             }`}
           >
             <CheckCircle2 className="w-4 h-4 text-amber-400" />
-            <span>Approvals & DB Tables</span>
+            <span>Approvals & Registries</span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-950 text-amber-300 border border-amber-800">
               {transferRequests.filter(r => r.status === 'PENDING').length} Pending
             </span>
@@ -1441,7 +1577,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Sub-Header Status Bar */}
+      {/* Sub-Header Status Bar with Quick Template Generators */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
@@ -1455,22 +1591,30 @@ export default function App() {
             </span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs)}
+              className="text-slate-700 hover:text-cyan-700 font-bold flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-200 cursor-pointer"
+              title="Download Template 1"
+            >
+              <Download className="w-3.5 h-3.5 text-cyan-600" />
+              <span>Summary Status (T1)</span>
+            </button>
+            <button
+              onClick={() => exportDailyOccupancyReport(activeCamp, occupants)}
+              className="text-slate-700 hover:text-emerald-700 font-bold flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-200 cursor-pointer"
+              title="Download Template 2"
+            >
+              <Download className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Daily Report (T2)</span>
+            </button>
             <button
               onClick={() => setShowManageCostCentersModal(true)}
-              className="text-cyan-700 hover:text-cyan-900 font-bold flex items-center gap-1 cursor-pointer"
+              className="text-cyan-700 hover:text-cyan-900 font-bold flex items-center gap-1 cursor-pointer ml-1"
             >
               <Tag className="w-3.5 h-3.5" />
-              <span>Project Cost Centers & Divisions ({costCenters.length} CCs • {divisions.length} Divs)</span>
+              <span>Cost Centers & Divs</span>
             </button>
-            {isSuperAdmin && (
-              <button
-                onClick={() => setActiveTab('admin')}
-                className="text-slate-600 hover:text-slate-900 font-semibold cursor-pointer"
-              >
-                User Roles & RBAC →
-              </button>
-            )}
           </div>
         </div>
       </div>
@@ -1756,6 +1900,9 @@ export default function App() {
                                               #{occ.employeeId}
                                             </span>
                                             <span className="text-xs font-bold text-slate-900 truncate">{occ.employeeName}</span>
+                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-800 font-bold border border-cyan-200">
+                                              {occ.productiveType || 'DE'}
+                                            </span>
                                           </div>
                                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
                                             isOnLeave ? 'bg-amber-200 text-amber-900' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'
@@ -1821,15 +1968,15 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: Book1 31-Column Occupant List (With Excel Import Trigger) */}
+        {/* TAB 2: Book1 31-Column Occupant List (With Productive Type Column & Filters) */}
         {activeTab === 'occupants' && (
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
-              <div className="relative w-full md:w-96">
+              <div className="relative w-full md:w-80">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
-                  placeholder="Search by ID, Name, Nationality, Mobile, Civil ID, Room..."
+                  placeholder="Search by ID, Name, Nationality, Room..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-xs text-slate-900 focus:ring-2 focus:ring-cyan-600 focus:outline-none"
@@ -1837,6 +1984,19 @@ export default function App() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+                {/* Productive Type Filter */}
+                <select
+                  value={productiveTypeFilter}
+                  onChange={(e) => setProductiveTypeFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2"
+                >
+                  <option value="ALL">All Productive Types</option>
+                  <option value="Direct Employee (DE)">Direct Employee (DE)</option>
+                  <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
+                  <option value="Shutdown">Shutdown</option>
+                  <option value="Others">Others</option>
+                </select>
+
                 <select
                   value={statusFilter}
                   onChange={(e) => setStatusFilter(e.target.value)}
@@ -1881,9 +2041,10 @@ export default function App() {
                     <tr>
                       <th className="p-3">ID</th>
                       <th className="p-3">Employee Name</th>
+                      <th className="p-3">Productive Type</th>
+                      <th className="p-3">Grade</th>
                       <th className="p-3">Nationality</th>
                       <th className="p-3">Mobile No</th>
-                      <th className="p-3">Grade</th>
                       <th className="p-3">Division</th>
                       <th className="p-3">Cost Center</th>
                       <th className="p-3">Camp & Room</th>
@@ -1906,13 +2067,22 @@ export default function App() {
                             {occ.employeeName}
                           </button>
                         </td>
+                        <td className="p-3">
+                          <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-800 border border-blue-200 text-[10px] font-bold">
+                            {occ.productiveType || 'Direct Employee (DE)'}
+                          </span>
+                        </td>
+                        <td className="p-3 font-bold text-[10px]">
+                          <span className={occ.roomGrade === 'Non-Manual' ? 'text-cyan-700 font-bold' : 'text-amber-700 font-bold'}>
+                            {occ.roomGrade}
+                          </span>
+                        </td>
                         <td className="p-3 font-semibold text-slate-700">
                           <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px]">
                             {occ.nationality}
                           </span>
                         </td>
                         <td className="p-3 font-mono text-cyan-700 font-semibold">{occ.mobileNo || 'N/A'}</td>
-                        <td className="p-3 font-bold text-[10px]">{occ.roomGrade}</td>
                         <td className="p-3">{occ.division}</td>
                         <td className="p-3 font-mono text-slate-600">{occ.costCenter}</td>
                         <td className="p-3 font-mono">{occ.campNo} ({occ.roomNo})</td>
@@ -1970,7 +2140,14 @@ export default function App() {
             occupants={occupants}
             leaveLogs={leaveLogs}
             rtdLogs={rtdLogs}
+            maintenanceLogs={maintenanceLogs}
+            misconductLogs={misconductLogs}
             projectInvoicingData={projectInvoicingData}
+            activeCamp={activeCamp}
+            onExportCampOccupancySummary={() => exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs)}
+            onExportDailyOccupancyReport={() => exportDailyOccupancyReport(activeCamp, occupants)}
+            onExportMisconductLog={() => exportMisconductLog(misconductLogs)}
+            onExportMaintenanceLog={() => exportMaintenanceLog(maintenanceLogs)}
           />
         )}
 
@@ -1993,6 +2170,10 @@ export default function App() {
             rtdLogs={rtdLogs}
             costCenters={costCenters}
             occupants={occupants}
+            maintenanceLogs={maintenanceLogs}
+            misconductLogs={misconductLogs}
+            onExportMisconductLog={() => exportMisconductLog(misconductLogs)}
+            onExportMaintenanceLog={() => exportMaintenanceLog(maintenanceLogs)}
             onDownloadSQLSchema={() => alert('PostgreSQL schema downloaded')}
           />
         )}
@@ -2079,7 +2260,7 @@ export default function App() {
       </main>
 
       {/* ======================================================= */}
-      {/* PHASE 1: MODAL - EDIT CAMP WITH FLOOR RATIO CONTROLS    */}
+      {/* MODAL: EDIT CAMP WITH FLOOR RATIO CONTROLS              */}
       {/* ======================================================= */}
       {editingCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -2295,7 +2476,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* PHASE 2: COST CENTER & DYNAMIC DIVISION MANAGEMENT MODAL */}
+      {/* COST CENTER & DYNAMIC DIVISION MANAGEMENT MODAL         */}
       {/* ======================================================= */}
       {showManageCostCentersModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -2480,7 +2661,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* PHASE 3: MODAL - EXCEL ROSTER IMPORT PREVIEW & COMMIT   */}
+      {/* EXCEL ROSTER IMPORT PREVIEW & COMMIT MODAL              */}
       {/* ======================================================= */}
       {showExcelImportModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -2502,7 +2683,6 @@ export default function App() {
               </button>
             </div>
 
-            {/* Import Telemetry Bar */}
             <div className="grid grid-cols-3 gap-3 shrink-0">
               <div className="p-3 bg-slate-50 border rounded-xl">
                 <span className="text-slate-500 font-medium">Total Rows Parsed:</span>
@@ -2518,7 +2698,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Table of Parsed Rows */}
             <div className="border border-slate-200 rounded-xl overflow-x-auto flex-1 max-h-96">
               <table className="w-full text-left whitespace-nowrap">
                 <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b sticky top-0">
@@ -2527,6 +2706,7 @@ export default function App() {
                     <th className="p-2.5">Status</th>
                     <th className="p-2.5">ID</th>
                     <th className="p-2.5">Name</th>
+                    <th className="p-2.5">Productive Type</th>
                     <th className="p-2.5">Nationality</th>
                     <th className="p-2.5">Camp & Room</th>
                     <th className="p-2.5">Grade</th>
@@ -2547,6 +2727,7 @@ export default function App() {
                       </td>
                       <td className="p-2.5 font-mono font-bold text-cyan-600">#{row.employeeId || 'N/A'}</td>
                       <td className="p-2.5 font-semibold text-slate-900">{row.employeeName || 'N/A'}</td>
+                      <td className="p-2.5 font-bold text-blue-700">{row.productiveType}</td>
                       <td className="p-2.5">{row.nationality}</td>
                       <td className="p-2.5 font-mono">{row.campNo} ({row.roomNo})</td>
                       <td className="p-2.5 font-bold text-[10px]">{row.roomGrade}</td>
@@ -2850,7 +3031,9 @@ export default function App() {
         </div>
       )}
 
-      {/* Employee Dossier Modal */}
+      {/* ======================================================= */}
+      {/* EMPLOYEE DOSSIER MODAL WITH TEMPLATE EXPORT ACTIONS     */}
+      {/* ======================================================= */}
       {viewingEmployeeDossier && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
@@ -2860,7 +3043,12 @@ export default function App() {
                   #{viewingEmployeeDossier.employeeId}
                 </div>
                 <div>
-                  <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
+                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
+                    </span>
+                  </div>
                   <p className="text-slate-500 font-medium">
                     {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
                   </p>
@@ -2934,16 +3122,69 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex justify-end pt-1">
+              {/* Action Buttons for Vouchers and Incident Logging */}
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-cyan-200/60">
+                <button
+                  type="button"
+                  onClick={() => exportMaterialIssuanceForm(viewingEmployeeDossier)}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Template 3: Material Issuance Form (Doc 150-04)"
+                >
+                  <Download className="w-3.5 h-3.5" /> Material Issuance (T3)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMisconductForm(prev => ({
+                      ...prev,
+                      employeeId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      title: occ.title,
+                      division: occ.division,
+                      costCenter: occ.costCenter,
+                      campNo: occ.campNo,
+                      roomNo: occ.roomNo,
+                      contactNo: occ.mobileNo || '+965 '
+                    }));
+                    setShowMisconductModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Template 5 & 6: Report Misconduct"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMaintenanceForm(prev => ({
+                      ...prev,
+                      reportedByEmpId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      floorNo: occ.floorNo || 1,
+                      flatCode: occ.flatCode,
+                      roomNo: occ.roomNo
+                    }));
+                    setShowMaintenanceModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                  title="Template 7: Log Maintenance"
+                >
+                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
+                </button>
+
                 <button
                   onClick={() => {
                     const occ = viewingEmployeeDossier;
                     setViewingEmployeeDossier(null);
                     handleOpenRelocateModal(occ);
                   }}
-                  className="px-3.5 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
                 >
-                  <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate / Transfer Bed
+                  <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
                 </button>
               </div>
             </div>
@@ -3104,16 +3345,35 @@ export default function App() {
                 </div>
               </div>
 
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button type="button" onClick={() => setRelocatingOccupant(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer">Confirm Relocation</button>
+              <div className="flex justify-between items-center pt-3 border-t">
+                <button
+                  type="button"
+                  onClick={() => exportOccupantsRelocationForm({
+                    employeeId: relocatingOccupant.employeeId,
+                    employeeName: relocatingOccupant.employeeName,
+                    title: relocatingOccupant.title,
+                    fromRoom: `${relocatingOccupant.campNo} - ${relocatingOccupant.roomNo}`,
+                    toRoom: `${relocationForm.targetCampId} - ${relocationForm.targetRoomNo}`,
+                    relocationDate: relocationForm.transferDate,
+                    reason: relocationForm.reason
+                  })}
+                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer text-xs"
+                >
+                  <Download className="w-3.5 h-3.5" /> Preview Form (T4)
+                </button>
+                <div className="flex items-center gap-2">
+                  <button type="button" onClick={() => setRelocatingOccupant(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                  <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer">Confirm & Export</button>
+                </div>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* Check-In Modal with Dynamic Divisions */}
+      {/* ======================================================= */}
+      {/* CHECK-IN MODAL WITH EMPLOYEE PRODUCTIVE TYPE DROPDOWN    */}
+      {/* ======================================================= */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
@@ -3138,6 +3398,34 @@ export default function App() {
                 <div>
                   <label className="block font-semibold mb-1">Full Name</label>
                   <input type="text" required placeholder="Full Name" value={checkInForm.employeeName} onChange={e => setCheckInForm({ ...checkInForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              {/* Employee Productive Type & Category */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Employee Productive Type</label>
+                  <select
+                    value={checkInForm.productiveType}
+                    onChange={e => setCheckInForm({ ...checkInForm, productiveType: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-bold text-slate-800 bg-white"
+                  >
+                    <option value="Direct Employee (DE)">Direct Employee (DE)</option>
+                    <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
+                    <option value="Shutdown">Shutdown</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Arrival Type</label>
+                  <select
+                    value={checkInForm.arrivalType}
+                    onChange={e => setCheckInForm({ ...checkInForm, arrivalType: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-semibold bg-white"
+                  >
+                    <option value="Local Residency Transfer">Local Residency Transfer</option>
+                    <option value="Overseas">Overseas Arrival</option>
+                  </select>
                 </div>
               </div>
 
@@ -3223,6 +3511,151 @@ export default function App() {
         </div>
       )}
 
+      {/* ======================================================= */}
+      {/* TEMPLATE 5 & 6: ACCOMMODATION MISCONDUCT REPORT MODAL    */}
+      {/* ======================================================= */}
+      {showMisconductModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveMisconduct} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                Accommodation Misconduct Report (Template 5 & 6)
+              </h3>
+              <button type="button" onClick={() => setShowMisconductModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Offender Employee ID</label>
+                <input type="text" required value={misconductForm.employeeId} onChange={e => setMisconductForm({ ...misconductForm, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Offender Name</label>
+                <input type="text" required value={misconductForm.employeeName} onChange={e => setMisconductForm({ ...misconductForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Accommodation</label>
+                <input type="text" required value={misconductForm.campNo} onChange={e => setMisconductForm({ ...misconductForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Room No</label>
+                <input type="text" required value={misconductForm.roomNo} onChange={e => setMisconductForm({ ...misconductForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Incident Time</label>
+                <input type="text" required value={misconductForm.incidentTime} onChange={e => setMisconductForm({ ...misconductForm, incidentTime: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Location of Offence</label>
+              <input type="text" required value={misconductForm.incidentLocation} onChange={e => setMisconductForm({ ...misconductForm, incidentLocation: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Type of Violation</label>
+              <input type="text" required value={misconductForm.typeOfViolation} onChange={e => setMisconductForm({ ...misconductForm, typeOfViolation: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-rose-700" />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Brief Description of Offence</label>
+              <textarea rows={3} required value={misconductForm.description} onChange={e => setMisconductForm({ ...misconductForm, description: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Detail the violation, witnesses, and facts..." />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border rounded-xl">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Witness Name</label>
+                <input type="text" value={misconductForm.witnessName} onChange={e => setMisconductForm({ ...misconductForm, witnessName: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Witness ID</label>
+                <input type="text" value={misconductForm.witnessId} onChange={e => setMisconductForm({ ...misconductForm, witnessId: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5 font-mono" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={() => setShowMisconductModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold cursor-pointer">Record & Export Slip (.xlsx)</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* ======================================================= */}
+      {/* TEMPLATE 7: ACCOMMODATION MAINTENANCE LOG MODAL         */}
+      {/* ======================================================= */}
+      {showMaintenanceModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveMaintenance} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-600" />
+                Accommodation Maintenance Complaint (Template 7)
+              </h3>
+              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Date</label>
+                <input type="date" required value={maintenanceForm.date} onChange={e => setMaintenanceForm({ ...maintenanceForm, date: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Month</label>
+                <input type="text" required value={maintenanceForm.month} onChange={e => setMaintenanceForm({ ...maintenanceForm, month: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Room No</label>
+                <input type="text" required value={maintenanceForm.roomNo} onChange={e => setMaintenanceForm({ ...maintenanceForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Maintenance Issue Details</label>
+              <textarea rows={2.5} required value={maintenanceForm.issueDetails} onChange={e => setMaintenanceForm({ ...maintenanceForm, issueDetails: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Describe the leak, electrical issue, A/C failure..." />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Reported by Emp ID</label>
+                <input type="text" required value={maintenanceForm.reportedByEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, reportedByEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Employee Name</label>
+                <input type="text" required value={maintenanceForm.employeeName} onChange={e => setMaintenanceForm({ ...maintenanceForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Status</label>
+                <select value={maintenanceForm.status} onChange={e => setMaintenanceForm({ ...maintenanceForm, status: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold">
+                  <option value="Pending">Pending</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Material Cost (KWD)</label>
+                <input type="text" value={maintenanceForm.replacedMaterialCost} onChange={e => setMaintenanceForm({ ...maintenanceForm, replacedMaterialCost: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Charge to Emp ID#</label>
+                <input type="text" value={maintenanceForm.chargeToEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, chargeToEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer">Save to Maintenance Log</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {/* Quick Manage Modal */}
       {manageOccupantModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3232,6 +3665,7 @@ export default function App() {
               <button onClick={() => setManageOccupantModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
             <div className="p-3 bg-slate-50 border rounded-xl space-y-1">
+              <div><strong>Type:</strong> <span className="font-semibold text-blue-700">{manageOccupantModal.productiveType || 'Direct Employee (DE)'}</span></div>
               <div><strong>Nationality:</strong> <span className="font-semibold text-slate-800">{manageOccupantModal.nationality}</span></div>
               <div><strong>Mobile:</strong> {manageOccupantModal.mobileNo || 'N/A'}</div>
               <div><strong>Emergency:</strong> {manageOccupantModal.emergencyContactName} ({manageOccupantModal.emergencyContactPhone})</div>
@@ -3324,11 +3758,11 @@ export default function App() {
               </select>
             </div>
             <div>
-              <label className="block font-bold mb-1">Exit Date</label>
+              <label className="block font-semibold mb-1">Exit Date</label>
               <input type="date" required value={rtdForm.rtdDate} onChange={e => setRtdForm({ ...rtdForm, rtdDate: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div>
-              <label className="block font-bold mb-1">AFR Exit Ref #</label>
+              <label className="block font-semibold mb-1">AFR Exit Ref #</label>
               <input type="text" required value={rtdForm.afrExitRef} onChange={e => setRtdForm({ ...rtdForm, afrExitRef: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
@@ -3345,7 +3779,7 @@ export default function App() {
           <form onSubmit={handleCostCenterTransferRequest} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
             <h3 className="text-base font-bold text-slate-900">Transfer Cost Center (#{showTransferRequestModal.employeeId})</h3>
             <div>
-              <label className="block font-bold mb-1">Target Project Cost Center</label>
+              <label className="block font-semibold mb-1">Target Project Cost Center</label>
               <select
                 value={transferRequestForm.toCostCenter}
                 onChange={e => {
@@ -3361,7 +3795,7 @@ export default function App() {
               </select>
             </div>
             <div>
-              <label className="block font-bold mb-1">Reason for Transfer</label>
+              <label className="block font-semibold mb-1">Reason for Transfer</label>
               <input type="text" required value={transferRequestForm.reason} onChange={e => setTransferRequestForm({ ...transferRequestForm, reason: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div className="flex justify-end gap-2 pt-2">

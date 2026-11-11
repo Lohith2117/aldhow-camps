@@ -837,3 +837,50 @@ export const INITIAL_ACTIVITY_LOGS = [
     campNo: 'CAMP-01'
   }
 ];
+// Add INITIAL_MAINTENANCE_LOGS and INITIAL_MISCONDUCT_LOGS:
+export const INITIAL_MISCONDUCT_LOGS = [
+  {
+    id: 'disc-1',
+    employeeId: '5912',
+    employeeName: 'Syed Tanveer Hussain',
+    title: 'QA/QC Inspector',
+    incidentDate: '2026-10-15',
+    incidentTime: '22:30',
+    incidentLocation: 'CAMP-01, Flat 1-01-02-M, Room B',
+    typeOfViolation: 'Cooking inside bedroom against fire safety policy',
+    docRef: 'DISC-5912-01',
+    costCenter: '1CIV011-KOC',
+    division: 'CIVIL',
+    campNo: 'CAMP-01',
+    roomNo: '1-01-02-B',
+    contactNo: '+965 99882211',
+    reportedBy: 'Tariq Al-Mansoor',
+    witnessName: 'Amr Mohamed Ali',
+    witnessId: '5838',
+    witnessRoom: '1-01-01-A',
+    witnessPhone: '+965 98765432',
+    description: 'Use of high-voltage electric hotplate inside sleeping quarters.',
+    remarks: 'First written warning issued by HR.'
+  }
+];
+
+export const INITIAL_MAINTENANCE_LOGS = [
+  {
+    id: 'MNT-101',
+    date: '2026-11-02',
+    month: 'November',
+    issueDetails: 'Split A/C cooling compressor failure and water leakage',
+    reportedByEmpId: '6410',
+    employeeName: 'Kamineni Lohith',
+    floorNo: 1,
+    flatCode: '1-01-01-NM',
+    roomNo: '1-01-01-B',
+    areaFacility: 'Bedroom AC',
+    inspectedBy: 'Facilities Supervisor',
+    actionTakenBy: 'HVAC Maintenance Team',
+    status: 'Completed',
+    replacedMaterialCost: '18.500',
+    chargeToEmpId: 'N/A (Wear & Tear)',
+    remarks: 'Replaced fan motor and cleared drain pipe.'
+  }
+];
