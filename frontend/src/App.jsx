@@ -15,7 +15,6 @@ import {
   INITIAL_LEAVE_LOGS, INITIAL_RTD_LOGS, INITIAL_TRANSFER_REQUESTS,
   INITIAL_BILLING_OTHER_COSTS, INITIAL_ACTIVITY_LOGS
 } from './data/initialDatabase';
-
 import {
   exportCampOccupancySummary,
   exportDailyOccupancyReport,
@@ -23,7 +22,8 @@ import {
   exportOccupantsRelocationForm,
   exportAccommodationMisconductReport,
   exportMisconductLog,
-  exportMaintenanceLog
+  exportMaintenanceLog,
+  printFormattedElement
 } from './utils/reportGenerators';
 
 import InvoicingTab from './components/InvoicingTab';
@@ -3085,9 +3085,13 @@ export default function App() {
             <div className="flex items-center justify-between pt-2 border-t">
               <span className="text-[11px] text-slate-400">Dhow Camp Management Registry</span>
               <div className="flex items-center gap-2">
-                <button type="button" onClick={() => window.print()} className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer">
-                  <Printer className="w-3.5 h-3.5" /> Print Invoice
-                </button>
+                <button
+                    type="button"
+                    onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}`)}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer no-print"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Print Invoice
+                  </button>
                 <button type="button" onClick={() => setSelectedInvoiceModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer">
                   Close
                 </button>
