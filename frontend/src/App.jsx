@@ -35,7 +35,6 @@ const DhowLogo = ({ className = "h-8 w-auto" }) => (
   <img src={dhowLogoImg} alt="Dhow Engineering" className={className} />
 );
 
-// Fallback initial data for Disciplinary & Maintenance Logs
 const DEFAULT_MISCONDUCT_LOGS = [
   {
     id: 'disc-1',
@@ -84,6 +83,8 @@ const DEFAULT_MAINTENANCE_LOGS = [
 ];
 
 export default function App() {
+  const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
+
   // ==========================================
   // STATE PERSISTENCE (14 TABLES / ENTITIES)
   // ==========================================
@@ -152,7 +153,7 @@ export default function App() {
   const [showMisconductModal, setShowMisconductModal] = useState(false);
   const [misconductForm, setMisconductForm] = useState({
     employeeId: '', employeeName: '', title: '', division: '', costCenter: '',
-    campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: '2026-11-10',
+    campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: todayStr,
     incidentTime: '14:00', incidentLocation: 'Accommodation Quarters',
     typeOfViolation: 'Camp Quiet Hours & Residential Safety Violation',
     description: '', witnessName: '', witnessId: '', witnessRoom: '', witnessPhone: '+965 ',
@@ -162,7 +163,7 @@ export default function App() {
   // Maintenance Log Modal
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
-    date: '2026-11-10', month: 'November', issueDetails: '', reportedByEmpId: '',
+    date: todayStr, month: 'November', issueDetails: '', reportedByEmpId: '',
     employeeName: '', floorNo: 1, flatCode: '', roomNo: '', areaFacility: 'Bedroom AC / Electrical',
     inspectedBy: 'Camp Facilities Supervisor', actionTakenBy: 'Maintenance Team',
     status: 'Pending', replacedMaterialCost: '0.000', chargeToEmpId: 'N/A (Wear & Tear)', remarks: ''
@@ -192,38 +193,57 @@ export default function App() {
     employeeId: '', employeeName: '', nationality: 'India',
     title: 'Site Engineer', division: 'IDS', costCenter: '1IDS038-KIPIC',
     passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '',
-    emergencyContactPhone: '+965 ', homeCountryAddress: '', entryDate: '2026-11-09'
+    emergencyContactPhone: '+965 ', homeCountryAddress: '', entryDate: todayStr
   });
 
   const [relocationForm, setRelocationForm] = useState({
     targetCampId: '', targetFloorNo: '', targetFlatCode: '', targetRoomNo: '',
-    transferDate: '2026-11-09', reason: 'Project Site Reallocation'
+    transferDate: todayStr, reason: 'Project Site Reallocation'
   });
 
   const [leaveForm, setLeaveForm] = useState({
-    startDate: '2026-11-09', expectedEndDate: '2026-12-09', afrLogNo: 'LOG-VAC', remarks: 'Annual Vacation'
+    startDate: todayStr, expectedEndDate: todayStr, afrLogNo: 'LOG-VAC', remarks: 'Annual Vacation'
   });
   const [returnJobForm, setReturnJobForm] = useState({
-    actualReturnDate: '2026-11-09', remarks: 'Returned on schedule'
+    actualReturnDate: todayStr, remarks: 'Returned on schedule'
   });
   const [rtdForm, setRtdForm] = useState({
-    rtdType: 'Resigned', rtdDate: '2026-11-09', afrExitRef: 'EXIT-RTD', remarks: 'Resigned from company'
+    rtdType: 'Resigned', rtdDate: todayStr, afrExitRef: 'EXIT-RTD', remarks: 'Resigned from company'
   });
   const [transferRequestForm, setTransferRequestForm] = useState({
     toCostCenter: '1MEP019-KNPC', toDivision: 'MEP', reason: 'Reassigned to new project site'
   });
   const [newCostCenterForm, setNewCostCenterForm] = useState({ code: '', name: '', division: 'IDS' });
 
-  // Add Camp Wizard: Floor-by-floor configuration
+  // Add Camp Wizard: Dynamic Configurable Floors & Rooms
   const [newCampForm, setNewCampForm] = useState({
-    campNo: 'CAMP-04', campArea: 'Ahmadi Sector 4', campDigit: '4', campStartDate: '2026-11-09',
-    floorsCount: 3, roomsPerFlat: 3,
+    campNo: 'CAMP-04',
+    campArea: 'Ahmadi Sector 4',
+    campDigit: '4',
+    campStartDate: todayStr,
+    floorsCount: 3,
+    roomsPerFlat: 3,
     floorConfigs: [
       { floorNo: 1, flatsCount: 2, nonManualFlats: 1 },
       { floorNo: 2, flatsCount: 3, nonManualFlats: 0 },
       { floorNo: 3, flatsCount: 3, nonManualFlats: 0 }
     ]
   });
+
+  const handleFloorsCountChange = (count) => {
+    const val = Math.max(1, Math.min(20, parseInt(count, 10) || 1));
+    setNewCampForm(prev => {
+      const currentConfigs = [...prev.floorConfigs];
+      if (val > currentConfigs.length) {
+        for (let i = currentConfigs.length + 1; i <= val; i++) {
+          currentConfigs.push({ floorNo: i, flatsCount: 3, nonManualFlats: 0 });
+        }
+      } else if (val < currentConfigs.length) {
+        currentConfigs.length = val;
+      }
+      return { ...prev, floorsCount: val, floorConfigs: currentConfigs };
+    });
+  };
 
   const [newUserForm, setNewUserForm] = useState({
     staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR',
@@ -663,7 +683,6 @@ export default function App() {
           return;
         }
 
-        // Normalize Column Headers
         const parsedRows = rawJson.map((row, idx) => {
           const keys = Object.keys(row);
           const getVal = (candidates) => {
@@ -688,11 +707,10 @@ export default function App() {
           const roomGrade = getVal(['Room Grade', 'Grade', 'Category']) || 'Manual';
           const division = getVal(['Division', 'Dept', 'Department']) || 'IDS';
           const costCenter = getVal(['Project Cost Center', 'Cost Center', 'CostCenter', 'CC']) || '1IDS038-KIPIC';
-          const entryDate = getVal(['Entry Date', 'Check In Date', 'Start Date']) || '2026-11-09';
+          const entryDate = getVal(['Entry Date', 'Check In Date', 'Start Date']) || todayStr;
           const emContact = getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact';
           const emPhone = getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ';
 
-          // Validation & Conflict Check
           const errors = [];
           if (!empId) errors.push('Missing Employee ID');
           if (!empName) errors.push('Missing Name');
@@ -806,7 +824,6 @@ export default function App() {
 
       newOccupantsList.push(newOcc);
 
-      // Assign to matching room slot
       updatedCamps = updatedCamps.map(c => {
         if (c.campNo !== row.campNo) return c;
         return {
@@ -946,7 +963,6 @@ export default function App() {
     setShowCheckInModal(false);
     logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${newOcc.employeeName} (${newOcc.nationality} • ${newOcc.productiveType}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo}`, targetCamp.campNo);
 
-    // Offer instant export of Material Issuance Form (Doc Ref 150-04)
     if (confirm(`Check-In complete for #${empId}! Would you like to export the Employee New Arrival - Material Issuance Voucher (Doc. Ref: 150-04) now?`)) {
       exportMaterialIssuanceForm(newOcc, checkInForm.arrivalType);
     }
@@ -1105,7 +1121,7 @@ export default function App() {
       targetFloorNo: defaultFloor.floorNo,
       targetFlatCode: defaultFlat.flatCode,
       targetRoomNo: defaultRoom.roomNo,
-      transferDate: '2026-11-09',
+      transferDate: todayStr,
       reason: 'Project Site Reallocation'
     });
   };
@@ -1181,8 +1197,7 @@ export default function App() {
     }
 
     logActivity('RELOCATION', `Relocated #${relocatingOccupant.employeeId} to Room ${targetRoom.roomNo}`, `${relocatingOccupant.employeeName} moved to ${targetCamp.campNo} Room ${targetRoom.roomNo}`, targetCamp.campNo);
-    
-    // Auto-generate Template 4: Occupants Relocation Form
+
     exportOccupantsRelocationForm({
       employeeId: relocatingOccupant.employeeId,
       employeeName: relocatingOccupant.employeeName,
@@ -1594,7 +1609,7 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={() => exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs)}
-              className="text-slate-700 hover:text-cyan-700 font-bold flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-200 cursor-pointer"
+              className="text-slate-700 hover:text-cyan-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
               title="Download Template 1"
             >
               <Download className="w-3.5 h-3.5 text-cyan-600" />
@@ -1602,7 +1617,7 @@ export default function App() {
             </button>
             <button
               onClick={() => exportDailyOccupancyReport(activeCamp, occupants)}
-              className="text-slate-700 hover:text-emerald-700 font-bold flex items-center gap-1 px-2 py-1 rounded bg-slate-100 border border-slate-200 cursor-pointer"
+              className="text-slate-700 hover:text-emerald-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
               title="Download Template 2"
             >
               <Download className="w-3.5 h-3.5 text-emerald-600" />
@@ -1610,7 +1625,7 @@ export default function App() {
             </button>
             <button
               onClick={() => setShowManageCostCentersModal(true)}
-              className="text-cyan-700 hover:text-cyan-900 font-bold flex items-center gap-1 cursor-pointer ml-1"
+              className="text-cyan-700 hover:text-cyan-900 font-bold flex items-center gap-1 cursor-pointer ml-1 text-xs"
             >
               <Tag className="w-3.5 h-3.5" />
               <span>Cost Centers & Divs</span>
@@ -1968,7 +1983,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: Book1 31-Column Occupant List (With Productive Type Column & Filters) */}
+        {/* TAB 2: Book1 31-Column Occupant List */}
         {activeTab === 'occupants' && (
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
@@ -1984,7 +1999,6 @@ export default function App() {
               </div>
 
               <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
-                {/* Productive Type Filter */}
                 <select
                   value={productiveTypeFilter}
                   onChange={(e) => setProductiveTypeFilter(e.target.value)}
@@ -2019,7 +2033,6 @@ export default function App() {
                   {divisions.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
 
-                {/* Excel Import Button */}
                 <button
                   onClick={() => excelFileInputRef.current?.click()}
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -2515,7 +2528,7 @@ export default function App() {
                     <button
                       type="button"
                       onClick={() => handleRemoveDivision(div)}
-                      className="text-slate-400 hover:text-rose-600 font-bold ml-1"
+                      className="text-slate-400 hover:text-rose-600 font-bold ml-1 cursor-pointer"
                     >
                       ×
                     </button>
@@ -2761,7 +2774,7 @@ export default function App() {
                   type="button"
                   disabled={excelImportStats.valid === 0}
                   onClick={handleCommitExcelImport}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold cursor-pointer"
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer disabled:opacity-50"
                 >
                   Confirm & Batch Import ({excelImportStats.valid} Occupants)
                 </button>
@@ -2771,14 +2784,14 @@ export default function App() {
         </div>
       )}
 
-      {/* Add Building Wizard */}
+      {/* DYNAMIC ADD BUILDING WIZARD (CONFIGURABLE FLOORS & ROOMS) */}
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
             <div className="flex items-center justify-between border-b pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
                 <Building2 className="w-5 h-5 text-emerald-600" />
-                Add Building (Floor-by-Floor Configuration)
+                Add Building (Configurable Floors & Topology)
               </h3>
               <button onClick={() => setShowAddCampModal(false)} className="text-slate-400 hover:text-slate-700">
                 <X className="w-5 h-5" />
@@ -2843,30 +2856,81 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Camp Code</label>
-                  <input type="text" required value={newCampForm.campNo} onChange={e => setNewCampForm({ ...newCampForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                  <input type="text" required value={newCampForm.campNo} onChange={e => setNewCampForm({ ...newCampForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Building Digit Prefix</label>
-                  <input type="text" required value={newCampForm.campDigit} onChange={e => setNewCampForm({ ...newCampForm, campDigit: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                  <label className="block font-semibold mb-1">Building Digit Prefix (e.g. 4 for 4-01-01)</label>
+                  <input type="text" required value={newCampForm.campDigit} onChange={e => setNewCampForm({ ...newCampForm, campDigit: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Camp Area</label>
+                  <label className="block font-semibold mb-1">Camp Area Location</label>
                   <input type="text" required value={newCampForm.campArea} onChange={e => setNewCampForm({ ...newCampForm, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Camp Start Date</label>
-                  <input type="date" required value={newCampForm.campStartDate} onChange={e => setNewCampForm({ ...newCampForm, campStartDate: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                  <label className="block font-semibold mb-1">Camp Commissioning Date</label>
+                  <input type="date" required value={newCampForm.campStartDate} onChange={e => setNewCampForm({ ...newCampForm, campStartDate: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
                 </div>
               </div>
 
+              {/* Dynamic Floor & Rooms per Flat Steppers */}
+              <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-bold text-slate-900 mb-1">Total Building Floors</label>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => handleFloorsCountChange(newCampForm.floorsCount - 1)}
+                      className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    >
+                      -
+                    </button>
+                    <input
+                      type="number"
+                      min="1"
+                      max="20"
+                      value={newCampForm.floorsCount}
+                      onChange={e => handleFloorsCountChange(e.target.value)}
+                      className="w-20 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-center font-bold text-slate-900"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => handleFloorsCountChange(newCampForm.floorsCount + 1)}
+                      className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
+                    >
+                      +
+                    </button>
+                    <span className="text-[11px] text-slate-500">Floors (1 to 20)</span>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-900 mb-1">Rooms per Flat</label>
+                  <select
+                    value={newCampForm.roomsPerFlat}
+                    onChange={e => setNewCampForm({ ...newCampForm, roomsPerFlat: Number(e.target.value) })}
+                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-slate-800"
+                  >
+                    <option value={2}>2 Rooms per Flat (A, B)</option>
+                    <option value={3}>3 Rooms per Flat (A, B, C)</option>
+                    <option value={4}>4 Rooms per Flat (A, B, C, D)</option>
+                    <option value={5}>5 Rooms per Flat (A, B, C, D, E)</option>
+                    <option value={6}>6 Rooms per Flat (A, B, C, D, E, F)</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Dynamic Per-Floor Topology Table */}
               <div className="p-4 bg-slate-50 border rounded-xl space-y-2.5">
-                <div className="font-bold text-slate-900">Floor-by-Floor Flat Topology:</div>
-                <div className="border border-slate-200 rounded-lg overflow-hidden">
-                  <table className="w-full text-left">
-                    <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b">
+                <div className="flex items-center justify-between">
+                  <span className="font-bold text-slate-900">Floor-by-Floor Flat Topology ({newCampForm.floorConfigs.length} Floors):</span>
+                  <span className="text-[11px] text-slate-500">Non-Manual = 2 beds/rm • Manual = 3 beds/rm</span>
+                </div>
+                <div className="border border-slate-200 rounded-lg overflow-x-auto max-h-64">
+                  <table className="w-full text-left whitespace-nowrap">
+                    <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b sticky top-0">
                       <tr>
                         <th className="py-2 px-3">Floor</th>
                         <th className="py-2 px-3">Flats on this Floor</th>
@@ -2882,13 +2946,15 @@ export default function App() {
                             <input
                               type="number"
                               min="1"
-                              max="10"
+                              max="15"
                               value={fc.flatsCount}
                               onChange={e => {
                                 const val = parseInt(e.target.value, 10) || 1;
                                 setNewCampForm(prev => ({
                                   ...prev,
-                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, flatsCount: val } : f)
+                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? {
+                                    ...f, flatsCount: val, nonManualFlats: Math.min(f.nonManualFlats, val)
+                                  } : f)
                                 }));
                               }}
                               className="w-20 border rounded px-2 py-1 text-center font-bold"
@@ -2904,7 +2970,7 @@ export default function App() {
                                 const val = parseInt(e.target.value, 10) || 0;
                                 setNewCampForm(prev => ({
                                   ...prev,
-                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: val } : f)
+                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: Math.min(val, f.flatsCount) } : f)
                                 }));
                               }}
                               className="w-20 border rounded px-2 py-1 text-center font-bold text-cyan-700"
@@ -3779,7 +3845,7 @@ export default function App() {
           <form onSubmit={handleCostCenterTransferRequest} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
             <h3 className="text-base font-bold text-slate-900">Transfer Cost Center (#{showTransferRequestModal.employeeId})</h3>
             <div>
-              <label className="block font-semibold mb-1">Target Project Cost Center</label>
+              <label className="block font-bold mb-1">Target Project Cost Center</label>
               <select
                 value={transferRequestForm.toCostCenter}
                 onChange={e => {

@@ -1,8 +1,8 @@
 import * as XLSX from 'xlsx';
 
-// 1. Camp Occupancy Summary Status Generator
-export function exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs) {
-  const todayStr = new Date().toISOString().split('T')[0];
+// 1. Camp Occupancy Summary Status (Template 1)
+export function exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs, meta = {}) {
+  const todayStr = meta.date || new Date().toISOString().split('T')[0];
   const yesterday = new Date();
   yesterday.setDate(yesterday.getDate() - 1);
   const yesterdayStr = yesterday.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' });
@@ -35,12 +35,12 @@ export function exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs)
 
   rows.push([]);
   rows.push(['', 'Inspection Details']);
-  rows.push(['', 'Type of Inspection:', '', '', '', 'Conducted at:', todayStr]);
+  rows.push(['', 'Type of Inspection:', meta.inspectionType || 'Weekly Routine Inspection', '', '', 'Conducted at:', meta.conductedAt || 'All Camp Facilities']);
   rows.push(['', "Camp Boss's Weekly Inspection conducted at:", todayStr]);
   rows.push([]);
   rows.push(['', "Accommodation Department Head's approval"]);
-  rows.push(['', 'Remarks: Regular accommodation operations compliant']);
-  rows.push(['', 'Name:', 'Mohamed Bayoumi', '', 'Signature:', '______________', '', 'Date:', todayStr]);
+  rows.push(['', `Remarks: ${meta.remarks || 'Regular accommodation operations compliant and inspected.'}`]);
+  rows.push(['', 'Name:', meta.approverName || 'Mohamed Bayoumi', '', 'Signature:', '______________', '', 'Date:', todayStr]);
 
   const ws = XLSX.utils.aoa_to_sheet(rows);
   const wb = XLSX.utils.book_new();
@@ -48,9 +48,9 @@ export function exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs)
   XLSX.writeFile(wb, `Camp Occupancy Summary Status - ${todayStr}.xlsx`);
 }
 
-// 2. Daily Occupancy Report Generator
-export function exportDailyOccupancyReport(activeCamp, occupants) {
-  const todayStr = new Date().toISOString().split('T')[0];
+// 2. Daily Occupancy Report (Template 2)
+export function exportDailyOccupancyReport(activeCamp, occupants, meta = {}) {
+  const todayStr = meta.date || new Date().toISOString().split('T')[0];
   const campOccupants = occupants.filter(o => o.campNo === activeCamp.campNo);
 
   const rows = [
@@ -71,7 +71,7 @@ export function exportDailyOccupancyReport(activeCamp, occupants) {
       occ.employeeStatus,
       occ.entryDate,
       occ.exitDate || '-',
-      'Camp Coordinator'
+      meta.enteredBy || 'Camp Coordinator'
     ]);
   });
 
@@ -84,8 +84,8 @@ export function exportDailyOccupancyReport(activeCamp, occupants) {
   XLSX.writeFile(wb, `Daily Occupancy Report - ${activeCamp.campNo} - ${todayStr}.xlsx`);
 }
 
-// 3. Employee New Arrival - Material Issuance Form (Doc. Ref: 150-04)
-export function exportMaterialIssuanceForm(occ, arrivalType = 'Local Residency Transfer') {
+// 3. Employee New Arrival - Material Issuance Form (Template 3 / Doc Ref 150-04)
+export function exportMaterialIssuanceForm(occ, arrivalType = 'Local Residency Transfer', meta = {}) {
   const todayStr = new Date().toISOString().split('T')[0];
 
   const rows = [
@@ -95,10 +95,10 @@ export function exportMaterialIssuanceForm(occ, arrivalType = 'Local Residency T
     ['', 'Employee Details:', '', '', '', '', 'Arrival Type :', '', '', arrivalType === 'Overseas' ? '[X] Overseas' : '[ ] Overseas', '', '', '', '', arrivalType !== 'Overseas' ? '[X] Local Residency Transfer' : '[ ] Local Residency Transfer', '', '', '', '', 'Arrival Date :', occ.entryDate || todayStr],
     [],
     ['', 'Project / Dept. No.', 'Emp. Code', '', 'Name', '', 'Nationality', '', '', 'Passport / Civil ID No.', '', '', '', '', '', '', '', 'Designation'],
-    ['', occ.costCenter, occ.employeeId, '', occ.employeeName, '', occ.nationality, '', '', `${occ.passportNo} / ${occ.civilId}`, '', '', '', '', '', '', '', occ.title],
+    ['', occ.costCenter, occ.employeeId, '', occ.employeeName, '', occ.nationality, '', '', `${occ.passportNo || 'N/A'} / ${occ.civilId || 'N/A'}`, '', '', '', '', '', '', '', occ.title],
     [],
     ['', 'Sl. No.', 'List of Materials', '', '', '', 'Total Qty Issued', '', '', '', 'Accommodation Request Ref. No. & Date', '', '', '', '', '', '', 'Assigned Camp No.', '', '', '', '', 'Assigned Room No.'],
-    ['', '', '', '', '', '', 'YES', 'No', '', '', `${occ.afrLogNo || 'LOG-AFR'} (${occ.entryDate})`, '', '', '', '', '', '', occ.campNo, '', '', '', '', occ.roomNo],
+    ['', '', '', '', '', '', 'YES', 'No', '', '', `${occ.afrLogNo || 'LOG-AFR'} (${occ.entryDate || todayStr})`, '', '', '', '', '', '', occ.campNo, '', '', '', '', occ.roomNo],
     ['', 1, '  Mattress', '', '', '', 'YES', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     ['', 2, '  Pillow', '', '', '', 'YES', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
     ['', 3, '  Bedsheet', '', '', '', 'YES', '', '', '', '', '', '', '', '', '', '', '', '', '', '', '', ''],
@@ -107,7 +107,7 @@ export function exportMaterialIssuanceForm(occ, arrivalType = 'Local Residency T
     ['', 'Note: Employee has to return the received items in case of vacating the accommodation.'],
     [],
     ['', '', 'Requested by', '', '', '', 'Issued by', '', '', '', '', '', '', '', '', '', '', 'Approved by'],
-    ['', 'Name:', occ.employeeName, '', '', '', 'Camp Supervisor', '', '', '', '', '', '', '', '', '', '', 'Mohamed Bayoumi'],
+    ['', 'Name:', occ.employeeName, '', '', '', meta.issuedByName || 'Camp Supervisor', '', '', '', '', '', '', '', '', '', '', meta.approvedByName || 'Mohamed Bayoumi'],
     ['', 'Designation:', occ.title, '', '', '', 'Camp Boss', '', '', '', '', '', '', '', '', '', '', 'Accommodation Dept Head'],
     ['', 'Signature:', '______________', '', '', '', '______________', '', '', '', '', '', '', '', '', '', '', '______________'],
     ['', 'Date:', todayStr, '', '', '', todayStr, '', '', '', '', '', '', '', '', '', '', todayStr]
@@ -119,8 +119,8 @@ export function exportMaterialIssuanceForm(occ, arrivalType = 'Local Residency T
   XLSX.writeFile(wb, `Material Issuance Form - ${occ.employeeId} - ${occ.employeeName}.xlsx`);
 }
 
-// 4. Occupants Relocation Form Generator
-export function exportOccupantsRelocationForm(relocationRecords) {
+// 4. Occupants Relocation Form (Template 4)
+export function exportOccupantsRelocationForm(relocationRecords, meta = {}) {
   const todayStr = new Date().toISOString().split('T')[0];
 
   const rows = [
@@ -148,7 +148,7 @@ export function exportOccupantsRelocationForm(relocationRecords) {
   rows.push([]);
   rows.push([]);
   rows.push(['', '', '', 'Prepared by', '', '', '', 'Reviewed by', '', '', '', 'Approved by']);
-  rows.push(['', 'Name:', '', 'Camp Supervisor', '', '', '', 'Project Coordinator', '', '', '', 'Accommodation Head']);
+  rows.push(['', 'Name:', '', meta.preparedByName || 'Camp Supervisor', '', '', '', meta.reviewedByName || 'Project Coordinator', '', '', '', meta.approvedByName || 'Accommodation Head']);
   rows.push(['', 'Designation:', '', 'Camp Admin', '', '', '', 'Field Engineer', '', '', '', 'Dept Head']);
   rows.push(['', 'Signature:', '', '______________', '', '', '', '______________', '', '', '', '______________']);
   rows.push(['', 'Date:', '', todayStr, '', '', '', todayStr, '', '', '', todayStr]);
@@ -159,7 +159,7 @@ export function exportOccupantsRelocationForm(relocationRecords) {
   XLSX.writeFile(wb, `Occupants Relocation Form - ${todayStr}.xlsx`);
 }
 
-// 5. Accommodation Misconduct Report Generator (Individual Incident)
+// 5. Accommodation Misconduct Report (Template 5)
 export function exportAccommodationMisconductReport(incident) {
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -167,18 +167,18 @@ export function exportAccommodationMisconductReport(incident) {
     [],
     ['', 'Details of Offence'],
     ['', 'Accommodation No.:', incident.campNo, '', '', '', '', '', 'Date:', incident.incidentDate || todayStr],
-    ['', 'Location of Offence:', incident.location, '', '', '', '', '', 'Time:', incident.incidentTime || '14:00'],
+    ['', 'Location of Offence:', incident.location || incident.incidentLocation, '', '', '', '', '', 'Time:', incident.incidentTime || '14:00'],
     ['', 'Name of Offender:', incident.employeeName, '', '', '', '', '', 'ID No.:', incident.employeeId],
     ['', 'Designation:', incident.title || 'Worker', '', '', '', '', '', 'Div./ Dept./ Proj.:', `${incident.division} / ${incident.costCenter}`],
     ['', 'Room No.:', incident.roomNo, '', '', '', '', '', 'Contact No.:', incident.contactNo || '+965'],
     [],
     ['', 'Brief Description of Offence'],
-    ['', incident.description || 'Violation of camp safety and residential quiet hours regulations.'],
+    ['', incident.description || 'Violation of camp safety regulations.'],
     [],
     [],
     ['', 'Witness (if available)'],
     ['', 'Sr. No.', 'Name', '', '', 'ID No.', '', 'Room No.', '', '', 'Contact No.'],
-    ['', 1, incident.witnessName || 'Colleague on Site', '', '', incident.witnessId || 'N/A', '', incident.witnessRoom || 'N/A', '', '', incident.witnessPhone || '+965'],
+    ['', 1, incident.witnessName || 'None', '', '', incident.witnessId || 'N/A', '', incident.witnessRoom || 'N/A', '', '', incident.witnessPhone || '+965'],
     [],
     ['', 'Submitted by:'],
     ['', 'Name', incident.reportedBy || 'Camp Supervisor', '', '', '', 'Signature', '______________', '', '', 'Date', todayStr],
@@ -200,7 +200,7 @@ export function exportAccommodationMisconductReport(incident) {
   XLSX.writeFile(wb, `Accommodation Misconduct Report - ${incident.employeeId} - ${todayStr}.xlsx`);
 }
 
-// 6. Accommodation Misconduct Report Log Generator (Master Register)
+// 6. Accommodation Misconduct Report Log (Template 6)
 export function exportMisconductLog(misconductLogs) {
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -230,7 +230,7 @@ export function exportMisconductLog(misconductLogs) {
   XLSX.writeFile(wb, `Accommodation Misconduct Report Log - ${todayStr}.xlsx`);
 }
 
-// 7. Maintenance Log Generator (Complaints & Work Orders)
+// 7. Maintenance Log (Template 7)
 export function exportMaintenanceLog(maintenanceRecords) {
   const todayStr = new Date().toISOString().split('T')[0];
 
@@ -251,7 +251,7 @@ export function exportMaintenanceLog(maintenanceRecords) {
       item.floorNo,
       item.flatCode,
       item.roomNo,
-      item.areaFacility || 'Bathroom / AC Unit',
+      item.areaFacility || 'Bedroom AC / Electrical',
       item.inspectedBy,
       item.actionTakenBy,
       item.status,
