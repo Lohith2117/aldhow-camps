@@ -5,7 +5,7 @@ import {
   Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane, Settings,
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
   Archive, Tag, Phone, Clock, SlidersHorizontal, Layers, CheckSquare, Globe,
-  Upload, FileUp, Filter, Wrench, ShieldAlert
+  Upload, FileUp, Filter, Wrench, ShieldAlert, Calendar
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import dhowLogoImg from './assets/dhow-logo.png';
@@ -15,6 +15,7 @@ import {
   INITIAL_LEAVE_LOGS, INITIAL_RTD_LOGS, INITIAL_TRANSFER_REQUESTS,
   INITIAL_BILLING_OTHER_COSTS, INITIAL_ACTIVITY_LOGS
 } from './data/initialDatabase';
+
 import {
   exportCampOccupancySummary,
   exportDailyOccupancyReport,
@@ -1242,10 +1243,10 @@ export default function App() {
     alert(`Maintenance issue logged in register.`);
   };
 
-  const handleCreateUser = (e) => {
+  // Synchronize User Creation with Neon DB API
+  const handleCreateUser = async (e) => {
     e.preventDefault();
-    const newUser = {
-      id: `u-${Date.now()}`,
+    const payload = {
       staffId: newUserForm.staffId,
       name: newUserForm.name,
       email: newUserForm.email,
@@ -1253,7 +1254,6 @@ export default function App() {
       title: newUserForm.title || 'Camp Coordinator',
       role: newUserForm.role,
       campScope: newUserForm.campScope,
-      status: 'Active',
       permissions: {
         canManageUsers: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canManageUsers,
         canAddCamps: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canAddCamps,
@@ -1261,13 +1261,36 @@ export default function App() {
         canEditOccupants: newUserForm.canEditOccupants,
         canExportReports: newUserForm.canExportReports,
         canApproveTransfers: newUserForm.role === 'SUPER_ADMIN' || newUserForm.role === 'AUDITOR'
-      },
-      lastLogin: 'Never'
+      }
     };
 
-    setUsers(prev => [...prev, newUser]);
-    setShowAddUserModal(false);
-    logActivity('USER_MGMT', `Created User ${newUser.staffId}`, `Created ${newUser.name} with role ${newUser.role}`);
+    try {
+      const res = await fetch('/api/users', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      
+      if (!res.ok) throw new Error('Failed to create user in database');
+      const savedUser = await res.json();
+      
+      setUsers(prev => [savedUser, ...prev]);
+      setShowAddUserModal(false);
+      logActivity('USER_MGMT', `Created User Account ${savedUser.staffId}`, `Created ${savedUser.name} (${savedUser.role}) in cloud database`);
+      alert(`User ${savedUser.name} successfully created and committed to Neon database!`);
+    } catch (err) {
+      const fallbackUser = {
+        id: `u-${Date.now()}`,
+        ...payload,
+        status: 'Active',
+        lastLogin: 'Never'
+      };
+      setUsers(prev => [fallbackUser, ...prev]);
+      setShowAddUserModal(false);
+      logActivity('USER_MGMT', `Created User ${fallbackUser.staffId}`, `Created ${fallbackUser.name} (Local fallback)`);
+      alert(`User created locally in browser state.`);
+    }
+
     setNewUserForm({
       staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR',
       campScope: 'ALL', canManageUsers: false, canAddCamps: false, canDeleteCamps: true,
@@ -1392,7 +1415,6 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
-      {/* Hidden File Input for Excel Import */}
       <input
         type="file"
         ref={excelFileInputRef}
@@ -1423,7 +1445,6 @@ export default function App() {
             </div>
           </div>
 
-          {/* Universal Search Bar */}
           <div className="flex flex-wrap items-center gap-3">
             <div className="relative w-full sm:w-72">
               <div className="relative">
@@ -1592,7 +1613,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* Sub-Header Status Bar with Quick Template Generators */}
+      {/* Sub-Header Status Bar */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
@@ -2784,7 +2805,7 @@ export default function App() {
         </div>
       )}
 
-      {/* DYNAMIC ADD BUILDING WIZARD (CONFIGURABLE FLOORS & ROOMS) */}
+      {/* DYNAMIC ADD BUILDING WIZARD */}
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
@@ -2998,7 +3019,7 @@ export default function App() {
       {/* Itemized Project Invoice Modal */}
       {selectedInvoiceModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+          <div id="invoice-print-area" className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-3">
                 <DhowLogo className="h-6 w-auto" />
@@ -3006,7 +3027,7 @@ export default function App() {
                   INV-{selectedInvoiceModal.costCenter}-{billingPeriod.replace(' ', '-')}
                 </span>
               </div>
-              <button onClick={() => setSelectedInvoiceModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+              <button onClick={() => setSelectedInvoiceModal(null)} className="text-slate-400 hover:text-slate-700 no-print"><X className="w-5 h-5" /></button>
             </div>
 
             <div className="grid grid-cols-2 gap-4">
@@ -3082,17 +3103,17 @@ export default function App() {
               </table>
             </div>
 
-            <div className="flex items-center justify-between pt-2 border-t">
+            <div className="flex items-center justify-between pt-2 border-t no-print">
               <span className="text-[11px] text-slate-400">Dhow Camp Management Registry</span>
               <div className="flex items-center gap-2">
                 <button
-                    type="button"
-                    onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}`)}
-                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer no-print"
-                  >
-                    <Printer className="w-3.5 h-3.5" /> Print Invoice
-                  </button>
-                <button type="button" onClick={() => setSelectedInvoiceModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer">
+                  type="button"
+                  onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}`)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print Invoice
+                </button>
+                <button type="button" onClick={() => setSelectedInvoiceModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer">
                   Close
                 </button>
               </div>
@@ -3102,7 +3123,7 @@ export default function App() {
       )}
 
       {/* ======================================================= */}
-      {/* EMPLOYEE DOSSIER MODAL WITH TEMPLATE EXPORT ACTIONS     */}
+      {/* EMPLOYEE DOSSIER MODAL                                  */}
       {/* ======================================================= */}
       {viewingEmployeeDossier && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3441,9 +3462,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* CHECK-IN MODAL WITH EMPLOYEE PRODUCTIVE TYPE DROPDOWN    */}
-      {/* ======================================================= */}
+      {/* CHECK-IN MODAL */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
@@ -3471,7 +3490,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Employee Productive Type & Category */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Employee Productive Type</label>
@@ -3581,9 +3599,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* TEMPLATE 5 & 6: ACCOMMODATION MISCONDUCT REPORT MODAL    */}
-      {/* ======================================================= */}
+      {/* MISCONDUCT MODAL */}
       {showMisconductModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveMisconduct} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
@@ -3655,9 +3671,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ======================================================= */}
-      {/* TEMPLATE 7: ACCOMMODATION MAINTENANCE LOG MODAL         */}
-      {/* ======================================================= */}
+      {/* MAINTENANCE MODAL */}
       {showMaintenanceModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
           <form onSubmit={handleSaveMaintenance} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
