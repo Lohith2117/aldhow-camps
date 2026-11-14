@@ -1,11 +1,10 @@
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
-  Building2, Users, ShieldCheck, Eye, EyeOff, Lock, LogOut, Plus, Search,
-  Download, CheckCircle2, AlertCircle, Trash2, UserPlus, KeyRound, Bed,
-  Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane, Settings,
+  Building2, Users, ShieldCheck, Eye, EyeOff, LogOut, Plus, Search,
+  Download, CheckCircle2, AlertCircle, UserPlus, KeyRound, Bed,
+  Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane,
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
-  Archive, Tag, Phone, Clock, SlidersHorizontal, Layers, CheckSquare, Globe,
-  Upload, FileUp, Filter, Wrench, ShieldAlert, Calendar
+  Archive, Tag, Phone, Clock, Layers, Globe, FileUp, Wrench, ShieldAlert, FileCheck
 } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import dhowLogoImg from './assets/dhow-logo.png';
@@ -87,7 +86,7 @@ export default function App() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   // ==========================================
-  // STATE PERSISTENCE (14 TABLES / ENTITIES)
+  // STATE PERSISTENCE
   // ==========================================
   const [users, setUsers] = useState(() => JSON.parse(localStorage.getItem('dhow_users_v14')) || INITIAL_USERS);
   const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('dhow_session_v14')) || null);
@@ -123,6 +122,8 @@ export default function App() {
 
   // Modals & Drawers
   const [viewingEmployeeDossier, setViewingEmployeeDossier] = useState(null);
+  const [editingEmployeeModal, setEditingEmployeeModal] = useState(null);
+  const [showPreAddEmployeeModal, setShowPreAddEmployeeModal] = useState(false);
   const [relocatingOccupant, setRelocatingOccupant] = useState(null);
   const [showCheckInModal, setShowCheckInModal] = useState(false);
   const [manageOccupantModal, setManageOccupantModal] = useState(null);
@@ -135,6 +136,9 @@ export default function App() {
   const [showManageCostCentersModal, setShowManageCostCentersModal] = useState(false);
   const [editingCostCenterModal, setEditingCostCenterModal] = useState(null);
   const [decommissionLockoutModal, setDecommissionLockoutModal] = useState(null);
+
+  // Report & Form Preview Modal (Preview before Print or Download)
+  const [reportPreviewModal, setReportPreviewModal] = useState(null);
 
   // Floor Configurator sub-modal inside Edit Camp
   const [showAddFloorConfigModal, setShowAddFloorConfigModal] = useState(false);
@@ -150,7 +154,7 @@ export default function App() {
   const [excelImportStats, setExcelImportStats] = useState({ total: 0, valid: 0, errors: 0 });
   const excelFileInputRef = useRef(null);
 
-  // Misconduct Report Modal
+  // Misconduct & Maintenance Modals
   const [showMisconductModal, setShowMisconductModal] = useState(false);
   const [misconductForm, setMisconductForm] = useState({
     employeeId: '', employeeName: '', title: '', division: '', costCenter: '',
@@ -161,7 +165,6 @@ export default function App() {
     reportedBy: 'Camp Supervisor', remarks: 'Referred to HR Disciplinary Committee'
   });
 
-  // Maintenance Log Modal
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
     date: todayStr, month: 'November', issueDetails: '', reportedByEmpId: '',
@@ -186,20 +189,30 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Forms
+  // Pre-Add Employee Form (Before assigning to a camp bed)
+  const [preAddForm, setPreAddForm] = useState({
+    employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer',
+    productiveType: 'Direct Employee (DE)', roomGrade: 'Manual',
+    division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '',
+    mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ',
+    entryDate: todayStr
+  });
+
+  // Bed Check-In Form (With Auto-Fill, Manual/Non-Manual, Doc Ref #, & Material Issuance)
   const [checkInForm, setCheckInForm] = useState({
     campId: 'camp-1', floorNo: 1, flatCode: '1-01-01-NM', roomNo: '1-01-01-B',
     roomGrade: 'Non-Manual', productiveType: 'Direct Employee (DE)',
-    arrivalType: 'Local Residency Transfer',
+    arrivalType: 'Local Residency Transfer', docRef: '150-04',
     employeeId: '', employeeName: '', nationality: 'India',
     title: 'Site Engineer', division: 'IDS', costCenter: '1IDS038-KIPIC',
     passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '',
-    emergencyContactPhone: '+965 ', homeCountryAddress: '', entryDate: todayStr
+    emergencyContactPhone: '+965 ', homeCountryAddress: '', entryDate: todayStr,
+    materials: { mattress: true, pillow: true, bedsheet: true, blanket: true }
   });
 
   const [relocationForm, setRelocationForm] = useState({
     targetCampId: '', targetFloorNo: '', targetFlatCode: '', targetRoomNo: '',
-    transferDate: todayStr, reason: 'Project Site Reallocation'
+    transferDate: todayStr, docRef: 'REL-2026-01', reason: 'Project Site Reallocation'
   });
 
   const [leaveForm, setLeaveForm] = useState({
@@ -216,7 +229,6 @@ export default function App() {
   });
   const [newCostCenterForm, setNewCostCenterForm] = useState({ code: '', name: '', division: 'IDS' });
 
-  // Add Camp Wizard: Dynamic Configurable Floors & Rooms
   const [newCampForm, setNewCampForm] = useState({
     campNo: 'CAMP-04',
     campArea: 'Ahmadi Sector 4',
@@ -343,6 +355,7 @@ export default function App() {
     const activeStaff = occupants.filter(o => !o.employeeStatus.startsWith('RTD'));
     const onJobCount = activeStaff.filter(o => o.employeeStatus === 'On Job').length;
     const onLeaveCount = activeStaff.filter(o => o.employeeStatus === 'On Leave').length;
+    const unassignedCount = activeStaff.filter(o => o.employeeStatus === 'Unassigned').length;
     const freeBeds = Math.max(0, totalBeds - occupiedBeds);
     const occupancyPct = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
@@ -350,7 +363,7 @@ export default function App() {
       campsCount: activeCamps.length,
       totalFlats, totalRooms, totalBeds, occupiedBeds,
       freeBeds, occupancyPct, activeStaffCount: activeStaff.length,
-      onJobCount, onLeaveCount
+      onJobCount, onLeaveCount, unassignedCount
     };
   }, [activeCamps, occupants]);
 
@@ -360,8 +373,8 @@ export default function App() {
     return occupants.filter(occ =>
       occ.employeeId.toLowerCase().includes(q) ||
       occ.employeeName.toLowerCase().includes(q) ||
-      occ.civilId.toString().includes(q) ||
-      occ.passportNo.toLowerCase().includes(q) ||
+      (occ.civilId && occ.civilId.toString().includes(q)) ||
+      (occ.passportNo && occ.passportNo.toLowerCase().includes(q)) ||
       (occ.nationality && occ.nationality.toLowerCase().includes(q)) ||
       (occ.mobileNo && occ.mobileNo.includes(q)) ||
       (occ.productiveType && occ.productiveType.toLowerCase().includes(q))
@@ -375,11 +388,11 @@ export default function App() {
         occ.employeeName.toLowerCase().includes(q) ||
         occ.employeeId.toLowerCase().includes(q) ||
         (occ.nationality && occ.nationality.toLowerCase().includes(q)) ||
-        occ.civilId.toString().includes(q) ||
-        occ.passportNo.toLowerCase().includes(q) ||
+        (occ.civilId && occ.civilId.toString().includes(q)) ||
+        (occ.passportNo && occ.passportNo.toLowerCase().includes(q)) ||
         (occ.mobileNo && occ.mobileNo.toLowerCase().includes(q)) ||
-        occ.flatCode.toLowerCase().includes(q) ||
-        occ.roomNo.toLowerCase().includes(q);
+        (occ.flatCode && occ.flatCode.toLowerCase().includes(q)) ||
+        (occ.roomNo && occ.roomNo.toLowerCase().includes(q));
 
       const matchesStatus = statusFilter === 'ALL' || occ.employeeStatus === statusFilter;
       const matchesDivision = divisionFilter === 'ALL' || occ.division === divisionFilter;
@@ -390,7 +403,7 @@ export default function App() {
   }, [occupants, searchTerm, statusFilter, divisionFilter, productiveTypeFilter]);
 
   const projectInvoicingData = useMemo(() => {
-    const activeOccupants = occupants.filter(o => !o.employeeStatus.startsWith('RTD'));
+    const activeOccupants = occupants.filter(o => !o.employeeStatus.startsWith('RTD') && o.employeeStatus !== 'Unassigned');
     const costCenterMap = {};
 
     activeOccupants.forEach(occ => {
@@ -570,7 +583,6 @@ export default function App() {
     setEditingCampModal(null);
   };
 
-  // Inline Grade Switcher in Map
   const handleFlatGradeChange = (campId, floorNo, flatCode, newGrade) => {
     const newCapacity = newGrade === 'Non-Manual' ? 2 : 3;
     const targetCamp = camps.find(c => c.id === campId);
@@ -662,7 +674,7 @@ export default function App() {
   };
 
   // =========================================================
-  // EXCEL ROSTER IMPORT ENGINE (`Book1.xlsx`)
+  // EXCEL ROSTER IMPORT ENGINE
   // =========================================================
   const handleExcelFileUpload = (e) => {
     const file = e.target.files[0];
@@ -702,9 +714,9 @@ export default function App() {
           const mobileNo = getVal(['Mobile Number', 'Mobile', 'Phone', 'Tel', 'Contact']) || '+965 ';
           const title = getVal(['Job Title', 'Title', 'Designation', 'Position']) || 'Worker';
           const productiveType = getVal(['Employee Productive Type', 'Productive Type', 'Productivity Type', 'Productivity', 'Type', 'Emp Type']) || 'Direct Employee (DE)';
-          const campNo = getVal(['Camp No', 'Camp', 'Building', 'Camp Code']) || (activeCamp?.campNo || 'CAMP-01');
+          const campNo = getVal(['Camp No', 'Camp', 'Building', 'Camp Code']) || 'UNASSIGNED';
           const flatCode = getVal(['Flat Code', 'Flat', 'Flat No']) || '';
-          const roomNo = getVal(['Room No', 'Room', 'Room Number']) || '';
+          const roomNo = getVal(['Room No', 'Room', 'Room Number']) || 'PENDING';
           const roomGrade = getVal(['Room Grade', 'Grade', 'Category']) || 'Manual';
           const division = getVal(['Division', 'Dept', 'Department']) || 'IDS';
           const costCenter = getVal(['Project Cost Center', 'Cost Center', 'CostCenter', 'CC']) || '1IDS038-KIPIC';
@@ -715,28 +727,9 @@ export default function App() {
           const errors = [];
           if (!empId) errors.push('Missing Employee ID');
           if (!empName) errors.push('Missing Name');
-          if (!roomNo) errors.push('Missing Room Number');
 
           const isDuplicate = occupants.some(o => o.employeeId === empId && !o.employeeStatus.startsWith('RTD'));
-          if (isDuplicate) errors.push('Employee ID already active in camp');
-
-          const targetCamp = camps.find(c => c.campNo === campNo);
-          let targetRoom = null;
-          if (targetCamp) {
-            targetCamp.floors.forEach(fl => {
-              fl.flats.forEach(ft => {
-                ft.rooms.forEach(rm => {
-                  if (rm.roomNo === roomNo) targetRoom = rm;
-                });
-              });
-            });
-          }
-
-          if (roomNo && !targetRoom) {
-            errors.push(`Room ${roomNo} not found in ${campNo}`);
-          } else if (targetRoom && targetRoom.occupants.length >= targetRoom.capacity) {
-            errors.push(`Room ${roomNo} is full (${targetRoom.occupants.length}/${targetRoom.capacity})`);
-          }
+          if (isDuplicate) errors.push('Employee ID already exists');
 
           return {
             rowIdx: idx + 2,
@@ -788,10 +781,11 @@ export default function App() {
     let updatedCamps = [...camps];
 
     validRows.forEach((row) => {
+      const hasValidRoom = row.roomNo && row.roomNo !== 'PENDING' && row.campNo !== 'UNASSIGNED';
       const newOcc = {
         srNo: newOccupantsList.length + 1,
-        campNo: row.campNo,
-        campArea: camps.find(c => c.campNo === row.campNo)?.campArea || 'Camp Facility',
+        campNo: hasValidRoom ? row.campNo : 'UNASSIGNED',
+        campArea: camps.find(c => c.campNo === row.campNo)?.campArea || 'Pending Assignment',
         status: 'Permanent',
         division: row.division,
         costCenter: row.costCenter,
@@ -810,12 +804,12 @@ export default function App() {
         roomGrade: row.roomGrade,
         floorNo: Number(row.flatCode.split('-')[1] || 1),
         flatNo: Number(row.flatCode.split('-')[2] || 1),
-        flatCode: row.flatCode,
-        roomNo: row.roomNo,
-        employeeStatus: 'On Job',
+        flatCode: row.flatCode || 'PENDING',
+        roomNo: hasValidRoom ? row.roomNo : 'PENDING',
+        employeeStatus: hasValidRoom ? 'On Job' : 'Unassigned',
         leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
         rtdType: '', rtdDate: '',
-        afrEntryRef: 'EXCEL-IMPORT-BOOK1',
+        afrEntryRef: 'EXCEL-IMPORT',
         afrLogNo: `LOG-${row.employeeId}`,
         residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
         reallocationCostCenter: row.costCenter.split('-')[0],
@@ -825,31 +819,33 @@ export default function App() {
 
       newOccupantsList.push(newOcc);
 
-      updatedCamps = updatedCamps.map(c => {
-        if (c.campNo !== row.campNo) return c;
-        return {
-          ...c,
-          floors: c.floors.map(fl => ({
-            ...fl,
-            flats: fl.flats.map(ft => ({
-              ...ft,
-              rooms: ft.rooms.map(rm => {
-                if (rm.roomNo === row.roomNo && !rm.occupants.includes(row.employeeId)) {
-                  return { ...rm, occupants: [...rm.occupants, row.employeeId] };
-                }
-                return rm;
-              })
+      if (hasValidRoom) {
+        updatedCamps = updatedCamps.map(c => {
+          if (c.campNo !== row.campNo) return c;
+          return {
+            ...c,
+            floors: c.floors.map(fl => ({
+              ...fl,
+              flats: fl.flats.map(ft => ({
+                ...ft,
+                rooms: ft.rooms.map(rm => {
+                  if (rm.roomNo === row.roomNo && rm.occupants.length < rm.capacity && !rm.occupants.includes(row.employeeId)) {
+                    return { ...rm, occupants: [...rm.occupants, row.employeeId] };
+                  }
+                  return rm;
+                })
+              }))
             }))
-          }))
-        };
-      });
+          };
+        });
+      }
     });
 
     setOccupants(newOccupantsList);
     setCamps(updatedCamps);
-    logActivity('EXCEL_IMPORT', `Bulk Imported ${validRows.length} Occupants`, `Successfully imported roster from ${excelImportFileName}`);
+    logActivity('EXCEL_IMPORT', `Bulk Imported ${validRows.length} Employees`, `Imported from ${excelImportFileName}`);
     setShowExcelImportModal(false);
-    alert(`Success: ${validRows.length} occupants imported and assigned to camp rooms.`);
+    alert(`Success: ${validRows.length} employees imported.`);
   };
 
   // Cost Center Actions
@@ -873,27 +869,6 @@ export default function App() {
     setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
   };
 
-  const handleSaveEditCostCenter = (e) => {
-    e.preventDefault();
-    if (!editingCostCenterModal) return;
-
-    const oldCC = costCenters.find(c => c.id === editingCostCenterModal.id);
-    const oldCode = oldCC?.code;
-    const newCode = editingCostCenterModal.code.trim().toUpperCase();
-    const newDivision = editingCostCenterModal.division;
-
-    if (oldCode && oldCode !== newCode) {
-      setOccupants(prev => prev.map(occ => occ.costCenter === oldCode ? { ...occ, costCenter: newCode, division: newDivision } : occ));
-    }
-
-    setCostCenters(prev => prev.map(c => c.id === editingCostCenterModal.id ? {
-      ...editingCostCenterModal, code: newCode, name: editingCostCenterModal.name.trim()
-    } : c));
-
-    logActivity('COST_CENTER', `Edited Cost Center ${newCode}`, `Updated project: ${editingCostCenterModal.name} (${newDivision})`);
-    setEditingCostCenterModal(null);
-  };
-
   const handleToggleCostCenterStatus = (id) => {
     setCostCenters(prev => prev.map(c => {
       if (c.id === id) {
@@ -905,17 +880,140 @@ export default function App() {
     }));
   };
 
-  // Occupant Actions
+  // =========================================================
+  // PRE-REGISTER EMPLOYEE, AUTO-FILL BY ID, & EDIT EMPLOYEE
+  // =========================================================
+  const handlePreAddEmployeeSubmit = (e) => {
+    e.preventDefault();
+    const empId = preAddForm.employeeId.trim();
+    if (occupants.some(o => o.employeeId === empId)) {
+      alert(`Employee ID #${empId} already exists in the system.`);
+      return;
+    }
+
+    const newOcc = {
+      srNo: occupants.length + 1,
+      campNo: 'UNASSIGNED',
+      campArea: 'Pending Bed Assignment',
+      status: 'Permanent',
+      division: preAddForm.division,
+      costCenter: preAddForm.costCenter,
+      employeeId: empId,
+      employeeName: preAddForm.employeeName,
+      nationality: preAddForm.nationality,
+      title: preAddForm.title,
+      productiveType: preAddForm.productiveType,
+      roomGrade: preAddForm.roomGrade,
+      entryDate: preAddForm.entryDate,
+      passportNo: preAddForm.passportNo,
+      civilId: preAddForm.civilId,
+      mobileNo: preAddForm.mobileNo,
+      emergencyContactName: preAddForm.emergencyContactName,
+      emergencyContactPhone: preAddForm.emergencyContactPhone,
+      homeCountryAddress: '',
+      floorNo: 0,
+      flatNo: 0,
+      flatCode: 'PENDING',
+      roomNo: 'PENDING',
+      employeeStatus: 'Unassigned',
+      leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
+      rtdType: '', rtdDate: '',
+      afrEntryRef: 'PRE-REG',
+      afrLogNo: `LOG-${empId}`,
+      residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
+      reallocationCostCenter: preAddForm.costCenter.split('-')[0],
+      exitDate: '', afrExitRef: '', remarks: 'Pre-registered in Occupants Directory',
+      stayHistory: []
+    };
+
+    setOccupants(prev => [newOcc, ...prev]);
+    setShowPreAddEmployeeModal(false);
+    logActivity('OCCUPANT_REG', `Pre-Registered Employee #${empId}`, `${newOcc.employeeName} (${newOcc.productiveType} • ${newOcc.roomGrade}) added to directory`);
+    setPreAddForm({
+      employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer',
+      productiveType: 'Direct Employee (DE)', roomGrade: 'Manual',
+      division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '',
+      mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ',
+      entryDate: todayStr
+    });
+  };
+
+  // Auto-Fill when typing Employee ID inside Bed Assignment Modal
+  const handleCheckInEmployeeIdChange = (idVal) => {
+    const cleanId = idVal.trim();
+    const existing = occupants.find(o => o.employeeId.toLowerCase() === cleanId.toLowerCase());
+    if (existing) {
+      setCheckInForm(prev => ({
+        ...prev,
+        employeeId: existing.employeeId,
+        employeeName: existing.employeeName || prev.employeeName,
+        nationality: existing.nationality || prev.nationality,
+        title: existing.title || prev.title,
+        productiveType: existing.productiveType || prev.productiveType,
+        roomGrade: existing.roomGrade || prev.roomGrade,
+        division: existing.division || prev.division,
+        costCenter: existing.costCenter || prev.costCenter,
+        passportNo: existing.passportNo || prev.passportNo,
+        civilId: existing.civilId || prev.civilId,
+        mobileNo: existing.mobileNo || prev.mobileNo,
+        emergencyContactName: existing.emergencyContactName || prev.emergencyContactName,
+        emergencyContactPhone: existing.emergencyContactPhone || prev.emergencyContactPhone
+      }));
+    } else {
+      setCheckInForm(prev => ({ ...prev, employeeId: idVal }));
+    }
+  };
+
+  // Save Edited Employee Details (Point 4)
+  const handleSaveEmployeeEdit = (e) => {
+    e.preventDefault();
+    if (!editingEmployeeModal) return;
+
+    setOccupants(prev => prev.map(o => o.employeeId === editingEmployeeModal.originalId ? {
+      ...editingEmployeeModal,
+      employeeId: editingEmployeeModal.employeeId.trim()
+    } : o));
+
+    if (editingEmployeeModal.originalId !== editingEmployeeModal.employeeId.trim()) {
+      const newId = editingEmployeeModal.employeeId.trim();
+      setCamps(prev => prev.map(c => ({
+        ...c,
+        floors: c.floors.map(fl => ({
+          ...fl,
+          flats: fl.flats.map(ft => ({
+            ...ft,
+            rooms: ft.rooms.map(rm => ({
+              ...rm,
+              occupants: rm.occupants.map(id => id === editingEmployeeModal.originalId ? newId : id)
+            }))
+          }))
+        }))
+      })));
+    }
+
+    if (viewingEmployeeDossier && viewingEmployeeDossier.employeeId === editingEmployeeModal.originalId) {
+      setViewingEmployeeDossier({ ...editingEmployeeModal, employeeId: editingEmployeeModal.employeeId.trim() });
+    }
+
+    logActivity('OCCUPANT_EDIT', `Edited Details for #${editingEmployeeModal.employeeId}`, `Updated profile for ${editingEmployeeModal.employeeName}`);
+    setEditingEmployeeModal(null);
+  };
+
+  // Occupant Bed Check-In Submit (Auto-triggers Material Issuance Preview Modal)
   const handleCheckInSubmit = (e) => {
     e.preventDefault();
     const empId = checkInForm.employeeId.trim();
-    if (occupants.some(o => o.employeeId === empId && !o.employeeStatus.startsWith('RTD'))) {
-      alert(`Employee #${empId} is already assigned to a room.`);
+    const existingActiveInRoom = occupants.find(o => o.employeeId === empId && o.employeeStatus !== 'Unassigned' && !o.employeeStatus.startsWith('RTD'));
+    if (existingActiveInRoom) {
+      alert(`Employee #${empId} is already assigned to ${existingActiveInRoom.campNo} Room ${existingActiveInRoom.roomNo}. Use Relocate instead.`);
       return;
     }
+
     const targetCamp = camps.find(c => c.id === checkInForm.campId) || activeCamp;
-    const newOcc = {
-      srNo: occupants.length + 1,
+    const existingRecord = occupants.find(o => o.employeeId === empId);
+
+    const assignedOcc = {
+      srNo: existingRecord ? existingRecord.srNo : occupants.length + 1,
       campNo: targetCamp.campNo,
       campArea: targetCamp.campArea,
       status: 'Permanent',
@@ -926,6 +1024,7 @@ export default function App() {
       nationality: checkInForm.nationality,
       title: checkInForm.title,
       productiveType: checkInForm.productiveType || 'Direct Employee (DE)',
+      roomGrade: checkInForm.roomGrade,
       entryDate: checkInForm.entryDate,
       passportNo: checkInForm.passportNo,
       civilId: checkInForm.civilId,
@@ -933,7 +1032,6 @@ export default function App() {
       emergencyContactName: checkInForm.emergencyContactName,
       emergencyContactPhone: checkInForm.emergencyContactPhone,
       homeCountryAddress: checkInForm.homeCountryAddress,
-      roomGrade: checkInForm.roomGrade,
       floorNo: Number(checkInForm.floorNo),
       flatNo: Number(checkInForm.flatCode.split('-')[2] || 1),
       flatCode: checkInForm.flatCode,
@@ -941,15 +1039,23 @@ export default function App() {
       employeeStatus: 'On Job',
       leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
       rtdType: '', rtdDate: '',
-      afrEntryRef: 'AFR-MANUAL',
-      afrLogNo: `LOG-${empId}`,
+      afrEntryRef: checkInForm.docRef || '150-04',
+      afrLogNo: checkInForm.docRef || `LOG-${empId}`,
       residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
       reallocationCostCenter: checkInForm.costCenter.split('-')[0],
-      exitDate: '', afrExitRef: '', remarks: 'Checked in via Dhow Portal',
-      stayHistory: []
+      exitDate: '', afrExitRef: '',
+      remarks: `Assigned Bed (Ref: ${checkInForm.docRef || '150-04'})`,
+      materialsIssued: checkInForm.materials,
+      arrivalType: checkInForm.arrivalType,
+      stayHistory: existingRecord?.stayHistory || []
     };
 
-    setOccupants(prev => [...prev, newOcc]);
+    if (existingRecord) {
+      setOccupants(prev => prev.map(o => o.employeeId === empId ? assignedOcc : o));
+    } else {
+      setOccupants(prev => [assignedOcc, ...prev]);
+    }
+
     setCamps(prev => prev.map(c => c.id !== targetCamp.id ? c : {
       ...c,
       floors: c.floors.map(fl => ({
@@ -962,11 +1068,16 @@ export default function App() {
     }));
 
     setShowCheckInModal(false);
-    logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${newOcc.employeeName} (${newOcc.nationality} • ${newOcc.productiveType}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo}`, targetCamp.campNo);
+    logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${assignedOcc.employeeName} (${assignedOcc.productiveType} • ${assignedOcc.roomGrade}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo} [Ref: ${assignedOcc.afrEntryRef}]`, targetCamp.campNo);
 
-    if (confirm(`Check-In complete for #${empId}! Would you like to export the Employee New Arrival - Material Issuance Voucher (Doc. Ref: 150-04) now?`)) {
-      exportMaterialIssuanceForm(newOcc, checkInForm.arrivalType);
-    }
+    // Automatically open the Material Issuance Form (Doc. Ref: 150-04) Preview Modal!
+    setReportPreviewModal({
+      type: 'issuance',
+      occupant: assignedOcc,
+      arrivalType: checkInForm.arrivalType,
+      docRef: checkInForm.docRef || '150-04',
+      materials: checkInForm.materials
+    });
   };
 
   const handleLeaveSubmit = (e) => {
@@ -1123,6 +1234,7 @@ export default function App() {
       targetFlatCode: defaultFlat.flatCode,
       targetRoomNo: defaultRoom.roomNo,
       transferDate: todayStr,
+      docRef: `REL-${occ.employeeId}-${todayStr.slice(5)}`,
       reason: 'Project Site Reallocation'
     });
   };
@@ -1150,7 +1262,8 @@ export default function App() {
       costCenter: relocatingOccupant.costCenter,
       startDate: relocatingOccupant.entryDate,
       endDate: relocationForm.transferDate,
-      reason: relocationForm.reason || 'Inter-Camp Bed Transfer'
+      docRef: relocationForm.docRef || 'N/A',
+      reason: `${relocationForm.reason || 'Inter-Camp Transfer'} (Doc Ref: ${relocationForm.docRef || 'N/A'})`
     };
 
     const updatedStayHistory = [...(relocatingOccupant.stayHistory || []), previousStayRecord];
@@ -1186,6 +1299,7 @@ export default function App() {
       roomNo: targetRoom.roomNo,
       roomGrade: targetFlat.roomGrade,
       entryDate: relocationForm.transferDate,
+      afrEntryRef: relocationForm.docRef || relocatingOccupant.afrEntryRef,
       stayHistory: updatedStayHistory
     };
 
@@ -1197,23 +1311,27 @@ export default function App() {
       setViewingEmployeeDossier(updatedOccupant);
     }
 
-    logActivity('RELOCATION', `Relocated #${relocatingOccupant.employeeId} to Room ${targetRoom.roomNo}`, `${relocatingOccupant.employeeName} moved to ${targetCamp.campNo} Room ${targetRoom.roomNo}`, targetCamp.campNo);
+    logActivity('RELOCATION', `Relocated #${relocatingOccupant.employeeId} to Room ${targetRoom.roomNo}`, `${relocatingOccupant.employeeName} moved to ${targetCamp.campNo} Room ${targetRoom.roomNo} [Doc Ref: ${relocationForm.docRef}]`, targetCamp.campNo);
 
-    exportOccupantsRelocationForm({
+    const relocRecord = {
       employeeId: relocatingOccupant.employeeId,
       employeeName: relocatingOccupant.employeeName,
       title: relocatingOccupant.title,
-      fromRoom: `${relocatingOccupant.campNo} - ${relocatingOccupant.roomNo}`,
-      toRoom: `${targetCamp.campNo} - ${targetRoom.roomNo}`,
+      fromRoom: `${relocatingOccupant.campNo} (${relocatingOccupant.roomNo})`,
+      toRoom: `${targetCamp.campNo} (${targetRoom.roomNo})`,
       relocationDate: relocationForm.transferDate,
+      docRef: relocationForm.docRef,
       reason: relocationForm.reason
-    });
+    };
 
     setRelocatingOccupant(null);
-    alert(`Successfully relocated #${relocatingOccupant.employeeId} to ${targetCamp.campNo} Room ${targetRoom.roomNo}! Official Relocation Form (.xlsx) has been downloaded.`);
+    setReportPreviewModal({
+      type: 'relocation',
+      record: relocRecord
+    });
   };
 
-  // Misconduct Report Action
+  // Misconduct & Maintenance Actions
   const handleSaveMisconduct = (e) => {
     e.preventDefault();
     const newEntry = {
@@ -1226,10 +1344,9 @@ export default function App() {
     logActivity('DISCIPLINARY', `Filed Misconduct for #${newEntry.employeeId}`, `${newEntry.employeeName}: ${newEntry.typeOfViolation}`);
     exportAccommodationMisconductReport(newEntry);
     setShowMisconductModal(false);
-    alert(`Misconduct Log recorded and Accommodation Misconduct Report (.xlsx) generated.`);
+    alert(`Misconduct recorded and Report (.xlsx) generated.`);
   };
 
-  // Maintenance Log Action
   const handleSaveMaintenance = (e) => {
     e.preventDefault();
     const newEntry = {
@@ -1243,7 +1360,7 @@ export default function App() {
     alert(`Maintenance issue logged in register.`);
   };
 
-  // Synchronize User Creation with Neon DB API
+  // User Creation with Neon DB Sync
   const handleCreateUser = async (e) => {
     e.preventDefault();
     const payload = {
@@ -1270,14 +1387,11 @@ export default function App() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
       });
-      
       if (!res.ok) throw new Error('Failed to create user in database');
       const savedUser = await res.json();
-      
       setUsers(prev => [savedUser, ...prev]);
       setShowAddUserModal(false);
-      logActivity('USER_MGMT', `Created User Account ${savedUser.staffId}`, `Created ${savedUser.name} (${savedUser.role}) in cloud database`);
-      alert(`User ${savedUser.name} successfully created and committed to Neon database!`);
+      logActivity('USER_MGMT', `Created User Account ${savedUser.staffId}`, `Created ${savedUser.name} (${savedUser.role}) in database`);
     } catch (err) {
       const fallbackUser = {
         id: `u-${Date.now()}`,
@@ -1287,8 +1401,7 @@ export default function App() {
       };
       setUsers(prev => [fallbackUser, ...prev]);
       setShowAddUserModal(false);
-      logActivity('USER_MGMT', `Created User ${fallbackUser.staffId}`, `Created ${fallbackUser.name} (Local fallback)`);
-      alert(`User created locally in browser state.`);
+      logActivity('USER_MGMT', `Created User ${fallbackUser.staffId}`, `Created ${fallbackUser.name}`);
     }
 
     setNewUserForm({
@@ -1445,13 +1558,13 @@ export default function App() {
             </div>
           </div>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <div className="relative w-full sm:w-72">
+          <div className="flex flex-wrap items-center gap-2.5">
+            <div className="relative w-full sm:w-64">
               <div className="relative">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3 top-2.5" />
                 <input
                   type="text"
-                  placeholder="Search ID / Name / Type / Mobile..."
+                  placeholder="Search ID / Name / Mobile..."
                   value={universalSearchQuery}
                   onFocus={() => setIsSearchDropdownOpen(true)}
                   onChange={(e) => {
@@ -1470,7 +1583,7 @@ export default function App() {
               {isSearchDropdownOpen && universalSearchResults.length > 0 && (
                 <div className="absolute left-0 right-0 top-full mt-1.5 bg-slate-900 border border-slate-700 rounded-xl shadow-2xl overflow-hidden z-50">
                   <div className="p-2 text-[10px] font-bold uppercase tracking-wider text-slate-400 border-b border-slate-800 bg-slate-950">
-                    Matching Occupants ({universalSearchResults.length})
+                    Matching Employees ({universalSearchResults.length})
                   </div>
                   <div className="divide-y divide-slate-800 max-h-72 overflow-y-auto">
                     {universalSearchResults.map(occ => (
@@ -1490,11 +1603,11 @@ export default function App() {
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-medium">{occ.productiveType || 'DE'}</span>
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • Tel: {occ.mobileNo || 'N/A'}
+                            {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • {occ.employeeStatus}
                           </div>
                         </div>
                         <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-cyan-950 text-cyan-300 border border-cyan-800 shrink-0">
-                          View Dossier →
+                          Open →
                         </span>
                       </div>
                     ))}
@@ -1503,13 +1616,21 @@ export default function App() {
               )}
             </div>
 
+            <button
+              onClick={() => setShowPreAddEmployeeModal(true)}
+              className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>+ Add Employee</span>
+            </button>
+
             {canAddCamps && (
               <button
                 onClick={() => setShowAddCampModal(true)}
                 className="bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold px-3.5 py-2 rounded-xl shadow-md flex items-center gap-1.5 cursor-pointer"
               >
                 <Plus className="w-4 h-4" />
-                <span>Add Building</span>
+                <span>+ Add Building</span>
               </button>
             )}
             <button
@@ -1522,7 +1643,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* 7 Navigation Tabs */}
+        {/* 7 SIMPLIFIED NAVIGATION TABS */}
         <div className="max-w-7xl mx-auto px-4 sm:px-6 flex items-center gap-2 overflow-x-auto border-t border-slate-800/80 pt-2">
           <button
             onClick={() => setActiveTab('map')}
@@ -1531,9 +1652,9 @@ export default function App() {
             }`}
           >
             <Layers className="w-4 h-4 text-cyan-400" />
-            <span>Interactive Camp Map</span>
+            <span>Camp Master</span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-cyan-950 text-cyan-300 border border-cyan-800">
-              {globalStats.freeBeds} Free Spots
+              {globalStats.freeBeds} Free
             </span>
           </button>
 
@@ -1543,10 +1664,10 @@ export default function App() {
               activeTab === 'occupants' ? 'bg-slate-800/90 text-white border-cyan-400' : 'text-slate-400 hover:text-slate-200 border-transparent'
             }`}
           >
-            <FileSpreadsheet className="w-4 h-4 text-slate-400" />
-            <span>Book1 Occupants</span>
+            <Users className="w-4 h-4 text-slate-400" />
+            <span>Occupants</span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300">
-              {globalStats.activeStaffCount} Active
+              {occupants.length}
             </span>
           </button>
 
@@ -1557,7 +1678,7 @@ export default function App() {
             }`}
           >
             <Receipt className="w-4 h-4 text-emerald-400" />
-            <span>Invoicing & "Others" Costs</span>
+            <span>Invoicing</span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-emerald-950 text-emerald-300 border border-emerald-800">
               {projectInvoicingData.grandTotalKWD.toFixed(0)} KWD
             </span>
@@ -1570,20 +1691,7 @@ export default function App() {
             }`}
           >
             <BarChart3 className="w-4 h-4 text-slate-400" />
-            <span>Reports & 7 Templates</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('activity_logs')}
-            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 whitespace-nowrap transition-all ${
-              activeTab === 'activity_logs' ? 'bg-slate-800/90 text-white border-cyan-400' : 'text-slate-400 hover:text-slate-200 border-transparent'
-            }`}
-          >
-            <History className="w-4 h-4 text-cyan-400" />
-            <span>Activity Time Log</span>
-            <span className="text-[10px] px-2 py-0.5 rounded-md bg-slate-800 text-slate-300">
-              {activityLogs.length}
-            </span>
+            <span>Reports</span>
           </button>
 
           <button
@@ -1593,10 +1701,20 @@ export default function App() {
             }`}
           >
             <CheckCircle2 className="w-4 h-4 text-amber-400" />
-            <span>Approvals & Registries</span>
+            <span>Approvals & Logs</span>
             <span className="text-[10px] px-2 py-0.5 rounded-md bg-amber-950 text-amber-300 border border-amber-800">
-              {transferRequests.filter(r => r.status === 'PENDING').length} Pending
+              {transferRequests.filter(r => r.status === 'PENDING').length}
             </span>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('activity_logs')}
+            className={`px-4 py-2.5 text-xs font-bold rounded-t-xl flex items-center gap-2 border-b-2 whitespace-nowrap transition-all ${
+              activeTab === 'activity_logs' ? 'bg-slate-800/90 text-white border-cyan-400' : 'text-slate-400 hover:text-slate-200 border-transparent'
+            }`}
+          >
+            <History className="w-4 h-4 text-cyan-400" />
+            <span>Activity Log</span>
           </button>
 
           {isSuperAdmin && (
@@ -1607,13 +1725,13 @@ export default function App() {
               }`}
             >
               <ShieldCheck className="w-4 h-4 text-emerald-400" />
-              <span>Admin & User Access (RBAC)</span>
+              <span>Users</span>
             </button>
           )}
         </div>
       </header>
 
-      {/* Sub-Header Status Bar */}
+      {/* Sub-Header Status Bar with Preview Triggers */}
       <div className="bg-white border-b border-slate-200">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 py-2 flex flex-wrap items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-2">
@@ -1622,27 +1740,29 @@ export default function App() {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
               {currentUser.role}
             </span>
-            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-slate-100 text-slate-700 border border-slate-200">
-              Camp Scope: {currentUser.campScope}
-            </span>
+            {globalStats.unassignedCount > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
+                {globalStats.unassignedCount} Unassigned Staff Ready for Bed
+              </span>
+            )}
           </div>
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs)}
+              onClick={() => setReportPreviewModal({ type: 'summary' })}
               className="text-slate-700 hover:text-cyan-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
-              title="Download Template 1"
+              title="Preview & Export Camp Summary Status"
             >
-              <Download className="w-3.5 h-3.5 text-cyan-600" />
-              <span>Summary Status (T1)</span>
+              <Eye className="w-3.5 h-3.5 text-cyan-600" />
+              <span>Preview Summary Status (T1)</span>
             </button>
             <button
-              onClick={() => exportDailyOccupancyReport(activeCamp, occupants)}
+              onClick={() => setReportPreviewModal({ type: 'daily', camp: activeCamp })}
               className="text-slate-700 hover:text-emerald-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
-              title="Download Template 2"
+              title="Preview & Export Daily Occupancy Report"
             >
-              <Download className="w-3.5 h-3.5 text-emerald-600" />
-              <span>Daily Report (T2)</span>
+              <Eye className="w-3.5 h-3.5 text-emerald-600" />
+              <span>Preview Daily Report (T2)</span>
             </button>
             <button
               onClick={() => setShowManageCostCentersModal(true)}
@@ -1726,7 +1846,7 @@ export default function App() {
           </div>
         </div>
 
-        {/* TAB 1: INTERACTIVE CAMP MAP */}
+        {/* TAB 1: CAMP MASTER */}
         {activeTab === 'map' && activeCamp && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 rounded-2xl p-5 shadow-xs space-y-4">
@@ -1794,14 +1914,6 @@ export default function App() {
                   )}
                 </div>
               </div>
-
-              <div className="flex items-center gap-4 pt-1">
-                <div className="inline-flex items-center gap-4 px-3.5 py-1.5 rounded-xl bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700">
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-cyan-600"></span> On Job</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-amber-500"></span> On Leave</span>
-                  <span className="flex items-center gap-1.5"><span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span> Free Bed</span>
-                </div>
-              </div>
             </div>
 
             {/* Floor Cards */}
@@ -1839,7 +1951,7 @@ export default function App() {
                           Floor {floor.floorNo}
                         </span>
                         <span className="text-xs font-semibold px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200">
-                          {floor.flats.length} Flats ({nmCount} Non-Manual • {mCount} Manual)
+                          {floor.flats.length} Flats ({nmCount} NM • {mCount} M)
                         </span>
                       </div>
                       <span className="text-xs font-bold text-emerald-600">{flFree} Free</span>
@@ -1879,15 +1991,14 @@ export default function App() {
                           </div>
                         </div>
 
-                        {/* Flat Grade Dropdown Selector */}
                         <div className="flex items-center gap-2">
                           <select
                             value={flat.roomGrade}
                             onChange={(e) => handleFlatGradeChange(activeCamp.id, activeFloor.floorNo, flat.flatCode, e.target.value)}
-                            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer focus:outline-none focus:ring-2 focus:ring-cyan-500 transition-all ${
+                            className={`text-[11px] font-bold px-2.5 py-1 rounded-lg border cursor-pointer focus:outline-none ${
                               flat.roomGrade === 'Non-Manual'
-                                ? 'bg-cyan-950 text-cyan-300 border-cyan-700 hover:bg-cyan-900'
-                                : 'bg-amber-950 text-amber-300 border-amber-700 hover:bg-amber-900'
+                                ? 'bg-cyan-950 text-cyan-300 border-cyan-700'
+                                : 'bg-amber-950 text-amber-300 border-amber-700'
                             }`}
                           >
                             <option value="Non-Manual">Non-Manual (2/rm)</option>
@@ -1936,9 +2047,6 @@ export default function App() {
                                               #{occ.employeeId}
                                             </span>
                                             <span className="text-xs font-bold text-slate-900 truncate">{occ.employeeName}</span>
-                                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-cyan-100 text-cyan-800 font-bold border border-cyan-200">
-                                              {occ.productiveType || 'DE'}
-                                            </span>
                                           </div>
                                           <span className={`text-[10px] font-bold px-2 py-0.5 rounded shrink-0 ${
                                             isOnLeave ? 'bg-amber-200 text-amber-900' : 'bg-cyan-50 text-cyan-700 border border-cyan-200'
@@ -1949,14 +2057,20 @@ export default function App() {
 
                                         <div className="flex items-center justify-between mt-1.5 text-[11px]">
                                           <span className="text-slate-500 truncate">
-                                            {occ.title} • <strong className="text-slate-700 font-semibold">{occ.nationality}</strong> • {occ.division} ({occ.costCenter})
+                                            {occ.roomGrade} • <strong className="text-slate-700">{occ.nationality}</strong> • {occ.division}
                                           </span>
                                           <div className="flex items-center gap-2 shrink-0 ml-2">
+                                            <button
+                                              onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
+                                              className="text-emerald-700 hover:underline font-bold cursor-pointer"
+                                            >
+                                              Edit
+                                            </button>
                                             <button
                                               onClick={() => setViewingEmployeeDossier(occ)}
                                               className="text-cyan-600 hover:text-cyan-800 font-semibold cursor-pointer"
                                             >
-                                              History →
+                                              Dossier
                                             </button>
                                             <button
                                               onClick={() => setManageOccupantModal(occ)}
@@ -1980,7 +2094,10 @@ export default function App() {
                                           floorNo: activeFloor.floorNo,
                                           flatCode: flat.flatCode,
                                           roomNo: room.roomNo,
-                                          roomGrade: flat.roomGrade
+                                          roomGrade: flat.roomGrade,
+                                          employeeId: '',
+                                          employeeName: '',
+                                          docRef: '150-04'
                                         }));
                                         setShowCheckInModal(true);
                                       }}
@@ -2004,22 +2121,22 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: Book1 31-Column Occupant List */}
+        {/* TAB 2: OCCUPANTS DIRECTORY (With Pre-Add Employee, Edit, & Direct Material Issuance) */}
         {activeTab === 'occupants' && (
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
-              <div className="relative w-full md:w-80">
+              <div className="relative w-full md:w-72">
                 <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-3" />
                 <input
                   type="text"
-                  placeholder="Search by ID, Name, Nationality, Room..."
+                  placeholder="Search ID, Name, Nationality, Room..."
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-300 rounded-xl py-2 pl-10 pr-4 text-xs text-slate-900 focus:ring-2 focus:ring-cyan-600 focus:outline-none"
                 />
               </div>
 
-              <div className="flex flex-wrap items-center gap-2.5 w-full md:w-auto">
+              <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
                 <select
                   value={productiveTypeFilter}
                   onChange={(e) => setProductiveTypeFilter(e.target.value)}
@@ -2038,11 +2155,11 @@ export default function App() {
                   className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2"
                 >
                   <option value="ALL">All Statuses</option>
+                  <option value="Unassigned">Unassigned (Pending Bed)</option>
                   <option value="On Job">On Job</option>
                   <option value="On Leave">On Leave</option>
                   <option value="RTD - Resigned">RTD - Resigned</option>
                   <option value="RTD - Terminated">RTD - Terminated</option>
-                  <option value="RTD - Dismissed">RTD - Dismissed</option>
                 </select>
 
                 <select
@@ -2055,19 +2172,27 @@ export default function App() {
                 </select>
 
                 <button
+                  onClick={() => setShowPreAddEmployeeModal(true)}
+                  className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>+ Add Employee</span>
+                </button>
+
+                <button
                   onClick={() => excelFileInputRef.current?.click()}
                   className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
                 >
                   <FileUp className="w-4 h-4" />
-                  <span>Import Excel Roster</span>
+                  <span>Import Excel</span>
                 </button>
               </div>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
-                <span>Showing {filteredOccupants.length} of {occupants.length} Records</span>
-                <span className="text-cyan-700 font-mono">Book1.xlsx Normalized Table</span>
+                <span>Showing {filteredOccupants.length} of {occupants.length} Employees</span>
+                <span className="text-cyan-700 font-mono">Master Occupants Directory</span>
               </div>
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs whitespace-nowrap">
@@ -2076,16 +2201,13 @@ export default function App() {
                       <th className="p-3">ID</th>
                       <th className="p-3">Employee Name</th>
                       <th className="p-3">Productive Type</th>
-                      <th className="p-3">Grade</th>
+                      <th className="p-3">Manual / Non-Manual</th>
                       <th className="p-3">Nationality</th>
                       <th className="p-3">Mobile No</th>
-                      <th className="p-3">Division</th>
-                      <th className="p-3">Cost Center</th>
+                      <th className="p-3">Division / CC</th>
                       <th className="p-3">Camp & Room</th>
-                      <th className="p-3">Emergency Contact</th>
                       <th className="p-3">Status</th>
-                      <th className="p-3">Stay Tenure</th>
-                      <th className="p-3">Actions</th>
+                      <th className="p-3 text-right">Quick Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200">
@@ -2107,37 +2229,60 @@ export default function App() {
                           </span>
                         </td>
                         <td className="p-3 font-bold text-[10px]">
-                          <span className={occ.roomGrade === 'Non-Manual' ? 'text-cyan-700 font-bold' : 'text-amber-700 font-bold'}>
+                          <span className={`px-2 py-0.5 rounded ${occ.roomGrade === 'Non-Manual' ? 'bg-cyan-50 text-cyan-700' : 'bg-amber-50 text-amber-800'}`}>
                             {occ.roomGrade}
                           </span>
                         </td>
-                        <td className="p-3 font-semibold text-slate-700">
-                          <span className="px-2 py-0.5 rounded bg-slate-100 border border-slate-200 text-[11px]">
-                            {occ.nationality}
-                          </span>
-                        </td>
+                        <td className="p-3">{occ.nationality}</td>
                         <td className="p-3 font-mono text-cyan-700 font-semibold">{occ.mobileNo || 'N/A'}</td>
-                        <td className="p-3">{occ.division}</td>
-                        <td className="p-3 font-mono text-slate-600">{occ.costCenter}</td>
-                        <td className="p-3 font-mono">{occ.campNo} ({occ.roomNo})</td>
-                        <td className="p-3 text-slate-600">{occ.emergencyContactName} ({occ.emergencyContactPhone})</td>
+                        <td className="p-3 font-mono text-slate-600">{occ.division} ({occ.costCenter})</td>
+                        <td className="p-3 font-mono font-bold">
+                          {occ.employeeStatus === 'Unassigned' ? (
+                            <span className="text-blue-600">Unassigned</span>
+                          ) : (
+                            `${occ.campNo} (${occ.roomNo})`
+                          )}
+                        </td>
                         <td className="p-3">
                           <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
                             occ.employeeStatus === 'On Job' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' :
-                            occ.employeeStatus === 'On Leave' ? 'bg-amber-100 text-amber-800' : 'bg-rose-50 text-rose-700 border border-rose-200'
+                            occ.employeeStatus === 'Unassigned' ? 'bg-blue-100 text-blue-800' :
+                            occ.employeeStatus === 'On Leave' ? 'bg-amber-100 text-amber-800' : 'bg-rose-50 text-rose-700'
                           }`}>
                             {occ.employeeStatus}
                           </span>
                         </td>
-                        <td className="p-3 font-mono text-slate-600 text-[11px]">
-                          {calculateTenure(occ.entryDate, occ.employeeStatus.startsWith('RTD') ? occ.exitDate : null)}
-                        </td>
-                        <td className="p-3">
-                          <div className="flex items-center gap-2">
-                            <button onClick={() => setViewingEmployeeDossier(occ)} className="text-cyan-600 font-bold hover:underline">
-                              History
+                        <td className="p-3 text-right">
+                          <div className="flex items-center justify-end gap-1.5">
+                            <button
+                              onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
+                              className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] cursor-pointer"
+                            >
+                              Edit
                             </button>
-                            <button onClick={() => setManageOccupantModal(occ)} className="text-slate-600 font-bold hover:text-slate-900">
+                            <button
+                              onClick={() => setReportPreviewModal({
+                                type: 'issuance',
+                                occupant: occ,
+                                arrivalType: occ.arrivalType || 'Local Residency Transfer',
+                                docRef: occ.afrEntryRef || '150-04',
+                                materials: occ.materialsIssued || { mattress: true, pillow: true, bedsheet: true, blanket: true }
+                              })}
+                              className="px-2 py-1 rounded bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 font-bold text-[11px] cursor-pointer"
+                              title="Material Issuance Form (Doc. Ref: 150-04)"
+                            >
+                              Issuance (150-04)
+                            </button>
+                            <button
+                              onClick={() => setViewingEmployeeDossier(occ)}
+                              className="px-2 py-1 rounded bg-cyan-50 hover:bg-cyan-100 text-cyan-800 font-bold text-[11px] cursor-pointer"
+                            >
+                              Dossier
+                            </button>
+                            <button
+                              onClick={() => setManageOccupantModal(occ)}
+                              className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer"
+                            >
                               Manage
                             </button>
                           </div>
@@ -2151,7 +2296,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 3: Invoicing Tab with "Others" */}
+        {/* TAB 3: INVOICING */}
         {activeTab === 'invoicing' && (
           <InvoicingTab
             billingPeriod={billingPeriod}
@@ -2167,7 +2312,7 @@ export default function App() {
           />
         )}
 
-        {/* TAB 4: Reports Tab */}
+        {/* TAB 4: REPORTS */}
         {activeTab === 'reports' && (
           <ReportsTab
             camps={camps}
@@ -2178,14 +2323,10 @@ export default function App() {
             misconductLogs={misconductLogs}
             projectInvoicingData={projectInvoicingData}
             activeCamp={activeCamp}
-            onExportCampOccupancySummary={() => exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs)}
-            onExportDailyOccupancyReport={() => exportDailyOccupancyReport(activeCamp, occupants)}
-            onExportMisconductLog={() => exportMisconductLog(misconductLogs)}
-            onExportMaintenanceLog={() => exportMaintenanceLog(maintenanceLogs)}
           />
         )}
 
-        {/* TAB 5: Activity Time Log Tab */}
+        {/* TAB 5: ACTIVITY LOG */}
         {activeTab === 'activity_logs' && (
           <ActivityLogTab
             activityLogs={activityLogs}
@@ -2194,7 +2335,7 @@ export default function App() {
           />
         )}
 
-        {/* TAB 6: Approvals & DB Tables Tab */}
+        {/* TAB 6: APPROVALS & LOGS */}
         {activeTab === 'approvals' && (
           <ApprovalsAndTablesTab
             transferRequests={transferRequests}
@@ -2212,28 +2353,26 @@ export default function App() {
           />
         )}
 
-        {/* TAB 7: Admin & User Access Tab */}
+        {/* TAB 7: USERS (RBAC) */}
         {activeTab === 'admin' && isSuperAdmin && (
           <div className="space-y-6">
             <div className="bg-white border border-slate-200 p-5 rounded-2xl flex flex-col sm:flex-row sm:items-center justify-between gap-4 shadow-xs">
               <div>
                 <h2 className="text-base font-bold text-slate-900 flex items-center gap-2">
                   <ShieldCheck className="w-5 h-5 text-cyan-600" />
-                  System Users & Role-Based Access Control (RBAC)
+                  System Users & Access Control
                 </h2>
                 <p className="text-xs text-slate-500 mt-0.5">
-                  Super Admins can directly manage roles, camp scopes, editing permissions, or reset user passwords.
+                  Manage user accounts, roles, camp scopes, or reset passwords.
                 </p>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => setShowAddUserModal(true)}
-                  className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 cursor-pointer"
-                >
-                  <UserPlus className="w-4 h-4" />
-                  Add User
-                </button>
-              </div>
+              <button
+                onClick={() => setShowAddUserModal(true)}
+                className="bg-cyan-600 hover:bg-cyan-500 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-sm flex items-center gap-2 cursor-pointer"
+              >
+                <UserPlus className="w-4 h-4" />
+                Add User
+              </button>
             </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
@@ -2242,7 +2381,7 @@ export default function App() {
                   <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b">
                     <tr>
                       <th className="py-3.5 px-4">Staff ID</th>
-                      <th className="py-3.5 px-4">Name & Title</th>
+                      <th className="py-3.5 px-4">Name</th>
                       <th className="py-3.5 px-4">Email</th>
                       <th className="py-3.5 px-4">Role</th>
                       <th className="py-3.5 px-4">Camp Scope</th>
@@ -2257,31 +2396,24 @@ export default function App() {
                         <td className="py-3.5 px-4 font-bold text-slate-900">{u.name}</td>
                         <td className="py-3.5 px-4 text-slate-600">{u.email}</td>
                         <td className="py-3.5 px-4">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            u.role === 'SUPER_ADMIN' ? 'bg-purple-100 text-purple-800' :
-                            u.role === 'CAMP_EDITOR' ? 'bg-cyan-50 text-cyan-700' : 'bg-slate-100 text-slate-700'
-                          }`}>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-purple-100 text-purple-800">
                             {u.role}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 font-mono font-bold">{u.campScope}</td>
                         <td className="py-3.5 px-4">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            u.status === 'Active' ? 'bg-emerald-50 text-emerald-700' : 'bg-rose-50 text-rose-700'
-                          }`}>
+                          <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-50 text-emerald-700">
                             {u.status}
                           </span>
                         </td>
                         <td className="py-3.5 px-4 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => { setTargetUserForReset(u); setShowResetPasswordModal(true); }}
-                              className="px-2.5 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg text-xs font-semibold flex items-center gap-1 cursor-pointer"
-                            >
-                              <KeyRound className="w-3.5 h-3.5" />
-                              Reset Password
-                            </button>
-                          </div>
+                          <button
+                            onClick={() => { setTargetUserForReset(u); setShowResetPasswordModal(true); }}
+                            className="px-2.5 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-700 rounded-lg text-xs font-semibold inline-flex items-center gap-1 cursor-pointer"
+                          >
+                            <KeyRound className="w-3.5 h-3.5" />
+                            Reset Password
+                          </button>
                         </td>
                       </tr>
                     ))}
@@ -2293,1036 +2425,711 @@ export default function App() {
         )}
       </main>
 
-      {/* ======================================================= */}
-      {/* MODAL: EDIT CAMP WITH FLOOR RATIO CONTROLS              */}
-      {/* ======================================================= */}
-      {editingCampModal && (
+      {/* =================================================================== */}
+      {/* MODAL: PRE-REGISTER EMPLOYEE (BEFORE BED ASSIGNMENT)                */}
+      {/* =================================================================== */}
+      {showPreAddEmployeeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
+          <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
               <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-cyan-600" />
-                Edit Camp Details & Floor Flats ({editingCampModal.campNo})
+                <UserPlus className="w-5 h-5 text-cyan-600" /> Add Employee to Master Directory
               </h3>
-              <button onClick={() => setEditingCampModal(null)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
+              <button onClick={() => setShowPreAddEmployeeModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
             </div>
+            <p className="text-slate-500">
+              Pre-register an employee in the system. When you assign them a bed in Camp Master later, entering their Employee ID will auto-fill all these details.
+            </p>
 
-            <form onSubmit={handleSaveCampEdits} className="space-y-4">
+            <form onSubmit={handlePreAddEmployeeSubmit} className="space-y-3">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Camp Code</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingCampModal.campNo}
-                    onChange={(e) => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 font-bold"
-                  />
+                  <label className="block font-semibold mb-1">Employee ID *</label>
+                  <input type="text" required placeholder="e.g. 6425" value={preAddForm.employeeId} onChange={e => setPreAddForm({ ...preAddForm, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Camp Area Location</label>
-                  <input
-                    type="text"
-                    required
-                    value={editingCampModal.campArea}
-                    onChange={(e) => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2"
-                  />
-                </div>
-              </div>
-
-              {/* Floor Management Toolbar */}
-              <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-xl flex items-center justify-between">
-                <div>
-                  <div className="font-bold text-slate-900 text-xs">Total Floors in Building</div>
-                  <div className="text-[11px] text-slate-500">Currently {editingCampModal.floors.length} Floors configured</div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {editingCampModal.floors.length > 1 && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveTopFloorDraft}
-                      className="px-3 py-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 rounded-lg text-xs font-bold cursor-pointer"
-                    >
-                      - Remove Top Floor
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    onClick={handleOpenAddFloorConfig}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold cursor-pointer flex items-center gap-1"
-                  >
-                    <Plus className="w-3.5 h-3.5" />
-                    + Add New Floor
-                  </button>
-                </div>
-              </div>
-
-              {/* Per-Floor Flat Controls with Engineering Breakdown */}
-              <div className="p-4 bg-slate-50 border rounded-xl space-y-3">
-                <div className="font-bold text-slate-900">Per-Floor Flat & Grade Ratios:</div>
-                <div className="space-y-2">
-                  {editingCampModal.floors.map(fl => {
-                    const nmCount = fl.flats.filter(ft => ft.roomGrade === 'Non-Manual').length;
-                    const mCount = fl.flats.filter(ft => ft.roomGrade === 'Manual').length;
-
-                    return (
-                      <div key={fl.floorNo} className="p-3 bg-white border rounded-lg flex flex-col sm:flex-row sm:items-center justify-between gap-3">
-                        <div>
-                          <div className="font-bold text-slate-900">Floor {fl.floorNo}</div>
-                          <div className="text-[11px] text-slate-500">
-                            {fl.flats.length} Flats ({nmCount} Non-Manual • {mCount} Manual)
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-1.5">
-                          {fl.flats.length > 1 && (
-                            <button
-                              type="button"
-                              onClick={() => handleRemoveFlatFromFloor(fl.floorNo)}
-                              className="px-2 py-1 bg-rose-50 text-rose-700 border border-rose-200 rounded text-xs font-semibold"
-                            >
-                              - Remove Flat
-                            </button>
-                          )}
-                          <button
-                            type="button"
-                            onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')}
-                            className="px-2 py-1 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 rounded text-xs font-bold"
-                          >
-                            + Add NM Flat
-                          </button>
-                          <button
-                            type="button"
-                            onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')}
-                            className="px-2 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 border border-amber-200 rounded text-xs font-bold"
-                          >
-                            + Add M Flat
-                          </button>
-                        </div>
-                      </div>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* Decommission Action */}
-              {currentUser.permissions?.canDeleteCamps && (
-                <div className="p-3.5 bg-rose-50/60 border border-rose-200 rounded-xl flex items-center justify-between">
-                  <div>
-                    <div className="font-bold text-rose-900">Decommission Camp Facility</div>
-                    <div className="text-[11px] text-rose-700">Safely archives this building once zero occupants remain.</div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const activeStaff = occupants.filter(o => o.campNo === editingCampModal.campNo && !o.employeeStatus.startsWith('RTD'));
-                      if (activeStaff.length > 0) {
-                        setDecommissionLockoutModal({ camp: editingCampModal, occupants: activeStaff });
-                        return;
-                      }
-                      if (confirm(`Confirm decommissioning of ${editingCampModal.campNo}?`)) {
-                        setCamps(prev => prev.map(c => c.id === editingCampModal.id ? { ...c, status: 'Decommissioned' } : c));
-                        setEditingCampModal(null);
-                      }
-                    }}
-                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <Archive className="w-3.5 h-3.5" />
-                    Decommission
-                  </button>
-                </div>
-              )}
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button
-                  type="button"
-                  onClick={() => setEditingCampModal(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="submit"
-                  className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer"
-                >
-                  Save Camp Details
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Add New Floor Configuration Modal */}
-      {showAddFloorConfigModal && editingCampModal && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-60 flex items-center justify-center p-4">
-          <form onSubmit={handleCommitNewFloorToCamp} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
-            <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-              <Plus className="w-5 h-5 text-emerald-600" />
-              Configure New Floor {editingCampModal.floors.length + 1}
-            </h3>
-            <div>
-              <label className="block font-semibold mb-1">Total Flats on this Floor</label>
-              <input
-                type="number"
-                min="1"
-                max="10"
-                required
-                value={newFloorDraft.flatsCount}
-                onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 font-bold"
-              />
-            </div>
-            <div>
-              <label className="block font-semibold mb-1">Number of Non-Manual / Engineering Flats (2 beds/rm)</label>
-              <input
-                type="number"
-                min="0"
-                max={newFloorDraft.flatsCount}
-                required
-                value={newFloorDraft.nonManualFlats}
-                onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })}
-                className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700"
-              />
-              <span className="text-[11px] text-slate-500 mt-1 block">
-                Remaining {Math.max(0, newFloorDraft.flatsCount - newFloorDraft.nonManualFlats)} flats will default to Manual (3 beds/rm).
-              </span>
-            </div>
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <button
-                type="button"
-                onClick={() => setShowAddFloorConfigModal(false)}
-                className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="submit"
-                className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer"
-              >
-                Add Floor to Draft
-              </button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {/* ======================================================= */}
-      {/* COST CENTER & DYNAMIC DIVISION MANAGEMENT MODAL         */}
-      {/* ======================================================= */}
-      {showManageCostCentersModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-slate-200 rounded-2xl max-w-4xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-9 h-9 rounded-xl bg-cyan-600 text-white flex items-center justify-center">
-                  <Tag className="w-5 h-5" />
-                </div>
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">Project Cost Centers & Operating Divisions</h3>
-                  <p className="text-slate-500 font-medium">
-                    Configure master billing codes and dynamic company divisions used across check-in, bed transfers, and recharges.
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowManageCostCentersModal(false)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            {/* Division Management Section */}
-            <div className="p-4 bg-gradient-to-r from-blue-50 to-indigo-50 border border-blue-200 rounded-xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-blue-900 flex items-center gap-1.5">
-                  <Layers className="w-4 h-4 text-blue-600" /> Company Operating Divisions ({divisions.length})
-                </span>
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {divisions.map(div => (
-                  <span
-                    key={div}
-                    className="inline-flex items-center gap-1.5 px-3 py-1 bg-white border border-blue-300 rounded-lg text-blue-900 font-bold text-xs shadow-2xs"
-                  >
-                    {div}
-                    <button
-                      type="button"
-                      onClick={() => handleRemoveDivision(div)}
-                      className="text-slate-400 hover:text-rose-600 font-bold ml-1 cursor-pointer"
-                    >
-                      ×
-                    </button>
-                  </span>
-                ))}
-              </div>
-              <form onSubmit={handleAddDivision} className="flex items-center gap-2 pt-1">
-                <input
-                  type="text"
-                  placeholder="Enter new Division (e.g. FACILITIES, HVAC, INSTRUMENTATION)..."
-                  value={newDivisionInput}
-                  onChange={e => setNewDivisionInput(e.target.value)}
-                  className="bg-white border border-blue-300 rounded-lg px-3 py-1.5 text-xs text-slate-900 uppercase font-semibold flex-1 max-w-sm"
-                />
-                <button
-                  type="submit"
-                  className="px-3.5 py-1.5 bg-blue-700 hover:bg-blue-600 text-white font-bold rounded-lg cursor-pointer text-xs"
-                >
-                  + Add Division
-                </button>
-              </form>
-            </div>
-
-            {/* Add Cost Center Form */}
-            <form onSubmit={handleCreateCostCenter} className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3">
-              <div className="font-bold text-slate-800 flex items-center gap-1.5">
-                <Plus className="w-4 h-4 text-cyan-600" /> Add New Project Cost Center
-              </div>
-              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                <div>
-                  <label className="block text-slate-600 font-medium mb-1">Cost Center Code</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. 1IDS040-KOC"
-                    value={newCostCenterForm.code}
-                    onChange={(e) => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-mono uppercase font-bold"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-medium mb-1">Project Name / Description</label>
-                  <input
-                    type="text"
-                    required
-                    placeholder="e.g. Substation Expansion Phase 2"
-                    value={newCostCenterForm.name}
-                    onChange={(e) => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5"
-                  />
-                </div>
-                <div>
-                  <label className="block text-slate-600 font-medium mb-1">Division</label>
-                  <div className="flex items-center gap-2">
-                    <select
-                      value={newCostCenterForm.division}
-                      onChange={(e) => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })}
-                      className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-slate-800"
-                    >
-                      {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-                    </select>
-                    <button
-                      type="submit"
-                      className="px-4 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white font-bold rounded-lg shrink-0 cursor-pointer"
-                    >
-                      Add
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </form>
-
-            {/* Existing Cost Centers Table */}
-            <div className="border border-slate-200 rounded-xl overflow-x-auto">
-              <table className="w-full min-w-[720px] text-left whitespace-nowrap">
-                <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b">
-                  <tr>
-                    <th className="py-2.5 px-3.5">Code</th>
-                    <th className="py-2.5 px-3.5">Project / Client Name</th>
-                    <th className="py-2.5 px-3.5">Division</th>
-                    <th className="py-2.5 px-3.5">Active Occupants</th>
-                    <th className="py-2.5 px-3.5">Status</th>
-                    <th className="py-2.5 px-3.5 text-right">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {costCenters.map(cc => {
-                    const activeCount = occupants.filter(o => o.costCenter === cc.code && !o.employeeStatus.startsWith('RTD')).length;
-                    return (
-                      <tr key={cc.id} className="hover:bg-slate-50">
-                        <td className="py-2.5 px-3.5 font-mono font-bold text-cyan-700">{cc.code}</td>
-                        <td className="py-2.5 px-3.5 font-semibold text-slate-900">{cc.name}</td>
-                        <td className="py-2.5 px-3.5">
-                          <span className="px-2 py-0.5 rounded bg-cyan-50 text-cyan-700 font-bold text-[10px]">
-                            {cc.division}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3.5 font-bold text-slate-700">
-                          {activeCount} Bed{activeCount !== 1 ? 's' : ''} Assigned
-                        </td>
-                        <td className="py-2.5 px-3.5">
-                          <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                            cc.status === 'Active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-slate-100 text-slate-500'
-                          }`}>
-                            {cc.status}
-                          </span>
-                        </td>
-                        <td className="py-2.5 px-3.5 text-right">
-                          <div className="flex items-center justify-end gap-2">
-                            <button
-                              onClick={() => setEditingCostCenterModal({ ...cc })}
-                              className="px-2.5 py-1 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-md font-bold text-xs cursor-pointer"
-                            >
-                              Edit
-                            </button>
-                            <button
-                              onClick={() => handleToggleCostCenterStatus(cc.id)}
-                              className={`px-2.5 py-1 rounded-md font-bold text-xs cursor-pointer ${
-                                cc.status === 'Active' ? 'bg-amber-50 text-amber-800 hover:bg-amber-100' : 'bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
-                              }`}
-                            >
-                              {cc.status === 'Active' ? 'Deactivate' : 'Activate'}
-                            </button>
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex justify-end pt-2 border-t">
-              <button
-                onClick={() => setShowManageCostCentersModal(false)}
-                className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold cursor-pointer"
-              >
-                Done
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================= */}
-      {/* EXCEL ROSTER IMPORT PREVIEW & COMMIT MODAL              */}
-      {/* ======================================================= */}
-      {showExcelImportModal && (
-        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-5xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto flex flex-col">
-            <div className="flex items-center justify-between border-b pb-3 shrink-0">
-              <div className="flex items-center gap-2.5">
-                <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
-                <div>
-                  <h3 className="text-base font-bold text-slate-900">
-                    Import Preview: {excelImportFileName}
-                  </h3>
-                  <p className="text-slate-500 font-medium">
-                    Review and validate employee bed allocations before committing to the database.
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setShowExcelImportModal(false)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 shrink-0">
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <span className="text-slate-500 font-medium">Total Rows Parsed:</span>
-                <div className="text-xl font-black text-slate-900 mt-0.5">{excelImportStats.total}</div>
-              </div>
-              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
-                <span className="text-emerald-800 font-medium">Ready to Commit:</span>
-                <div className="text-xl font-black text-emerald-700 mt-0.5">{excelImportStats.valid}</div>
-              </div>
-              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
-                <span className="text-rose-800 font-medium">Conflict / Errors:</span>
-                <div className="text-xl font-black text-rose-700 mt-0.5">{excelImportStats.errors}</div>
-              </div>
-            </div>
-
-            <div className="border border-slate-200 rounded-xl overflow-x-auto flex-1 max-h-96">
-              <table className="w-full text-left whitespace-nowrap">
-                <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b sticky top-0">
-                  <tr>
-                    <th className="p-2.5">Row</th>
-                    <th className="p-2.5">Status</th>
-                    <th className="p-2.5">ID</th>
-                    <th className="p-2.5">Name</th>
-                    <th className="p-2.5">Productive Type</th>
-                    <th className="p-2.5">Nationality</th>
-                    <th className="p-2.5">Camp & Room</th>
-                    <th className="p-2.5">Grade</th>
-                    <th className="p-2.5">Division / Cost Center</th>
-                    <th className="p-2.5">Validation Notes</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {excelParsedRows.map(row => (
-                    <tr key={row.rowIdx} className={row.status === 'ERROR' ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
-                      <td className="p-2.5 font-mono text-slate-500">#{row.rowIdx}</td>
-                      <td className="p-2.5">
-                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                          row.status === 'VALID' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
-                        }`}>
-                          {row.status}
-                        </span>
-                      </td>
-                      <td className="p-2.5 font-mono font-bold text-cyan-600">#{row.employeeId || 'N/A'}</td>
-                      <td className="p-2.5 font-semibold text-slate-900">{row.employeeName || 'N/A'}</td>
-                      <td className="p-2.5 font-bold text-blue-700">{row.productiveType}</td>
-                      <td className="p-2.5">{row.nationality}</td>
-                      <td className="p-2.5 font-mono">{row.campNo} ({row.roomNo})</td>
-                      <td className="p-2.5 font-bold text-[10px]">{row.roomGrade}</td>
-                      <td className="p-2.5">{row.division} ({row.costCenter})</td>
-                      <td className="p-2.5 font-medium">
-                        {row.errors.length > 0 ? (
-                          <span className="text-rose-600 font-semibold">{row.errors.join('; ')}</span>
-                        ) : (
-                          <span className="text-emerald-600 font-semibold">Ready for import</span>
-                        )}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t shrink-0">
-              <span className="text-[11px] text-slate-500">
-                Only valid rows without capacity or ID conflicts will be committed to the camp database.
-              </span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setShowExcelImportModal(false)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
-                >
-                  Cancel
-                </button>
-                <button
-                  type="button"
-                  disabled={excelImportStats.valid === 0}
-                  onClick={handleCommitExcelImport}
-                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer disabled:opacity-50"
-                >
-                  Confirm & Batch Import ({excelImportStats.valid} Occupants)
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* DYNAMIC ADD BUILDING WIZARD */}
-      {showAddCampModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Building2 className="w-5 h-5 text-emerald-600" />
-                Add Building (Configurable Floors & Topology)
-              </h3>
-              <button onClick={() => setShowAddCampModal(false)} className="text-slate-400 hover:text-slate-700">
-                <X className="w-5 h-5" />
-              </button>
-            </div>
-
-            <form onSubmit={e => {
-              e.preventDefault();
-              const campDigit = newCampForm.campDigit || String(camps.length + 1);
-              const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
-
-              const generatedFloors = newCampForm.floorConfigs.map(fc => {
-                const floorStr = String(fc.floorNo).padStart(2, '0');
-                const floorFlats = [];
-
-                for (let fl = 1; fl <= fc.flatsCount; fl++) {
-                  const flatStr = String(fl).padStart(2, '0');
-                  const isNM = fl <= fc.nonManualFlats;
-                  const flatGrade = isNM ? 'Non-Manual' : 'Manual';
-                  const gradeInitial = isNM ? 'NM' : 'M';
-                  const roomCapacity = isNM ? 2 : 3;
-
-                  const flatRooms = [];
-                  const roomLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
-                  for (let r = 0; r < roomsPerFl; r++) {
-                    const letter = roomLetters[r] || `R${r + 1}`;
-                    flatRooms.push({
-                      roomNo: `${campDigit}-${floorStr}-${flatStr}-${letter}`,
-                      capacity: roomCapacity,
-                      occupants: []
-                    });
-                  }
-
-                  floorFlats.push({
-                    flatNo: fl,
-                    flatCode: `${campDigit}-${floorStr}-${flatStr}-${gradeInitial}`,
-                    roomGrade: flatGrade,
-                    rooms: flatRooms
-                  });
-                }
-
-                return { floorNo: fc.floorNo, flats: floorFlats };
-              });
-
-              const newCampObj = {
-                id: `camp-${Date.now()}`,
-                campNo: newCampForm.campNo,
-                campArea: newCampForm.campArea,
-                costCenter: '1ACD000',
-                campDigit,
-                campStartDate: newCampForm.campStartDate,
-                status: 'Active',
-                floors: generatedFloors
-              };
-
-              setCamps(prev => [...prev, newCampObj]);
-              setSelectedCampId(newCampObj.id);
-              setSelectedFloorNo(1);
-              setShowAddCampModal(false);
-              logActivity('CAMP_CONFIG', `Created ${newCampObj.campNo}`, `Created building with ${generatedFloors.length} floors.`);
-            }} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Camp Code</label>
-                  <input type="text" required value={newCampForm.campNo} onChange={e => setNewCampForm({ ...newCampForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Building Digit Prefix (e.g. 4 for 4-01-01)</label>
-                  <input type="text" required value={newCampForm.campDigit} onChange={e => setNewCampForm({ ...newCampForm, campDigit: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+                  <label className="block font-semibold mb-1">Full Name *</label>
+                  <input type="text" required placeholder="Full Name" value={preAddForm.employeeName} onChange={e => setPreAddForm({ ...preAddForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
                 </div>
               </div>
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Camp Area Location</label>
-                  <input type="text" required value={newCampForm.campArea} onChange={e => setNewCampForm({ ...newCampForm, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                  <label className="block font-semibold mb-1">Employee Productive Type</label>
+                  <select value={preAddForm.productiveType} onChange={e => setPreAddForm({ ...preAddForm, productiveType: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold bg-white">
+                    <option value="Direct Employee (DE)">Direct Employee (DE)</option>
+                    <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
+                    <option value="Shutdown">Shutdown</option>
+                    <option value="Others">Others</option>
+                  </select>
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Camp Commissioning Date</label>
-                  <input type="date" required value={newCampForm.campStartDate} onChange={e => setNewCampForm({ ...newCampForm, campStartDate: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-                </div>
-              </div>
-
-              {/* Dynamic Floor & Rooms per Flat Steppers */}
-              <div className="p-3.5 bg-slate-100 border border-slate-300 rounded-xl grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-bold text-slate-900 mb-1">Total Building Floors</label>
-                  <div className="flex items-center gap-2">
-                    <button
-                      type="button"
-                      onClick={() => handleFloorsCountChange(newCampForm.floorsCount - 1)}
-                      className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                    >
-                      -
-                    </button>
-                    <input
-                      type="number"
-                      min="1"
-                      max="20"
-                      value={newCampForm.floorsCount}
-                      onChange={e => handleFloorsCountChange(e.target.value)}
-                      className="w-20 bg-white border border-slate-300 rounded-lg px-2 py-1.5 text-center font-bold text-slate-900"
-                    />
-                    <button
-                      type="button"
-                      onClick={() => handleFloorsCountChange(newCampForm.floorsCount + 1)}
-                      className="px-3 py-1.5 bg-white border border-slate-300 rounded-lg font-bold text-slate-700 hover:bg-slate-50 cursor-pointer"
-                    >
-                      +
-                    </button>
-                    <span className="text-[11px] text-slate-500">Floors (1 to 20)</span>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block font-bold text-slate-900 mb-1">Rooms per Flat</label>
-                  <select
-                    value={newCampForm.roomsPerFlat}
-                    onChange={e => setNewCampForm({ ...newCampForm, roomsPerFlat: Number(e.target.value) })}
-                    className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-bold text-slate-800"
-                  >
-                    <option value={2}>2 Rooms per Flat (A, B)</option>
-                    <option value={3}>3 Rooms per Flat (A, B, C)</option>
-                    <option value={4}>4 Rooms per Flat (A, B, C, D)</option>
-                    <option value={5}>5 Rooms per Flat (A, B, C, D, E)</option>
-                    <option value={6}>6 Rooms per Flat (A, B, C, D, E, F)</option>
+                  <label className="block font-semibold mb-1">Manual / Non-Manual Category</label>
+                  <select value={preAddForm.roomGrade} onChange={e => setPreAddForm({ ...preAddForm, roomGrade: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700 bg-white">
+                    <option value="Manual">Manual</option>
+                    <option value="Non-Manual">Non-Manual</option>
                   </select>
                 </div>
               </div>
 
-              {/* Dynamic Per-Floor Topology Table */}
-              <div className="p-4 bg-slate-50 border rounded-xl space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="font-bold text-slate-900">Floor-by-Floor Flat Topology ({newCampForm.floorConfigs.length} Floors):</span>
-                  <span className="text-[11px] text-slate-500">Non-Manual = 2 beds/rm • Manual = 3 beds/rm</span>
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Nationality</label>
+                  <input type="text" required value={preAddForm.nationality} onChange={e => setPreAddForm({ ...preAddForm, nationality: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
-                <div className="border border-slate-200 rounded-lg overflow-x-auto max-h-64">
-                  <table className="w-full text-left whitespace-nowrap">
-                    <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b sticky top-0">
-                      <tr>
-                        <th className="py-2 px-3">Floor</th>
-                        <th className="py-2 px-3">Flats on this Floor</th>
-                        <th className="py-2 px-3">Non-Manual Flats (2 beds/rm)</th>
-                        <th className="py-2 px-3">Manual Flats (3 beds/rm)</th>
+                <div>
+                  <label className="block font-semibold mb-1">Mobile Number</label>
+                  <input type="text" required value={preAddForm.mobileNo} onChange={e => setPreAddForm({ ...preAddForm, mobileNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Passport Number</label>
+                  <input type="text" value={preAddForm.passportNo} onChange={e => setPreAddForm({ ...preAddForm, passportNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Kuwait Civil ID</label>
+                  <input type="text" value={preAddForm.civilId} onChange={e => setPreAddForm({ ...preAddForm, civilId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Designation</label>
+                  <input type="text" value={preAddForm.title} onChange={e => setPreAddForm({ ...preAddForm, title: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Cost Center</label>
+                  <select
+                    value={preAddForm.costCenter}
+                    onChange={e => {
+                      const c = costCenters.find(cc => cc.code === e.target.value);
+                      setPreAddForm({ ...preAddForm, costCenter: e.target.value, division: c ? c.division : preAddForm.division });
+                    }}
+                    className="w-full border rounded-xl px-2 py-2 font-mono font-bold"
+                  >
+                    {costCenters.filter(c => c.status === 'Active').map(cc => (
+                      <option key={cc.id} value={cc.code}>{cc.code}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Division</label>
+                  <select value={preAddForm.division} onChange={e => setPreAddForm({ ...preAddForm, division: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-bold">
+                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onClick={() => setShowPreAddEmployeeModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">Save Employee to Directory</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL: EDIT EMPLOYEE DETAILS (POINT 4)                              */}
+      {/* =================================================================== */}
+      {editingEmployeeModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-cyan-600" /> Edit Employee Details (#{editingEmployeeModal.originalId})
+              </h3>
+              <button onClick={() => setEditingEmployeeModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveEmployeeEdit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Employee ID</label>
+                  <input type="text" required value={editingEmployeeModal.employeeId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Full Name</label>
+                  <input type="text" required value={editingEmployeeModal.employeeName} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Productive Type</label>
+                  <select value={editingEmployeeModal.productiveType || 'Direct Employee (DE)'} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, productiveType: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold">
+                    <option value="Direct Employee (DE)">Direct Employee (DE)</option>
+                    <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
+                    <option value="Shutdown">Shutdown</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Manual / Non-Manual Grade</label>
+                  <select value={editingEmployeeModal.roomGrade || 'Manual'} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, roomGrade: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700">
+                    <option value="Manual">Manual</option>
+                    <option value="Non-Manual">Non-Manual</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Nationality</label>
+                  <input type="text" value={editingEmployeeModal.nationality} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, nationality: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Mobile Number</label>
+                  <input type="text" value={editingEmployeeModal.mobileNo} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, mobileNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Passport Number</label>
+                  <input type="text" value={editingEmployeeModal.passportNo} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, passportNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Kuwait Civil ID</label>
+                  <input type="text" value={editingEmployeeModal.civilId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, civilId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Job Title</label>
+                  <input type="text" value={editingEmployeeModal.title} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, title: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Cost Center</label>
+                  <select value={editingEmployeeModal.costCenter} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, costCenter: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-mono font-bold">
+                    {costCenters.map(cc => <option key={cc.id} value={cc.code}>{cc.code}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Division</label>
+                  <select value={editingEmployeeModal.division} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, division: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-bold">
+                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Name</label>
+                  <input type="text" value={editingEmployeeModal.emergencyContactName || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Phone</label>
+                  <input type="text" value={editingEmployeeModal.emergencyContactPhone || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onClick={() => setEditingEmployeeModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* CHECK-IN MODAL (WITH ID AUTO-FILL, MANUAL/NON-MANUAL, & ISSUANCE)   */}
+      {/* =================================================================== */}
+      {showCheckInModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <UserPlus className="w-5 h-5 text-cyan-600" /> Assign Employee to Bed & Issue Materials
+              </h3>
+              <button onClick={() => setShowCheckInModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-xl flex items-center justify-between">
+              <span>Target Bed: <strong>Room {checkInForm.roomNo}</strong> (Flat {checkInForm.flatCode})</span>
+              <span className="font-bold text-cyan-800">{checkInForm.roomGrade} Room</span>
+            </div>
+
+            <form onSubmit={handleCheckInSubmit} className="space-y-3">
+              {/* Auto-Fill Lookup by Employee ID */}
+              <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
+                <label className="block font-bold text-blue-900">
+                  Enter Employee ID (Auto-fills details if pre-registered in Occupants):
+                </label>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <input
+                      type="text"
+                      list="registered-employees-list"
+                      required
+                      placeholder="Type ID (e.g. 6410)..."
+                      value={checkInForm.employeeId}
+                      onChange={e => handleCheckInEmployeeIdChange(e.target.value)}
+                      className="w-full bg-white border border-blue-300 rounded-xl px-3 py-2 font-mono font-bold text-slate-900"
+                    />
+                    <datalist id="registered-employees-list">
+                      {occupants.map(o => (
+                        <option key={o.employeeId} value={o.employeeId}>
+                          {o.employeeName} ({o.employeeStatus})
+                        </option>
+                      ))}
+                    </datalist>
+                  </div>
+                  <div>
+                    <input
+                      type="text"
+                      required
+                      placeholder="Employee Full Name"
+                      value={checkInForm.employeeName}
+                      onChange={e => setCheckInForm({ ...checkInForm, employeeName: e.target.value })}
+                      className="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 font-bold"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Explicit Productive Type + Manual / Non-Manual Grade */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Employee Productive Type</label>
+                  <select
+                    value={checkInForm.productiveType}
+                    onChange={e => setCheckInForm({ ...checkInForm, productiveType: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-bold text-slate-800 bg-white"
+                  >
+                    <option value="Direct Employee (DE)">Direct Employee (DE)</option>
+                    <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
+                    <option value="Shutdown">Shutdown</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Manual / Non-Manual Grade</label>
+                  <select
+                    value={checkInForm.roomGrade}
+                    onChange={e => setCheckInForm({ ...checkInForm, roomGrade: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700 bg-white"
+                  >
+                    <option value="Manual">Manual</option>
+                    <option value="Non-Manual">Non-Manual</option>
+                  </select>
+                </div>
+              </div>
+
+              {/* Arrival / Camp Shift Type + Manual Document Reference Number (Point 6) */}
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Arrival / Transfer Type</label>
+                  <select
+                    value={checkInForm.arrivalType}
+                    onChange={e => setCheckInForm({ ...checkInForm, arrivalType: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-semibold bg-white"
+                  >
+                    <option value="Local Residency Transfer">Shifted from Another Camp / Local</option>
+                    <option value="Overseas">New Overseas Arrival</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Document Ref # (Shift / AFR Ref)</label>
+                  <input
+                    type="text"
+                    required
+                    placeholder="e.g. 150-04 or TRF-2026-09"
+                    value={checkInForm.docRef}
+                    onChange={e => setCheckInForm({ ...checkInForm, docRef: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-mono font-bold text-cyan-800"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Nationality</label>
+                  <input type="text" required value={checkInForm.nationality} onChange={e => setCheckInForm({ ...checkInForm, nationality: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Mobile Number</label>
+                  <input type="tel" required value={checkInForm.mobileNo} onChange={e => setCheckInForm({ ...checkInForm, mobileNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Passport Number</label>
+                  <input type="text" required value={checkInForm.passportNo} onChange={e => setCheckInForm({ ...checkInForm, passportNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Kuwait Civil ID</label>
+                  <input type="text" required value={checkInForm.civilId} onChange={e => setCheckInForm({ ...checkInForm, civilId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Job Title</label>
+                  <input type="text" required value={checkInForm.title} onChange={e => setCheckInForm({ ...checkInForm, title: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Cost Center</label>
+                  <select
+                    value={checkInForm.costCenter}
+                    onChange={e => {
+                      const c = costCenters.find(cc => cc.code === e.target.value);
+                      setCheckInForm({ ...checkInForm, costCenter: e.target.value, division: c ? c.division : checkInForm.division });
+                    }}
+                    className="w-full border rounded-xl px-2 py-2 font-mono font-bold"
+                  >
+                    {costCenters.filter(c => c.status === 'Active').map(cc => (
+                      <option key={cc.id} value={cc.code}>{cc.code}</option>
+                    ))}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Division</label>
+                  <select value={checkInForm.division} onChange={e => setCheckInForm({ ...checkInForm, division: e.target.value })} className="w-full border font-bold rounded-xl px-2 py-2">
+                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {/* Built-In Material Issuance Checklist (Doc. Ref: 150-04 - Point 7) */}
+              <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
+                <div className="font-bold text-emerald-900 flex items-center justify-between">
+                  <span>Material Issuance Checklist (Doc. Ref: 150-04)</span>
+                  <span className="text-[10px] text-emerald-700">Generates form upon check-in</span>
+                </div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 pt-1">
+                  {['mattress', 'pillow', 'bedsheet', 'blanket'].map(item => (
+                    <label key={item} className="flex items-center gap-2 bg-white px-2.5 py-1.5 rounded-lg border border-emerald-200 cursor-pointer font-semibold capitalize">
+                      <input
+                        type="checkbox"
+                        checked={checkInForm.materials[item]}
+                        onChange={e => setCheckInForm({
+                          ...checkInForm,
+                          materials: { ...checkInForm.materials, [item]: e.target.checked }
+                        })}
+                      />
+                      {item}
+                    </label>
+                  ))}
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onClick={() => setShowCheckInModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer">
+                  Confirm Bed & Preview Material Issuance Form
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* UNIVERSAL DOCUMENT PREVIEW MODAL (PREVIEW BEFORE PRINT / DOWNLOAD)  */}
+      {/* =================================================================== */}
+      {reportPreviewModal && (
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <FileCheck className="w-6 h-6 text-emerald-600" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Document Preview & Export
+                  </h3>
+                  <p className="text-slate-500">
+                    Review the official formatted sheet below, then choose Print / Save PDF or Download Excel (.xlsx).
+                  </p>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => printFormattedElement('modal-preview-print-area', 'Al-Dhow Official Document')}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-4 h-4" /> Print / Save PDF
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (reportPreviewModal.type === 'summary') {
+                      exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs);
+                    } else if (reportPreviewModal.type === 'daily') {
+                      exportDailyOccupancyReport(reportPreviewModal.camp || activeCamp, occupants);
+                    } else if (reportPreviewModal.type === 'issuance') {
+                      exportMaterialIssuanceForm(reportPreviewModal.occupant, reportPreviewModal.arrivalType, {
+                        docRef: reportPreviewModal.docRef,
+                        materials: reportPreviewModal.materials
+                      });
+                    } else if (reportPreviewModal.type === 'relocation') {
+                      exportOccupantsRelocationForm(reportPreviewModal.record);
+                    }
+                  }}
+                  className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Download className="w-4 h-4" /> Download Excel (.xlsx)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setReportPreviewModal(null)}
+                  className="p-2 text-slate-400 hover:text-slate-700 cursor-pointer"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            {/* A4 Printable Preview Container */}
+            <div id="modal-preview-print-area" className="border border-slate-300 p-6 bg-white text-black font-sans overflow-x-auto">
+              {/* PREVIEW 1: MATERIAL ISSUANCE FORM (DOC REF 150-04) */}
+              {reportPreviewModal.type === 'issuance' && reportPreviewModal.occupant && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-3">
+                    <img src={dhowLogoImg} alt="Dhow" className="h-10 w-auto" />
+                    <h2 className="text-base font-bold uppercase text-center">
+                      EMPLOYEE NEW ARRIVAL - MATERIAL ISSUANCE FORM
+                    </h2>
+                    <div className="text-right font-mono text-xs">
+                      <div><strong>Doc. Ref.:</strong> {reportPreviewModal.docRef || '150-04'}</div>
+                      <div><strong>Date:</strong> {todayStr}</div>
+                    </div>
+                  </div>
+
+                  <div className="flex justify-between text-xs font-bold py-1">
+                    <span>Arrival Type: {reportPreviewModal.arrivalType}</span>
+                    <span>Arrival Date: {reportPreviewModal.occupant.entryDate || todayStr}</span>
+                  </div>
+
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="border border-black p-1.5">Project / Dept. No.</th>
+                        <th className="border border-black p-1.5">Emp. Code</th>
+                        <th className="border border-black p-1.5">Name</th>
+                        <th className="border border-black p-1.5">Nationality</th>
+                        <th className="border border-black p-1.5">Passport / Civil ID</th>
+                        <th className="border border-black p-1.5">Designation & Grade</th>
+                        <th className="border border-black p-1.5">Assigned Camp</th>
+                        <th className="border border-black p-1.5">Assigned Room</th>
                       </tr>
                     </thead>
-                    <tbody className="divide-y divide-slate-200 bg-white">
-                      {newCampForm.floorConfigs.map(fc => (
-                        <tr key={fc.floorNo}>
-                          <td className="py-2 px-3 font-bold text-slate-900">Floor {fc.floorNo}</td>
-                          <td className="py-2 px-3">
-                            <input
-                              type="number"
-                              min="1"
-                              max="15"
-                              value={fc.flatsCount}
-                              onChange={e => {
-                                const val = parseInt(e.target.value, 10) || 1;
-                                setNewCampForm(prev => ({
-                                  ...prev,
-                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? {
-                                    ...f, flatsCount: val, nonManualFlats: Math.min(f.nonManualFlats, val)
-                                  } : f)
-                                }));
-                              }}
-                              className="w-20 border rounded px-2 py-1 text-center font-bold"
-                            />
-                          </td>
-                          <td className="py-2 px-3">
-                            <input
-                              type="number"
-                              min="0"
-                              max={fc.flatsCount}
-                              value={fc.nonManualFlats}
-                              onChange={e => {
-                                const val = parseInt(e.target.value, 10) || 0;
-                                setNewCampForm(prev => ({
-                                  ...prev,
-                                  floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: Math.min(val, f.flatsCount) } : f)
-                                }));
-                              }}
-                              className="w-20 border rounded px-2 py-1 text-center font-bold text-cyan-700"
-                            />
-                          </td>
-                          <td className="py-2 px-3 font-mono text-amber-700 font-bold">
-                            {Math.max(0, fc.flatsCount - fc.nonManualFlats)} Manual
-                          </td>
+                    <tbody>
+                      <tr className="text-center font-semibold">
+                        <td className="border border-black p-1.5">{reportPreviewModal.occupant.costCenter}</td>
+                        <td className="border border-black p-1.5 font-mono">#{reportPreviewModal.occupant.employeeId}</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.occupant.employeeName}</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.occupant.nationality}</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.occupant.passportNo} / {reportPreviewModal.occupant.civilId}</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.occupant.title} ({reportPreviewModal.occupant.roomGrade})</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.occupant.campNo}</td>
+                        <td className="border border-black p-1.5 font-mono">{reportPreviewModal.occupant.roomNo}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="border border-black p-1.5 w-14">Sl. No.</th>
+                        <th className="border border-black p-1.5">List of Materials</th>
+                        <th className="border border-black p-1.5 w-28">Issued (YES)</th>
+                        <th className="border border-black p-1.5 w-28">Issued (NO)</th>
+                        <th className="border border-black p-1.5">Accommodation Request Ref. & Date</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {[
+                        { label: 'Mattress', key: 'mattress' },
+                        { label: 'Pillow', key: 'pillow' },
+                        { label: 'Bedsheet', key: 'bedsheet' },
+                        { label: 'Blanket', key: 'blanket' }
+                      ].map((m, idx) => {
+                        const isIssued = reportPreviewModal.materials?.[m.key] !== false;
+                        return (
+                          <tr key={m.key}>
+                            <td className="border border-black p-1.5 text-center">{idx + 1}</td>
+                            <td className="border border-black p-1.5 font-semibold">{m.label}</td>
+                            <td className="border border-black p-1.5 text-center font-bold">{isIssued ? 'YES (1)' : '-'}</td>
+                            <td className="border border-black p-1.5 text-center">{isIssued ? '-' : 'NO'}</td>
+                            <td className="border border-black p-1.5 text-center">{idx === 0 ? `${reportPreviewModal.docRef || '150-04'} (${todayStr})` : ''}</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+
+                  <div className="text-[11px] italic font-semibold">
+                    Note: Employee has to return the received items in case of vacating the accommodation.
+                  </div>
+
+                  <table className="w-full border-collapse text-xs mt-3">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="border border-black p-1.5">Sign-Off</th>
+                        <th className="border border-black p-1.5">Requested by (Employee)</th>
+                        <th className="border border-black p-1.5">Issued by (Camp Boss)</th>
+                        <th className="border border-black p-1.5">Approved by (Dept Head)</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr>
+                        <td className="border border-black p-1.5 font-bold">Name:</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.occupant.employeeName}</td>
+                        <td className="border border-black p-1.5">Camp Supervisor</td>
+                        <td className="border border-black p-1.5">Mohamed Bayoumi</td>
+                      </tr>
+                      <tr>
+                        <td className="border border-black p-1.5 font-bold">Signature & Date:</td>
+                        <td className="border border-black p-1.5">{todayStr}</td>
+                        <td className="border border-black p-1.5">{todayStr}</td>
+                        <td className="border border-black p-1.5">{todayStr}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* PREVIEW 2: CAMP OCCUPANCY SUMMARY STATUS (T1) */}
+              {reportPreviewModal.type === 'summary' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <img src={dhowLogoImg} alt="Dhow" className="h-10 w-auto" />
+                    <h2 className="text-base font-bold uppercase">CAMP OCCUPANCY SUMMARY STATUS</h2>
+                    <span className="font-mono text-xs font-bold border border-black px-3 py-1">Date: {todayStr}</span>
+                  </div>
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="border border-black p-1.5">Sr. No.</th>
+                        <th className="border border-black p-1.5">Accommodation No.</th>
+                        <th className="border border-black p-1.5">Total Capacity</th>
+                        <th className="border border-black p-1.5">Occupied</th>
+                        <th className="border border-black p-1.5">Vacation</th>
+                        <th className="border border-black p-1.5">RTD</th>
+                        <th className="border border-black p-1.5">Remarks</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {camps.map((camp, idx) => {
+                        let cap = 0;
+                        camp.floors.forEach(fl => fl.flats.forEach(ft => ft.rooms.forEach(rm => { cap += rm.capacity; })));
+                        const inCamp = occupants.filter(o => o.campNo === camp.campNo);
+                        const onJob = inCamp.filter(o => o.employeeStatus === 'On Job').length;
+                        const onLeave = inCamp.filter(o => o.employeeStatus === 'On Leave').length;
+                        const rtdCount = rtdLogs.filter(r => r.vacatedCampNo === camp.campNo).length;
+                        return (
+                          <tr key={camp.id} className="text-center">
+                            <td className="border border-black p-1.5">{idx + 1}</td>
+                            <td className="border border-black p-1.5 text-left font-bold">{camp.campNo} ({camp.campArea})</td>
+                            <td className="border border-black p-1.5">{cap}</td>
+                            <td className="border border-black p-1.5 font-bold">{onJob + onLeave}</td>
+                            <td className="border border-black p-1.5">{onLeave}</td>
+                            <td className="border border-black p-1.5">{rtdCount}</td>
+                            <td className="border border-black p-1.5 text-left">{cap - (onJob + onLeave)} Beds Vacant</td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* PREVIEW 3: DAILY OCCUPANCY REPORT (T2) */}
+              {reportPreviewModal.type === 'daily' && (
+                <div className="space-y-3">
+                  <div className="flex items-center justify-between">
+                    <img src={dhowLogoImg} alt="Dhow" className="h-10 w-auto" />
+                    <h2 className="text-base font-bold uppercase">
+                      DAILY OCCUPANCY REPORT — {(reportPreviewModal.camp || activeCamp)?.campNo}
+                    </h2>
+                    <span className="font-mono text-xs font-bold">Date: {todayStr}</span>
+                  </div>
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="border border-black p-1.5">Sr. No.</th>
+                        <th className="border border-black p-1.5">Code*</th>
+                        <th className="border border-black p-1.5">Name</th>
+                        <th className="border border-black p-1.5">Designation</th>
+                        <th className="border border-black p-1.5">Project/Dept</th>
+                        <th className="border border-black p-1.5">Room No.</th>
+                        <th className="border border-black p-1.5">Status</th>
+                        <th className="border border-black p-1.5">Arrival</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {occupants.filter(o => o.campNo === (reportPreviewModal.camp || activeCamp)?.campNo).map((occ, idx) => (
+                        <tr key={occ.employeeId} className="text-center">
+                          <td className="border border-black p-1.5">{idx + 1}</td>
+                          <td className="border border-black p-1.5 font-mono">#{occ.employeeId}</td>
+                          <td className="border border-black p-1.5 text-left font-semibold">{occ.employeeName}</td>
+                          <td className="border border-black p-1.5 text-left">{occ.title}</td>
+                          <td className="border border-black p-1.5">{occ.costCenter}</td>
+                          <td className="border border-black p-1.5 font-mono">{occ.roomNo}</td>
+                          <td className="border border-black p-1.5">{occ.employeeStatus}</td>
+                          <td className="border border-black p-1.5">{occ.entryDate}</td>
                         </tr>
                       ))}
                     </tbody>
                   </table>
                 </div>
-              </div>
+              )}
 
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setShowAddCampModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer">Create Building</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* Itemized Project Invoice Modal */}
-      {selectedInvoiceModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div id="invoice-print-area" className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-3">
-                <DhowLogo className="h-6 w-auto" />
-                <span className="font-mono font-bold text-slate-500">
-                  INV-{selectedInvoiceModal.costCenter}-{billingPeriod.replace(' ', '-')}
-                </span>
-              </div>
-              <button onClick={() => setSelectedInvoiceModal(null)} className="text-slate-400 hover:text-slate-700 no-print"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div className="p-3 bg-slate-50 rounded-xl border space-y-1">
-                <div className="text-slate-500">Debited Project Cost Center:</div>
-                <div className="text-sm font-black text-cyan-700">{selectedInvoiceModal.costCenter}</div>
-                <div className="font-semibold text-slate-700">Site: {selectedInvoiceModal.projectName}</div>
-                <div className="text-slate-500">Division: {selectedInvoiceModal.division}</div>
-              </div>
-
-              <div className="p-3 bg-slate-50 rounded-xl border space-y-1 text-right">
-                <div className="text-slate-500">Credited Camp Management:</div>
-                <div className="text-sm font-black text-slate-900">Cost Center 1ACD000</div>
-                <div className="font-semibold text-slate-700">Billing Period: {billingPeriod}</div>
-              </div>
-            </div>
-
-            <div className="border rounded-xl overflow-hidden">
-              <table className="w-full text-left">
-                <thead className="bg-slate-100 text-slate-600 uppercase font-mono text-[10px] border-b">
-                  <tr>
-                    <th className="py-2.5 px-3">Staff ID</th>
-                    <th className="py-2.5 px-3">Employee Name</th>
-                    <th className="py-2.5 px-3">Nationality</th>
-                    <th className="py-2.5 px-3">Room</th>
-                    <th className="py-2.5 px-3">Grade</th>
-                    <th className="py-2.5 px-3 text-right">Charge (KWD)</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-200">
-                  {selectedInvoiceModal.occupants.map(occ => {
-                    const bedCost = occ.roomGrade === 'Non-Manual' ? rates.nonManual : rates.manual;
-                    return (
-                      <tr key={occ.employeeId}>
-                        <td className="py-2 px-3 font-mono font-bold text-cyan-600">#{occ.employeeId}</td>
-                        <td className="py-2 px-3 font-semibold text-slate-900">{occ.employeeName}</td>
-                        <td className="py-2 px-3">{occ.nationality}</td>
-                        <td className="py-2 px-3 font-mono text-slate-700">{occ.roomNo}</td>
-                        <td className="py-2 px-3 font-bold text-[10px]">
-                          <span className={`px-2 py-0.5 rounded ${
-                            occ.roomGrade === 'Non-Manual' ? 'bg-cyan-50 text-cyan-700' : 'bg-amber-50 text-amber-700'
-                          }`}>
-                            {occ.roomGrade}
-                          </span>
-                        </td>
-                        <td className="py-2 px-3 text-right font-mono font-bold text-slate-900">
-                          {bedCost.toFixed(3)}
-                        </td>
-                      </tr>
-                    );
-                  })}
-
-                  {selectedInvoiceModal.otherCostKWD > 0 && (
-                    <tr className="bg-purple-50/70 font-semibold text-purple-900">
-                      <td colSpan={3} className="py-2.5 px-3">
-                        <strong>Others (Misc Camp Cost):</strong> {selectedInvoiceModal.otherCostDesc || 'Allocated recharge'}
-                      </td>
-                      <td colSpan={2} className="py-2.5 px-3 text-right">Allocated Recharge</td>
-                      <td className="py-2.5 px-3 text-right font-mono font-black text-purple-800">
-                        {selectedInvoiceModal.otherCostKWD.toFixed(3)}
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-                <tfoot className="bg-slate-50 border-t font-bold text-xs">
-                  <tr>
-                    <td colSpan={5} className="py-2.5 px-3 text-right uppercase">Total Invoice:</td>
-                    <td className="py-2.5 px-3 text-right font-black text-sm text-emerald-700">
-                      {selectedInvoiceModal.totalAmountKWD.toFixed(3)} KWD
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-
-            <div className="flex items-center justify-between pt-2 border-t no-print">
-              <span className="text-[11px] text-slate-400">Dhow Camp Management Registry</span>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}`)}
-                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Printer className="w-3.5 h-3.5" /> Print Invoice
-                </button>
-                <button type="button" onClick={() => setSelectedInvoiceModal(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer">
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ======================================================= */}
-      {/* EMPLOYEE DOSSIER MODAL                                  */}
-      {/* ======================================================= */}
-      {viewingEmployeeDossier && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
-                  #{viewingEmployeeDossier.employeeId}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
-                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
-                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
-                    </span>
-                  </div>
-                  <p className="text-slate-500 font-medium">
-                    {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
-                  </p>
-                </div>
-              </div>
-              <button onClick={() => setViewingEmployeeDossier(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Civil ID</div>
-                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Passport #</div>
-                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium flex items-center gap-1"><Phone className="w-3 h-3 text-cyan-600" /> Mobile</div>
-                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium flex items-center gap-1"><Globe className="w-3 h-3 text-cyan-600" /> Nationality</div>
-                <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Status</div>
-                <div className="mt-0.5">
-                  <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                    viewingEmployeeDossier.employeeStatus === 'On Job' ? 'bg-emerald-50 text-emerald-700' : 'bg-amber-100 text-amber-800'
-                  }`}>
-                    {viewingEmployeeDossier.employeeStatus}
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            {/* Current Room Allocation & Duration */}
-            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-cyan-600" /> Current Room Allocation
-                </span>
-                <span className="font-bold px-2.5 py-1 rounded-lg bg-white text-cyan-700 border border-cyan-200">
-                  {viewingEmployeeDossier.roomGrade} Grade
-                </span>
-              </div>
-
-              <div className="grid grid-cols-2 sm:grid-cols-3 gap-3">
-                <div>
-                  <span className="text-slate-500">Camp:</span>
-                  <div className="font-bold text-slate-900">{viewingEmployeeDossier.campNo} ({viewingEmployeeDossier.campArea})</div>
-                </div>
-                <div>
-                  <span className="text-slate-500">Room:</span>
-                  <div className="font-bold text-cyan-700 font-mono">Flat {viewingEmployeeDossier.flatCode} • Room {viewingEmployeeDossier.roomNo}</div>
-                </div>
-                <div>
-                  <span className="text-slate-500">Entry Date:</span>
-                  <div className="font-bold text-slate-900 font-mono">{viewingEmployeeDossier.entryDate}</div>
-                </div>
-              </div>
-
-              <div className="p-3 bg-white/90 border border-cyan-200 rounded-xl flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2">
-                  <Clock className="w-4 h-4 text-cyan-600 shrink-0" />
-                  <span className="text-slate-600 font-medium">Current Room Duration:</span>
-                </div>
-                <div className="font-black text-slate-900 font-mono text-sm">
-                  {calculateTenure(viewingEmployeeDossier.entryDate, viewingEmployeeDossier.employeeStatus.startsWith('RTD') ? viewingEmployeeDossier.exitDate : null)}
-                </div>
-              </div>
-
-              {/* Action Buttons for Vouchers and Incident Logging */}
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-1 border-t border-cyan-200/60">
-                <button
-                  type="button"
-                  onClick={() => exportMaterialIssuanceForm(viewingEmployeeDossier)}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                  title="Template 3: Material Issuance Form (Doc 150-04)"
-                >
-                  <Download className="w-3.5 h-3.5" /> Material Issuance (T3)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setMisconductForm(prev => ({
-                      ...prev,
-                      employeeId: occ.employeeId,
-                      employeeName: occ.employeeName,
-                      title: occ.title,
-                      division: occ.division,
-                      costCenter: occ.costCenter,
-                      campNo: occ.campNo,
-                      roomNo: occ.roomNo,
-                      contactNo: occ.mobileNo || '+965 '
-                    }));
-                    setShowMisconductModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                  title="Template 5 & 6: Report Misconduct"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setMaintenanceForm(prev => ({
-                      ...prev,
-                      reportedByEmpId: occ.employeeId,
-                      employeeName: occ.employeeName,
-                      floorNo: occ.floorNo || 1,
-                      flatCode: occ.flatCode,
-                      roomNo: occ.roomNo
-                    }));
-                    setShowMaintenanceModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                  title="Template 7: Log Maintenance"
-                >
-                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
-                </button>
-
-                <button
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setViewingEmployeeDossier(null);
-                    handleOpenRelocateModal(occ);
-                  }}
-                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-2xs"
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
-                </button>
-              </div>
-            </div>
-
-            {/* Relocation History */}
-            <div className="space-y-3">
-              <h4 className="text-xs font-bold text-slate-800 uppercase tracking-wider flex items-center gap-1.5">
-                <History className="w-4 h-4 text-slate-600" /> Accommodation & Relocation History Ledger
-              </h4>
-              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-4">
-                <div className="relative pl-6 pb-2 border-l-2 border-cyan-500">
-                  <div className="absolute -left-[9px] top-0 w-4 h-4 rounded-full bg-cyan-500 border-2 border-white" />
-                  <div className="flex items-center justify-between">
-                    <span className="font-bold text-cyan-800">● Active Stay: {viewingEmployeeDossier.campNo} (Room {viewingEmployeeDossier.roomNo})</span>
-                    <span className="font-mono text-slate-500 text-[11px]">{viewingEmployeeDossier.entryDate} – Present</span>
-                  </div>
-                  <div className="text-[11px] text-slate-600 mt-0.5">Grade: {viewingEmployeeDossier.roomGrade} • Cost Center: {viewingEmployeeDossier.costCenter}</div>
-                </div>
-
-                {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
-                  viewingEmployeeDossier.stayHistory.map((hist, idx) => (
-                    <div key={idx} className="relative pl-6 pb-2 border-l-2 border-slate-300">
-                      <div className="absolute -left-[7px] top-0.5 w-3 h-3 rounded-full bg-slate-400 border border-white" />
-                      <div className="flex items-center justify-between">
-                        <span className="font-bold text-slate-700">{hist.campNo} — Room {hist.roomNo}</span>
-                        <span className="font-mono text-slate-500 text-[11px]">{hist.startDate} – {hist.endDate}</span>
-                      </div>
-                      <div className="text-[11px] text-slate-500 mt-0.5">Stayed: {calculateTenure(hist.startDate, hist.endDate)}</div>
-                      <div className="text-[11px] text-slate-700 italic mt-0.5 bg-white p-1.5 rounded border">Reason: {hist.reason}</div>
+              {/* PREVIEW 4: OCCUPANTS RELOCATION FORM (T4) */}
+              {reportPreviewModal.type === 'relocation' && reportPreviewModal.record && (
+                <div className="space-y-4">
+                  <div className="flex items-center justify-between border-b-2 border-black pb-3">
+                    <img src={dhowLogoImg} alt="Dhow" className="h-10 w-auto" />
+                    <h2 className="text-base font-bold uppercase">OCCUPANTS RELOCATION FORM</h2>
+                    <div className="text-right font-mono text-xs">
+                      <div><strong>Doc. Ref.:</strong> {reportPreviewModal.record.docRef}</div>
+                      <div><strong>Date:</strong> {reportPreviewModal.record.relocationDate}</div>
                     </div>
-                  ))
-                ) : (
-                  <div className="text-center py-2 text-xs text-slate-400 italic">No previous relocation records.</div>
-                )}
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2 border-t">
-              <button onClick={() => setViewingEmployeeDossier(null)} className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-bold cursor-pointer">
-                Close Dossier
-              </button>
+                  </div>
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="bg-slate-100">
+                        <th className="border border-black p-1.5">Employee ID</th>
+                        <th className="border border-black p-1.5">Employee Name</th>
+                        <th className="border border-black p-1.5">Designation</th>
+                        <th className="border border-black p-1.5">From</th>
+                        <th className="border border-black p-1.5">To</th>
+                        <th className="border border-black p-1.5">Relocation Date</th>
+                        <th className="border border-black p-1.5">Remarks & Ref</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      <tr className="text-center">
+                        <td className="border border-black p-1.5 font-mono font-bold">#{reportPreviewModal.record.employeeId}</td>
+                        <td className="border border-black p-1.5 font-bold">{reportPreviewModal.record.employeeName}</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.record.title}</td>
+                        <td className="border border-black p-1.5 font-mono">{reportPreviewModal.record.fromRoom}</td>
+                        <td className="border border-black p-1.5 font-mono font-bold">{reportPreviewModal.record.toRoom}</td>
+                        <td className="border border-black p-1.5">{reportPreviewModal.record.relocationDate}</td>
+                        <td className="border border-black p-1.5">[Ref: {reportPreviewModal.record.docRef}] {reportPreviewModal.record.reason}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              )}
             </div>
           </div>
         </div>
       )}
 
-      {/* Bed Relocation Modal */}
+      {/* =================================================================== */}
+      {/* MODAL: BED RELOCATION (WITH MANUAL DOC REF # INPUT - POINT 6)       */}
+      {/* =================================================================== */}
       {relocatingOccupant && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
@@ -3427,572 +3234,591 @@ export default function App() {
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block font-semibold mb-1">Transfer Date</label>
-                  <input type="date" required value={relocationForm.transferDate} onChange={e => setRelocationForm({ ...relocationForm, transferDate: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Transfer Reason</label>
-                  <input type="text" required value={relocationForm.reason} onChange={e => setRelocationForm({ ...relocationForm, reason: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-              </div>
-
-              <div className="flex justify-between items-center pt-3 border-t">
-                <button
-                  type="button"
-                  onClick={() => exportOccupantsRelocationForm({
-                    employeeId: relocatingOccupant.employeeId,
-                    employeeName: relocatingOccupant.employeeName,
-                    title: relocatingOccupant.title,
-                    fromRoom: `${relocatingOccupant.campNo} - ${relocatingOccupant.roomNo}`,
-                    toRoom: `${relocationForm.targetCampId} - ${relocationForm.targetRoomNo}`,
-                    relocationDate: relocationForm.transferDate,
-                    reason: relocationForm.reason
-                  })}
-                  className="px-3 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl font-bold flex items-center gap-1.5 cursor-pointer text-xs"
-                >
-                  <Download className="w-3.5 h-3.5" /> Preview Form (T4)
-                </button>
-                <div className="flex items-center gap-2">
-                  <button type="button" onClick={() => setRelocatingOccupant(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-                  <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer">Confirm & Export</button>
-                </div>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* CHECK-IN MODAL */}
-      {showCheckInModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-cyan-600" /> Room Assignment (AFR Check-In)
-              </h3>
-              <button onClick={() => setShowCheckInModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="p-3 bg-cyan-50 border border-cyan-200 rounded-xl flex items-center justify-between">
-              <span>Target Room: <strong>{checkInForm.roomNo}</strong> (Flat {checkInForm.flatCode})</span>
-              <span className="font-bold text-cyan-700">{checkInForm.roomGrade} Grade</span>
-            </div>
-
-            <form onSubmit={handleCheckInSubmit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Employee ID</label>
-                  <input type="text" required placeholder="6410" value={checkInForm.employeeId} onChange={e => setCheckInForm({ ...checkInForm, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Full Name</label>
-                  <input type="text" required placeholder="Full Name" value={checkInForm.employeeName} onChange={e => setCheckInForm({ ...checkInForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Employee Productive Type</label>
-                  <select
-                    value={checkInForm.productiveType}
-                    onChange={e => setCheckInForm({ ...checkInForm, productiveType: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 font-bold text-slate-800 bg-white"
-                  >
-                    <option value="Direct Employee (DE)">Direct Employee (DE)</option>
-                    <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
-                    <option value="Shutdown">Shutdown</option>
-                    <option value="Others">Others</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Arrival Type</label>
-                  <select
-                    value={checkInForm.arrivalType}
-                    onChange={e => setCheckInForm({ ...checkInForm, arrivalType: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 font-semibold bg-white"
-                  >
-                    <option value="Local Residency Transfer">Local Residency Transfer</option>
-                    <option value="Overseas">Overseas Arrival</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Nationality</label>
+                  <label className="block font-semibold mb-1">Document Reference # (Doc. Ref) *</label>
                   <input
                     type="text"
                     required
-                    placeholder="e.g. India, Egypt, Pakistan"
-                    value={checkInForm.nationality}
-                    onChange={e => setCheckInForm({ ...checkInForm, nationality: e.target.value })}
-                    className="w-full border rounded-xl px-3 py-2 font-semibold"
+                    placeholder="e.g. REL-2026-104"
+                    value={relocationForm.docRef}
+                    onChange={e => setRelocationForm({ ...relocationForm, docRef: e.target.value })}
+                    className="w-full border border-cyan-400 bg-cyan-50/30 rounded-xl px-3 py-2 font-mono font-bold text-cyan-900"
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Mobile Number</label>
-                  <input type="tel" required value={checkInForm.mobileNo} onChange={e => setCheckInForm({ ...checkInForm, mobileNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Passport Number</label>
-                  <input type="text" required value={checkInForm.passportNo} onChange={e => setCheckInForm({ ...checkInForm, passportNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Kuwait Civil ID</label>
-                  <input type="text" required value={checkInForm.civilId} onChange={e => setCheckInForm({ ...checkInForm, civilId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                  <label className="block font-semibold mb-1">Transfer Date</label>
+                  <input type="date" required value={relocationForm.transferDate} onChange={e => setRelocationForm({ ...relocationForm, transferDate: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
                 </div>
               </div>
 
               <div>
-                <label className="block font-semibold mb-1">Job Title</label>
-                <input type="text" required value={checkInForm.title} onChange={e => setCheckInForm({ ...checkInForm, title: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Emergency Contact Name</label>
-                  <input type="text" placeholder="Name & Relation" value={checkInForm.emergencyContactName} onChange={e => setCheckInForm({ ...checkInForm, emergencyContactName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Emergency Phone</label>
-                  <input type="tel" placeholder="+965 or home phone" value={checkInForm.emergencyContactPhone} onChange={e => setCheckInForm({ ...checkInForm, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div className="col-span-2">
-                  <label className="block font-semibold mb-1">Project Cost Center</label>
-                  <select
-                    value={checkInForm.costCenter}
-                    onChange={e => {
-                      const c = costCenters.find(cc => cc.code === e.target.value);
-                      setCheckInForm({ ...checkInForm, costCenter: e.target.value, division: c ? c.division : checkInForm.division });
-                    }}
-                    className="w-full border rounded-xl px-3 py-2 font-mono font-bold"
-                  >
-                    {costCenters.filter(c => c.status === 'Active').map(cc => (
-                      <option key={cc.id} value={cc.code}>{cc.code} — {cc.name}</option>
-                    ))}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Division</label>
-                  <select
-                    value={checkInForm.division}
-                    onChange={e => setCheckInForm({ ...checkInForm, division: e.target.value })}
-                    className="w-full border font-bold rounded-xl px-3 py-2"
-                  >
-                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
+                <label className="block font-semibold mb-1">Transfer / Shift Reason</label>
+                <input type="text" required value={relocationForm.reason} onChange={e => setRelocationForm({ ...relocationForm, reason: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
               </div>
 
               <div className="flex justify-end gap-2 pt-3 border-t">
-                <button type="button" onClick={() => setShowCheckInModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">Confirm Check-In</button>
+                <button type="button" onClick={() => setRelocatingOccupant(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer">
+                  Confirm Shift & Preview Relocation Form
+                </button>
               </div>
             </form>
           </div>
         </div>
       )}
 
-      {/* MISCONDUCT MODAL */}
-      {showMisconductModal && (
+      {/* =================================================================== */}
+      {/* EMPLOYEE DOSSIER MODAL                                              */}
+      {/* =================================================================== */}
+      {viewingEmployeeDossier && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSaveMisconduct} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
             <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <ShieldAlert className="w-5 h-5 text-rose-600" />
-                Accommodation Misconduct Report (Template 5 & 6)
-              </h3>
-              <button type="button" onClick={() => setShowMisconductModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold mb-1">Offender Employee ID</label>
-                <input type="text" required value={misconductForm.employeeId} onChange={e => setMisconductForm({ ...misconductForm, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
+                  #{viewingEmployeeDossier.employeeId}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
+                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
+                    </span>
+                  </div>
+                  <p className="text-slate-500 font-medium">
+                    {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
+                  </p>
+                </div>
               </div>
-              <div>
-                <label className="block font-semibold mb-1">Offender Name</label>
-                <input type="text" required value={misconductForm.employeeName} onChange={e => setMisconductForm({ ...misconductForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block font-semibold mb-1">Accommodation</label>
-                <input type="text" required value={misconductForm.campNo} onChange={e => setMisconductForm({ ...misconductForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1">Room No</label>
-                <input type="text" required value={misconductForm.roomNo} onChange={e => setMisconductForm({ ...misconductForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1">Incident Time</label>
-                <input type="text" required value={misconductForm.incidentTime} onChange={e => setMisconductForm({ ...misconductForm, incidentTime: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => setEditingEmployeeModal({ ...viewingEmployeeDossier, originalId: viewingEmployeeDossier.employeeId })}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" /> Edit Details
+                </button>
+                <button onClick={() => setViewingEmployeeDossier(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
               </div>
             </div>
 
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Civil ID</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Passport #</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Mobile</div>
+                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Nationality</div>
+                <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Status</div>
+                <div className="mt-0.5 font-bold text-emerald-700">{viewingEmployeeDossier.employeeStatus}</div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-cyan-600" /> Current Room Allocation
+                </span>
+                <span className="font-bold px-2.5 py-1 rounded-lg bg-white text-cyan-700 border border-cyan-200">
+                  {viewingEmployeeDossier.roomGrade} Grade
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <span className="text-slate-500">Camp:</span>
+                  <div className="font-bold text-slate-900">{viewingEmployeeDossier.campNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Room:</span>
+                  <div className="font-bold text-cyan-700 font-mono">Room {viewingEmployeeDossier.roomNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Entry Date & Ref:</span>
+                  <div className="font-bold text-slate-900 font-mono">{viewingEmployeeDossier.entryDate} ({viewingEmployeeDossier.afrEntryRef || '150-04'})</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-cyan-200/60">
+                <button
+                  type="button"
+                  onClick={() => setReportPreviewModal({
+                    type: 'issuance',
+                    occupant: viewingEmployeeDossier,
+                    arrivalType: viewingEmployeeDossier.arrivalType || 'Local Residency Transfer',
+                    docRef: viewingEmployeeDossier.afrEntryRef || '150-04',
+                    materials: viewingEmployeeDossier.materialsIssued || { mattress: true, pillow: true, bedsheet: true, blanket: true }
+                  })}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Preview Material Issuance (T3)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMisconductForm(prev => ({
+                      ...prev,
+                      employeeId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      title: occ.title,
+                      division: occ.division,
+                      costCenter: occ.costCenter,
+                      campNo: occ.campNo,
+                      roomNo: occ.roomNo,
+                      contactNo: occ.mobileNo || '+965 '
+                    }));
+                    setShowMisconductModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMaintenanceForm(prev => ({
+                      ...prev,
+                      reportedByEmpId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      floorNo: occ.floorNo || 1,
+                      flatCode: occ.flatCode,
+                      roomNo: occ.roomNo
+                    }));
+                    setShowMaintenanceModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
+                </button>
+
+                <button
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setViewingEmployeeDossier(null);
+                    handleOpenRelocateModal(occ);
+                  }}
+                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
+                </button>
+              </div>
+            </div>
+
+            {/* Relocation History */}
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-800 uppercase">Accommodation & Shift History Ledger</h4>
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+                {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
+                  viewingEmployeeDossier.stayHistory.map((hist, idx) => (
+                    <div key={idx} className="border-l-2 border-cyan-600 pl-3">
+                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
+                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-400 italic">No previous camp shifts recorded.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* REMAINING MODALS (EDIT CAMP, ADD BUILDING, COST CENTERS, ETC.)      */}
+      {/* =================================================================== */}
+      {editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900">Edit Camp ({editingCampModal.campNo})</h3>
+              <button onClick={() => setEditingCampModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleSaveCampEdits} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Camp Code</label>
+                  <input type="text" required value={editingCampModal.campNo} onChange={e => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Camp Area</label>
+                  <input type="text" required value={editingCampModal.campArea} onChange={e => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-100 border rounded-xl flex items-center justify-between">
+                <div className="font-bold">Total Floors: {editingCampModal.floors.length}</div>
+                <div className="flex gap-2">
+                  {editingCampModal.floors.length > 1 && (
+                    <button type="button" onClick={handleRemoveTopFloorDraft} className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold cursor-pointer">
+                      - Remove Top Floor
+                    </button>
+                  )}
+                  <button type="button" onClick={handleOpenAddFloorConfig} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold cursor-pointer">
+                    + Add New Floor
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {editingCampModal.floors.map(fl => (
+                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between">
+                    <span className="font-bold">Floor {fl.floorNo} ({fl.flats.length} Flats)</span>
+                    <div className="flex gap-1.5">
+                      {fl.flats.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveFlatFromFloor(fl.floorNo)} className="px-2 py-1 bg-rose-50 text-rose-700 border rounded font-semibold">- Flat</button>
+                      )}
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')} className="px-2 py-1 bg-cyan-50 text-cyan-800 border rounded font-bold">+ NM Flat</button>
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')} className="px-2 py-1 bg-amber-50 text-amber-800 border rounded font-bold">+ M Flat</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onClick={() => setEditingCampModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Save Camp</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddFloorConfigModal && editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-60 flex items-center justify-center p-4">
+          <form onSubmit={handleCommitNewFloorToCamp} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+            <h3 className="text-base font-bold">Configure Floor {editingCampModal.floors.length + 1}</h3>
             <div>
-              <label className="block font-semibold mb-1">Location of Offence</label>
-              <input type="text" required value={misconductForm.incidentLocation} onChange={e => setMisconductForm({ ...misconductForm, incidentLocation: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              <label className="block font-semibold mb-1">Total Flats</label>
+              <input type="number" min="1" max="10" required value={newFloorDraft.flatsCount} onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
             </div>
-
             <div>
-              <label className="block font-semibold mb-1">Type of Violation</label>
-              <input type="text" required value={misconductForm.typeOfViolation} onChange={e => setMisconductForm({ ...misconductForm, typeOfViolation: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-rose-700" />
+              <label className="block font-semibold mb-1">Non-Manual Flats (2 beds/rm)</label>
+              <input type="number" min="0" max={newFloorDraft.flatsCount} required value={newFloorDraft.nonManualFlats} onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" />
             </div>
-
-            <div>
-              <label className="block font-semibold mb-1">Brief Description of Offence</label>
-              <textarea rows={3} required value={misconductForm.description} onChange={e => setMisconductForm({ ...misconductForm, description: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Detail the violation, witnesses, and facts..." />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border rounded-xl">
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700">Witness Name</label>
-                <input type="text" value={misconductForm.witnessName} onChange={e => setMisconductForm({ ...misconductForm, witnessName: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5" />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1 text-slate-700">Witness ID</label>
-                <input type="text" value={misconductForm.witnessId} onChange={e => setMisconductForm({ ...misconductForm, witnessId: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5 font-mono" />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <button type="button" onClick={() => setShowMisconductModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold cursor-pointer">Record & Export Slip (.xlsx)</button>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowAddFloorConfigModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Add Floor</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* MAINTENANCE MODAL */}
-      {showMaintenanceModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <form onSubmit={handleSaveMaintenance} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Wrench className="w-5 h-5 text-amber-600" />
-                Accommodation Maintenance Complaint (Template 7)
-              </h3>
-              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+      {showManageCostCentersModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Project Cost Centers & Divisions</h3>
+              <button onClick={() => setShowManageCostCentersModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
             </div>
 
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block font-semibold mb-1">Date</label>
-                <input type="date" required value={maintenanceForm.date} onChange={e => setMaintenanceForm({ ...maintenanceForm, date: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+              <div className="font-bold text-blue-900">Operating Divisions ({divisions.length})</div>
+              <div className="flex flex-wrap gap-2">
+                {divisions.map(div => (
+                  <span key={div} className="px-3 py-1 bg-white border rounded-lg font-bold flex items-center gap-1.5">
+                    {div}
+                    <button type="button" onClick={() => handleRemoveDivision(div)} className="text-rose-600 font-bold">×</button>
+                  </span>
+                ))}
               </div>
-              <div>
-                <label className="block font-semibold mb-1">Month</label>
-                <input type="text" required value={maintenanceForm.month} onChange={e => setMaintenanceForm({ ...maintenanceForm, month: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1">Room No</label>
-                <input type="text" required value={maintenanceForm.roomNo} onChange={e => setMaintenanceForm({ ...maintenanceForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
-              </div>
+              <form onSubmit={handleAddDivision} className="flex gap-2 pt-1">
+                <input type="text" placeholder="New Division..." value={newDivisionInput} onChange={e => setNewDivisionInput(e.target.value)} className="bg-white border rounded-lg px-3 py-1.5 flex-1" />
+                <button type="submit" className="px-3.5 py-1.5 bg-blue-700 text-white font-bold rounded-lg">+ Add Division</button>
+              </form>
             </div>
 
-            <div>
-              <label className="block font-semibold mb-1">Maintenance Issue Details</label>
-              <textarea rows={2.5} required value={maintenanceForm.issueDetails} onChange={e => setMaintenanceForm({ ...maintenanceForm, issueDetails: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Describe the leak, electrical issue, A/C failure..." />
-            </div>
-
-            <div className="grid grid-cols-2 gap-3">
-              <div>
-                <label className="block font-semibold mb-1">Reported by Emp ID</label>
-                <input type="text" required value={maintenanceForm.reportedByEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, reportedByEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1">Employee Name</label>
-                <input type="text" required value={maintenanceForm.employeeName} onChange={e => setMaintenanceForm({ ...maintenanceForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-3 gap-3">
-              <div>
-                <label className="block font-semibold mb-1">Status</label>
-                <select value={maintenanceForm.status} onChange={e => setMaintenanceForm({ ...maintenanceForm, status: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold">
-                  <option value="Pending">Pending</option>
-                  <option value="Completed">Completed</option>
+            <form onSubmit={handleCreateCostCenter} className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border rounded-xl">
+              <input type="text" required placeholder="Code (1IDS040)" value={newCostCenterForm.code} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5 font-mono uppercase font-bold" />
+              <input type="text" required placeholder="Project Name" value={newCostCenterForm.name} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5" />
+              <div className="flex gap-2">
+                <select value={newCostCenterForm.division} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })} className="border bg-white rounded-lg px-2 py-1.5 flex-1 font-bold">
+                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
+                <button type="submit" className="px-4 py-1.5 bg-cyan-600 text-white font-bold rounded-lg">Add</button>
               </div>
-              <div>
-                <label className="block font-semibold mb-1">Material Cost (KWD)</label>
-                <input type="text" value={maintenanceForm.replacedMaterialCost} onChange={e => setMaintenanceForm({ ...maintenanceForm, replacedMaterialCost: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-              </div>
-              <div>
-                <label className="block font-semibold mb-1">Charge to Emp ID#</label>
-                <input type="text" value={maintenanceForm.chargeToEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, chargeToEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-              </div>
-            </div>
-
-            <div className="flex justify-end gap-2 pt-2 border-t">
-              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer">Save to Maintenance Log</button>
-            </div>
-          </form>
+            </form>
+          </div>
         </div>
       )}
 
-      {/* Quick Manage Modal */}
+      {showExcelImportModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Import Preview: {excelImportFileName} ({excelImportStats.valid} Valid)</h3>
+              <button onClick={() => setShowExcelImportModal(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowExcelImportModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button onClick={handleCommitExcelImport} className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">
+                Confirm Import ({excelImportStats.valid})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showAddCampModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Add Building</h3>
+              <button onClick={() => setShowAddCampModal(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <form onSubmit={e => {
+              e.preventDefault();
+              const campDigit = newCampForm.campDigit || String(camps.length + 1);
+              const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
+              const generatedFloors = newCampForm.floorConfigs.map(fc => {
+                const floorStr = String(fc.floorNo).padStart(2, '0');
+                const floorFlats = [];
+                for (let fl = 1; fl <= fc.flatsCount; fl++) {
+                  const flatStr = String(fl).padStart(2, '0');
+                  const isNM = fl <= fc.nonManualFlats;
+                  const flatGrade = isNM ? 'Non-Manual' : 'Manual';
+                  const gradeInitial = isNM ? 'NM' : 'M';
+                  const roomCapacity = isNM ? 2 : 3;
+                  const flatRooms = [];
+                  const roomLetters = ['A', 'B', 'C', 'D', 'E', 'F'];
+                  for (let r = 0; r < roomsPerFl; r++) {
+                    flatRooms.push({
+                      roomNo: `${campDigit}-${floorStr}-${flatStr}-${roomLetters[r] || `R${r + 1}`}`,
+                      capacity: roomCapacity,
+                      occupants: []
+                    });
+                  }
+                  floorFlats.push({
+                    flatNo: fl,
+                    flatCode: `${campDigit}-${floorStr}-${flatStr}-${gradeInitial}`,
+                    roomGrade: flatGrade,
+                    rooms: flatRooms
+                  });
+                }
+                return { floorNo: fc.floorNo, flats: floorFlats };
+              });
+
+              const newCampObj = {
+                id: `camp-${Date.now()}`,
+                campNo: newCampForm.campNo,
+                campArea: newCampForm.campArea,
+                costCenter: '1ACD000',
+                campDigit,
+                campStartDate: newCampForm.campStartDate,
+                status: 'Active',
+                floors: generatedFloors
+              };
+              setCamps(prev => [...prev, newCampObj]);
+              setSelectedCampId(newCampObj.id);
+              setSelectedFloorNo(1);
+              setShowAddCampModal(false);
+            }} className="space-y-4">
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Camp Code</label>
+                  <input type="text" required value={newCampForm.campNo} onChange={e => setNewCampForm({ ...newCampForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Area</label>
+                  <input type="text" required value={newCampForm.campArea} onChange={e => setNewCampForm({ ...newCampForm, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Total Floors</label>
+                  <input type="number" min="1" max="20" value={newCampForm.floorsCount} onChange={e => handleFloorsCountChange(e.target.value)} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+              </div>
+
+              <div className="max-h-56 overflow-y-auto border rounded-xl p-2 space-y-2">
+                {newCampForm.floorConfigs.map(fc => (
+                  <div key={fc.floorNo} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
+                    <span className="font-bold">Floor {fc.floorNo}</span>
+                    <input type="number" min="1" max="15" value={fc.flatsCount} onChange={e => {
+                      const val = parseInt(e.target.value, 10) || 1;
+                      setNewCampForm(prev => ({
+                        ...prev,
+                        floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, flatsCount: val } : f)
+                      }));
+                    }} className="border bg-white rounded px-2 py-1" placeholder="Flats" />
+                    <input type="number" min="0" max={fc.flatsCount} value={fc.nonManualFlats} onChange={e => {
+                      const val = parseInt(e.target.value, 10) || 0;
+                      setNewCampForm(prev => ({
+                        ...prev,
+                        floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: val } : f)
+                      }));
+                    }} className="border bg-white rounded px-2 py-1" placeholder="NM Flats" />
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2">
+                <button type="button" onClick={() => setShowAddCampModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Create Building</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {selectedInvoiceModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div id="invoice-print-area" className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <span className="font-mono font-bold">INV-{selectedInvoiceModal.costCenter}-{billingPeriod}</span>
+              <button onClick={() => setSelectedInvoiceModal(null)} className="no-print"><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex justify-end gap-2 no-print">
+              <button onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}`)} className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold flex items-center gap-1.5">
+                <Printer className="w-3.5 h-3.5" /> Print Invoice
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {manageOccupantModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
             <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900">Manage #{manageOccupantModal.employeeId} ({manageOccupantModal.employeeName})</h3>
-              <button onClick={() => setManageOccupantModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+              <h3 className="text-base font-bold">Manage #{manageOccupantModal.employeeId} ({manageOccupantModal.employeeName})</h3>
+              <button onClick={() => setManageOccupantModal(null)}><X className="w-5 h-5" /></button>
             </div>
-            <div className="p-3 bg-slate-50 border rounded-xl space-y-1">
-              <div><strong>Type:</strong> <span className="font-semibold text-blue-700">{manageOccupantModal.productiveType || 'Direct Employee (DE)'}</span></div>
-              <div><strong>Nationality:</strong> <span className="font-semibold text-slate-800">{manageOccupantModal.nationality}</span></div>
-              <div><strong>Mobile:</strong> {manageOccupantModal.mobileNo || 'N/A'}</div>
-              <div><strong>Emergency:</strong> {manageOccupantModal.emergencyContactName} ({manageOccupantModal.emergencyContactPhone})</div>
-              <div><strong>Status:</strong> <span className="font-bold text-cyan-700">{manageOccupantModal.employeeStatus}</span></div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-2 pt-2">
-              {manageOccupantModal.employeeStatus !== 'On Leave' && !manageOccupantModal.employeeStatus.startsWith('RTD') && (
-                <button onClick={() => setShowLeaveModal(manageOccupantModal)} className="p-2.5 bg-amber-500 hover:bg-amber-600 text-white rounded-xl font-bold cursor-pointer">
+            <div className="grid grid-cols-2 gap-2">
+              <button onClick={() => { setEditingEmployeeModal({ ...manageOccupantModal, originalId: manageOccupantModal.employeeId }); setManageOccupantModal(null); }} className="p-2.5 bg-slate-800 text-white rounded-xl font-bold cursor-pointer">
+                Edit Employee Details
+              </button>
+              <button onClick={() => { handleOpenRelocateModal(manageOccupantModal); setManageOccupantModal(null); }} className="p-2.5 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">
+                Relocate / Shift Bed
+              </button>
+              {manageOccupantModal.employeeStatus !== 'On Leave' && (
+                <button onClick={() => setShowLeaveModal(manageOccupantModal)} className="p-2.5 bg-amber-500 text-white rounded-xl font-bold cursor-pointer">
                   Mark On Leave
                 </button>
               )}
               {manageOccupantModal.employeeStatus === 'On Leave' && (
-                <button onClick={() => setShowReturnJobModal(manageOccupantModal)} className="p-2.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer">
+                <button onClick={() => setShowReturnJobModal(manageOccupantModal)} className="p-2.5 bg-emerald-600 text-white rounded-xl font-bold cursor-pointer">
                   Return from Leave
                 </button>
               )}
-              {!manageOccupantModal.employeeStatus.startsWith('RTD') && (
-                <button onClick={() => setShowTransferRequestModal(manageOccupantModal)} className="p-2.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl font-bold cursor-pointer">
-                  Change Cost Center
-                </button>
-              )}
-              {!manageOccupantModal.employeeStatus.startsWith('RTD') && (
-                <button onClick={() => setShowRtdModal(manageOccupantModal)} className="p-2.5 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold cursor-pointer">
-                  Process RTD Exit
-                </button>
-              )}
+              <button onClick={() => setShowTransferRequestModal(manageOccupantModal)} className="p-2.5 bg-blue-600 text-white rounded-xl font-bold cursor-pointer">
+                Change Cost Center
+              </button>
+              <button onClick={() => setShowRtdModal(manageOccupantModal)} className="p-2.5 bg-rose-600 text-white rounded-xl font-bold cursor-pointer">
+                Process RTD Exit
+              </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Leave Modal */}
       {showLeaveModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleLeaveSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900">Mark On Leave (#{showLeaveModal.employeeId})</h3>
-            <div>
-              <label className="block font-bold mb-1">Leave Start Date</label>
-              <input type="date" required value={leaveForm.startDate} onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div>
-              <label className="block font-bold mb-1">Expected End Date</label>
-              <input type="date" required value={leaveForm.expectedEndDate} onChange={e => setLeaveForm({ ...leaveForm, expectedEndDate: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div>
-              <label className="block font-bold mb-1">AFR Log / Vacation Ref</label>
-              <input type="text" required value={leaveForm.afrLogNo} onChange={e => setLeaveForm({ ...leaveForm, afrLogNo: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowLeaveModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg font-bold cursor-pointer">Cancel</button>
-              <button type="submit" className="px-4 py-2 bg-amber-500 text-white rounded-lg font-bold cursor-pointer">Confirm Leave</button>
+            <h3 className="text-base font-bold">Mark On Leave (#{showLeaveModal.employeeId})</h3>
+            <input type="date" required value={leaveForm.startDate} onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            <input type="date" required value={leaveForm.expectedEndDate} onChange={e => setLeaveForm({ ...leaveForm, expectedEndDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowLeaveModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-amber-500 text-white rounded-lg font-bold">Confirm Leave</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Return to Job Modal */}
       {showReturnJobModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleReturnJobSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900">Return to Job (#{showReturnJobModal.employeeId})</h3>
-            <div>
-              <label className="block font-bold mb-1">Actual Return Date</label>
-              <input type="date" required value={returnJobForm.actualReturnDate} onChange={e => setReturnJobForm({ ...returnJobForm, actualReturnDate: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div>
-              <label className="block font-bold mb-1">Remarks</label>
-              <input type="text" value={returnJobForm.remarks} onChange={e => setReturnJobForm({ ...returnJobForm, remarks: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowReturnJobModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg font-bold cursor-pointer">Cancel</button>
-              <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold cursor-pointer">Confirm Return</button>
+            <h3 className="text-base font-bold">Return to Job (#{showReturnJobModal.employeeId})</h3>
+            <input type="date" required value={returnJobForm.actualReturnDate} onChange={e => setReturnJobForm({ ...returnJobForm, actualReturnDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowReturnJobModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold">Confirm Return</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* RTD Exit Modal */}
       {showRtdModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleRtdSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900">Process RTD Exit (#{showRtdModal.employeeId})</h3>
-            <div>
-              <label className="block font-bold mb-1">RTD Type</label>
-              <select value={rtdForm.rtdType} onChange={e => setRtdForm({ ...rtdForm, rtdType: e.target.value })} className="w-full border rounded-lg p-2 font-bold">
-                <option value="Resigned">Resigned</option>
-                <option value="Terminated">Terminated</option>
-                <option value="Dismissed">Dismissed</option>
-              </select>
-            </div>
-            <div>
-              <label className="block font-semibold mb-1">Exit Date</label>
-              <input type="date" required value={rtdForm.rtdDate} onChange={e => setRtdForm({ ...rtdForm, rtdDate: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div>
-              <label className="block font-semibold mb-1">AFR Exit Ref #</label>
-              <input type="text" required value={rtdForm.afrExitRef} onChange={e => setRtdForm({ ...rtdForm, afrExitRef: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowRtdModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg font-bold cursor-pointer">Cancel</button>
-              <button type="submit" className="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold cursor-pointer">Vacate Bed & Confirm RTD</button>
+            <h3 className="text-base font-bold">Process RTD Exit (#{showRtdModal.employeeId})</h3>
+            <select value={rtdForm.rtdType} onChange={e => setRtdForm({ ...rtdForm, rtdType: e.target.value })} className="w-full border rounded-lg p-2 font-bold">
+              <option value="Resigned">Resigned</option>
+              <option value="Terminated">Terminated</option>
+              <option value="Dismissed">Dismissed</option>
+            </select>
+            <input type="date" required value={rtdForm.rtdDate} onChange={e => setRtdForm({ ...rtdForm, rtdDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowRtdModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold">Confirm RTD</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* Transfer Request Modal */}
       {showTransferRequestModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleCostCenterTransferRequest} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
-            <h3 className="text-base font-bold text-slate-900">Transfer Cost Center (#{showTransferRequestModal.employeeId})</h3>
-            <div>
-              <label className="block font-bold mb-1">Target Project Cost Center</label>
-              <select
-                value={transferRequestForm.toCostCenter}
-                onChange={e => {
-                  const ccCode = e.target.value;
-                  const cc = costCenters.find(c => c.code === ccCode);
-                  setTransferRequestForm({ ...transferRequestForm, toCostCenter: ccCode, toDivision: cc ? cc.division : 'General' });
-                }}
-                className="w-full border rounded-lg p-2 font-bold font-mono"
-              >
-                {costCenters.filter(c => c.status === 'Active').map(cc => (
-                  <option key={cc.id} value={cc.code}>{cc.code} — {cc.name} ({cc.division})</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="block font-semibold mb-1">Reason for Transfer</label>
-              <input type="text" required value={transferRequestForm.reason} onChange={e => setTransferRequestForm({ ...transferRequestForm, reason: e.target.value })} className="w-full border rounded-lg p-2" />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowTransferRequestModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg font-bold cursor-pointer">Cancel</button>
-              <button type="submit" className="px-4 py-2 bg-cyan-600 text-white rounded-lg font-bold cursor-pointer">
-                {currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'AUDITOR' ? 'Apply Transfer Directly' : 'Submit Transfer Request'}
-              </button>
+            <h3 className="text-base font-bold">Transfer Cost Center (#{showTransferRequestModal.employeeId})</h3>
+            <select value={transferRequestForm.toCostCenter} onChange={e => setTransferRequestForm({ ...transferRequestForm, toCostCenter: e.target.value })} className="w-full border rounded-lg p-2 font-bold font-mono">
+              {costCenters.map(cc => <option key={cc.id} value={cc.code}>{cc.code} — {cc.name}</option>)}
+            </select>
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowTransferRequestModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
+              <button type="submit" className="px-4 py-2 bg-cyan-600 text-white rounded-lg font-bold">Submit</button>
             </div>
           </form>
         </div>
       )}
 
-      {/* User Management Modals */}
       {showAddUserModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <UserPlus className="w-5 h-5 text-cyan-600" /> Add System User Account
-              </h3>
-              <button onClick={() => setShowAddUserModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+          <form onSubmit={handleCreateUser} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-3.5 shadow-2xl text-xs">
+            <h3 className="text-base font-bold">Add System User</h3>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="text" required placeholder="Staff ID (EDT-025)" value={newUserForm.staffId} onChange={e => setNewUserForm({ ...newUserForm, staffId: e.target.value })} className="border rounded-xl px-3 py-2" />
+              <input type="text" required placeholder="Full Name" value={newUserForm.name} onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })} className="border rounded-xl px-3 py-2" />
             </div>
-
-            <form onSubmit={handleCreateUser} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Staff ID</label>
-                  <input type="text" required placeholder="EDT-025" value={newUserForm.staffId} onChange={e => setNewUserForm({ ...newUserForm, staffId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Full Name</label>
-                  <input type="text" required placeholder="Full Name" value={newUserForm.name} onChange={e => setNewUserForm({ ...newUserForm, name: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Email</label>
-                  <input type="email" required placeholder="user@al-dhow.com" value={newUserForm.email} onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Role</label>
-                  <select value={newUserForm.role} onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value, ...getRoleDefaultPermissions(e.target.value) })} className="w-full border rounded-xl px-3 py-2 font-bold">
-                    <option value="CAMP_EDITOR">Camp Editor</option>
-                    <option value="AUDITOR">Auditor (Compliance)</option>
-                    <option value="SUPER_ADMIN">Super Admin</option>
-                  </select>
-                </div>
-              </div>
-
-              <div>
-                <label className="block font-semibold mb-1">Initial Password</label>
-                <input type="password" required placeholder="Min 8 characters" value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">Create User</button>
-              </div>
-            </form>
-          </div>
+            <div className="grid grid-cols-2 gap-3">
+              <input type="email" required placeholder="Email" value={newUserForm.email} onChange={e => setNewUserForm({ ...newUserForm, email: e.target.value })} className="border rounded-xl px-3 py-2" />
+              <select value={newUserForm.role} onChange={e => setNewUserForm({ ...newUserForm, role: e.target.value })} className="border rounded-xl px-3 py-2 font-bold">
+                <option value="CAMP_EDITOR">Camp Editor</option>
+                <option value="AUDITOR">Auditor</option>
+                <option value="SUPER_ADMIN">Super Admin</option>
+              </select>
+            </div>
+            <input type="password" required placeholder="Initial Password" value={newUserForm.password} onChange={e => setNewUserForm({ ...newUserForm, password: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowAddUserModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Create User</button>
+            </div>
+          </form>
         </div>
       )}
 
       {showResetPasswordModal && targetUserForReset && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <KeyRound className="w-5 h-5 text-cyan-600" /> Reset Password
-              </h3>
-              <button onClick={() => { setShowResetPasswordModal(false); setTargetUserForReset(null); }}><X className="w-5 h-5 text-slate-400" /></button>
+          <form onSubmit={handleExecutePasswordReset} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+            <h3 className="text-base font-bold">Reset Password for {targetUserForReset.name}</h3>
+            <input type="password" required placeholder="New Password" value={newPasswordValue} onChange={e => setNewPasswordValue(e.target.value)} className="w-full border rounded-xl px-3 py-2" />
+            <input type="password" required placeholder="Confirm Password" value={confirmPasswordValue} onChange={e => setConfirmPasswordValue(e.target.value)} className="w-full border rounded-xl px-3 py-2" />
+            <div className="flex justify-end gap-2">
+              <button type="button" onClick={() => setShowResetPasswordModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Update Password</button>
             </div>
-            {resetSuccessMessage ? (
-              <div className="p-3 bg-emerald-50 border border-emerald-200 text-emerald-800 rounded-xl font-semibold">{resetSuccessMessage}</div>
-            ) : (
-              <form onSubmit={handleExecutePasswordReset} className="space-y-3.5">
-                <div>
-                  <label className="block font-semibold mb-1">New Password for {targetUserForReset.name}</label>
-                  <input type="password" required placeholder="Min 8 characters" value={newPasswordValue} onChange={e => setNewPasswordValue(e.target.value)} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Confirm Password</label>
-                  <input type="password" required placeholder="Re-enter password" value={confirmPasswordValue} onChange={e => setConfirmPasswordValue(e.target.value)} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div className="flex justify-end gap-2 pt-2">
-                  <button type="button" onClick={() => { setShowResetPasswordModal(false); setTargetUserForReset(null); }} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-                  <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">Update Password</button>
-                </div>
-              </form>
-            )}
-          </div>
-        </div>
-      )}
-
-      {/* Decommission Lockout Modal */}
-      {decommissionLockoutModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border border-rose-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
-            <div className="flex items-center gap-3 text-rose-700">
-              <AlertTriangle className="w-8 h-8 text-rose-600 shrink-0" />
-              <div>
-                <h3 className="text-base font-bold text-slate-900">Decommissioning Blocked</h3>
-                <p className="text-rose-600">Facility {decommissionLockoutModal.camp.campNo} still has {decommissionLockoutModal.occupants.length} active occupants.</p>
-              </div>
-            </div>
-            <p className="text-slate-600">Relocate or check out all residents before archiving this facility.</p>
-            <div className="flex justify-end pt-2">
-              <button onClick={() => setDecommissionLockoutModal(null)} className="px-5 py-2 bg-slate-900 text-white rounded-xl font-bold cursor-pointer">
-                Understood
-              </button>
-            </div>
-          </div>
+          </form>
         </div>
       )}
     </div>

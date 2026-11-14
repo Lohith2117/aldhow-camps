@@ -1,9 +1,15 @@
 import React, { useState } from 'react';
 import {
-  Download, Printer, FileSpreadsheet, Building2, UserCheck, ShieldAlert,
-  Wrench, ArrowRightLeft, Layers, CheckCircle2, Calendar
+  Download, Printer, Building2, UserCheck, ShieldAlert, Wrench, Calendar
 } from 'lucide-react';
 import dhowLogoImg from '../assets/dhow-logo.png';
+import {
+  printFormattedElement,
+  exportCampOccupancySummary,
+  exportDailyOccupancyReport,
+  exportMisconductLog,
+  exportMaintenanceLog
+} from '../utils/reportGenerators';
 
 export default function ReportsTab({
   camps,
@@ -12,383 +18,470 @@ export default function ReportsTab({
   rtdLogs,
   maintenanceLogs = [],
   misconductLogs = [],
-  activeCamp,
-  onExportCampOccupancySummary,
-  onExportDailyOccupancyReport,
-  onExportMisconductLog,
-  onExportMaintenanceLog
+  activeCamp
 }) {
-  const [selectedTemplateTab, setSelectedTemplateTab] = useState('t1');
+  const [selectedTemplateTab, setSelectedTemplateTab] = useState('daily');
+  const [reportCampId, setReportCampId] = useState(camps[0]?.id || 'camp-1');
   const [inspectionType, setInspectionType] = useState('Weekly Routine Inspection');
+  const [conductedAt, setConductedAt] = useState('All Active Camp Facilities');
   const [approverName, setApproverName] = useState('Mohamed Bayoumi');
   const [reportRemarks, setReportRemarks] = useState('Regular accommodation operations compliant and inspected.');
-  const todayStr = new Date().toISOString().split('T')[0];
+
+  const targetReportCamp = camps.find(c => c.id === reportCampId) || activeCamp || camps[0];
+
+  const today = new Date();
+  const todayFormatted = today.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '/');
+  const yesterday = new Date(today);
+  yesterday.setDate(today.getDate() - 1);
+  const yesterdayFormatted = yesterday.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
+
+  const totalSummaryRows = Math.max(34, camps.length);
 
   return (
     <div className="space-y-5">
-      {/* 7-Template Navigation Bar */}
-      <div className="bg-white border border-slate-200 rounded-2xl p-3 shadow-xs flex items-center gap-2 overflow-x-auto">
-        <button
-          onClick={() => setSelectedTemplateTab('t1')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
-            selectedTemplateTab === 't1' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          <Building2 className="w-4 h-4 text-cyan-400" />
-          <span>1. Summary Status (T1)</span>
-        </button>
+      {/* Control Bar */}
+      <div className="bg-white border border-slate-200 rounded-2xl p-3.5 shadow-xs flex flex-wrap items-center justify-between gap-3 no-print">
+        <div className="flex items-center gap-2 overflow-x-auto">
+          <button
+            onClick={() => setSelectedTemplateTab('daily')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
+              selectedTemplateTab === 'daily' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <UserCheck className="w-4 h-4 text-emerald-400" />
+            <span>Daily Report (Individual Camp)</span>
+          </button>
 
-        <button
-          onClick={() => setSelectedTemplateTab('t2')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
-            selectedTemplateTab === 't2' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          <UserCheck className="w-4 h-4 text-emerald-400" />
-          <span>2. Daily Occupancy (T2)</span>
-        </button>
+          <button
+            onClick={() => setSelectedTemplateTab('weekly')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
+              selectedTemplateTab === 'weekly' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Calendar className="w-4 h-4 text-cyan-400" />
+            <span>Weekly Report (Individual Camp)</span>
+          </button>
 
-        <button
-          onClick={() => setSelectedTemplateTab('t6')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
-            selectedTemplateTab === 't6' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          <ShieldAlert className="w-4 h-4 text-rose-400" />
-          <span>5 & 6. Disciplinary Log (T6)</span>
-        </button>
+          <button
+            onClick={() => setSelectedTemplateTab('monthly')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
+              selectedTemplateTab === 'monthly' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Building2 className="w-4 h-4 text-purple-400" />
+            <span>Monthly Summary (All Camps Combined)</span>
+          </button>
 
-        <button
-          onClick={() => setSelectedTemplateTab('t7')}
-          className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
-            selectedTemplateTab === 't7' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
-          }`}
-        >
-          <Wrench className="w-4 h-4 text-amber-400" />
-          <span>7. Maintenance Log (T7)</span>
-        </button>
+          <button
+            onClick={() => setSelectedTemplateTab('t6')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
+              selectedTemplateTab === 't6' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <ShieldAlert className="w-4 h-4 text-rose-400" />
+            <span>Disciplinary Log</span>
+          </button>
+
+          <button
+            onClick={() => setSelectedTemplateTab('t7')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
+              selectedTemplateTab === 't7' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <Wrench className="w-4 h-4 text-amber-400" />
+            <span>Maintenance Log</span>
+          </button>
+        </div>
+
+        <div className="flex items-center gap-2">
+          {(selectedTemplateTab === 'daily' || selectedTemplateTab === 'weekly') && (
+            <select
+              value={reportCampId}
+              onChange={e => setReportCampId(e.target.value)}
+              className="bg-slate-50 border border-slate-300 text-slate-900 font-bold text-xs rounded-xl px-3 py-2"
+            >
+              {camps.map(c => <option key={c.id} value={c.id}>{c.campNo} ({c.campArea})</option>)}
+            </select>
+          )}
+
+          <button
+            type="button"
+            onClick={() => printFormattedElement('excel-print-area', 'Al-Dhow Official Report')}
+            className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
+          >
+            <Printer className="w-4 h-4" /> Print / Save PDF
+          </button>
+
+          {(selectedTemplateTab === 'daily' || selectedTemplateTab === 'weekly') && (
+            <button
+              type="button"
+              onClick={() => exportDailyOccupancyReport(targetReportCamp, occupants)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> Download Excel (.xlsx)
+            </button>
+          )}
+
+          {selectedTemplateTab === 'monthly' && (
+            <button
+              type="button"
+              onClick={() => exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs, {
+                inspectionType,
+                conductedAt,
+                approverName,
+                remarks: reportRemarks
+              })}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> Download Excel (.xlsx)
+            </button>
+          )}
+
+          {selectedTemplateTab === 't6' && (
+            <button
+              type="button"
+              onClick={() => exportMisconductLog(misconductLogs)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> Download Excel (.xlsx)
+            </button>
+          )}
+
+          {selectedTemplateTab === 't7' && (
+            <button
+              type="button"
+              onClick={() => exportMaintenanceLog(maintenanceLogs)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> Download Excel (.xlsx)
+            </button>
+          )}
+        </div>
       </div>
 
-      {/* TEMPLATE 1: CAMP OCCUPANCY SUMMARY STATUS (EXACT ON-SCREEN SHEET) */}
-      {selectedTemplateTab === 't1' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
-            <div className="flex items-center gap-3">
-              <img src={dhowLogoImg} alt="Dhow" className="h-9 w-auto" />
-              <div>
-                <h2 className="text-base font-black tracking-tight text-slate-900 uppercase">
-                  CAMP OCCUPANCY SUMMARY STATUS
-                </h2>
-                <p className="text-xs text-slate-500 font-mono">Template 1 • Official Weekly Management Review</p>
+      {/* ON-SCREEN A4 REPORT PREVIEW CONTAINER */}
+      <div id="excel-print-area" className="bg-white border border-slate-300 shadow-lg mx-auto max-w-[900px] p-8 text-black font-sans">
+        {/* 1. DAILY REPORT (Individual Camp) */}
+        {selectedTemplateTab === 'daily' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-10 w-auto" />
+              <h1 className="text-lg font-bold uppercase text-center flex-1 pr-14">DAILY OCCUPANCY REPORT</h1>
+            </div>
+
+            <div className="border-2 border-black p-2">
+              <div className="flex justify-between text-xs font-bold mb-2 px-1">
+                <span>Accommodation No.: {targetReportCamp?.campNo}</span>
+                <span>Area: {targetReportCamp?.campArea}</span>
               </div>
-            </div>
 
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" /> Print / Save PDF
-              </button>
-              <button
-                type="button"
-                onClick={onExportCampOccupancySummary}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
-              >
-                <Download className="w-4 h-4" /> Export Excel (.xlsx)
-              </button>
-            </div>
-          </div>
-
-          <div className="flex justify-end text-xs font-mono font-bold text-slate-600">
-            <span>Date: {todayStr}</span>
-          </div>
-
-          <div className="border border-slate-300 rounded-xl overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
-              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
-                <tr>
-                  <th className="p-3 border-r">Sr. No.</th>
-                  <th className="p-3 border-r">Accommodation No.</th>
-                  <th className="p-3 border-r text-center">Total Capacity [No. of Beds]</th>
-                  <th className="p-3 border-r text-center">Total Bed Space Occupied</th>
-                  <th className="p-3 border-r text-center">Vacation</th>
-                  <th className="p-3 border-r text-center">RTD</th>
-                  <th className="p-3">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {camps.map((camp, idx) => {
-                  let cap = 0;
-                  camp.floors.forEach(fl => fl.flats.forEach(ft => ft.rooms.forEach(rm => { cap += rm.capacity; })));
-                  const inCamp = occupants.filter(o => o.campNo === camp.campNo);
-                  const onJob = inCamp.filter(o => o.employeeStatus === 'On Job').length;
-                  const onLeave = inCamp.filter(o => o.employeeStatus === 'On Leave').length;
-                  const rtdCount = rtdLogs.filter(r => r.vacatedCampNo === camp.campNo).length;
-
-                  return (
-                    <tr key={camp.id} className="hover:bg-slate-50">
-                      <td className="p-3 border-r font-mono text-center">{idx + 1}</td>
-                      <td className="p-3 border-r font-bold text-slate-900">{camp.campNo} ({camp.campArea})</td>
-                      <td className="p-3 border-r text-center font-bold">{cap}</td>
-                      <td className="p-3 border-r text-center font-bold text-cyan-700">{onJob + onLeave}</td>
-                      <td className="p-3 border-r text-center font-bold text-amber-700">{onLeave}</td>
-                      <td className="p-3 border-r text-center font-bold text-rose-700">{rtdCount}</td>
-                      <td className="p-3 font-semibold text-emerald-700">{cap - (onJob + onLeave)} Beds Vacant</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Inspection Details Section (Matching Screenshot 2) */}
-          <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl space-y-3 text-xs">
-            <div className="font-bold text-slate-900 uppercase">Inspection Details</div>
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-slate-500 mb-1">Type of Inspection:</label>
-                <input
-                  type="text"
-                  value={inspectionType}
-                  onChange={e => setInspectionType(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-semibold"
-                />
-              </div>
-              <div>
-                <label className="block text-slate-500 mb-1">Conducted at:</label>
-                <input
-                  type="text"
-                  defaultValue="All Active Camp Buildings"
-                  className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-semibold"
-                />
-              </div>
-            </div>
-
-            <div className="pt-2">
-              <label className="block text-slate-500 mb-1">Accommodation Department Head's Approval Remarks:</label>
-              <input
-                type="text"
-                value={reportRemarks}
-                onChange={e => setReportRemarks(e.target.value)}
-                className="w-full bg-white border border-slate-300 rounded-lg px-3 py-1.5 font-semibold"
-              />
-            </div>
-
-            <div className="grid grid-cols-3 gap-3 pt-3 border-t border-slate-200">
-              <div>
-                <span className="text-slate-500">Name:</span>
-                <input
-                  type="text"
-                  value={approverName}
-                  onChange={e => setApproverName(e.target.value)}
-                  className="w-full bg-white border border-slate-300 rounded-lg px-2.5 py-1 font-bold text-slate-900 mt-1"
-                />
-              </div>
-              <div>
-                <span className="text-slate-500">Signature:</span>
-                <div className="font-mono text-slate-400 mt-2">____________________</div>
-              </div>
-              <div>
-                <span className="text-slate-500">Date:</span>
-                <div className="font-mono font-bold text-slate-900 mt-2">{todayStr}</div>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* TEMPLATE 2: DAILY OCCUPANCY REPORT */}
-      {selectedTemplateTab === 't2' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
-            <div>
-              <h2 className="text-base font-black tracking-tight text-slate-900 uppercase">
-                DAILY OCCUPANCY REPORT: {activeCamp?.campNo} ({activeCamp?.campArea})
-              </h2>
-              <p className="text-xs text-slate-500 font-mono">Template 2 • Arrival & Leaving Log</p>
-            </div>
-
-            <div className="flex items-center gap-2">
-              <button
-                type="button"
-                onClick={() => window.print()}
-                className="px-3.5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-              >
-                <Printer className="w-4 h-4" /> Print / Save PDF
-              </button>
-              <button
-                type="button"
-                onClick={onExportDailyOccupancyReport}
-                className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
-              >
-                <Download className="w-4 h-4" /> Export Excel (.xlsx)
-              </button>
-            </div>
-          </div>
-
-          <div className="border border-slate-300 rounded-xl overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
-              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300 text-[11px]">
-                <tr>
-                  <th className="p-2.5 border-r">Sr. No.</th>
-                  <th className="p-2.5 border-r">Employee Code*</th>
-                  <th className="p-2.5 border-r">Name</th>
-                  <th className="p-2.5 border-r">Designation</th>
-                  <th className="p-2.5 border-r">Project / Dept. No.</th>
-                  <th className="p-2.5 border-r">Room No.</th>
-                  <th className="p-2.5 border-r">Status</th>
-                  <th className="p-2.5 border-r">Date Arrival</th>
-                  <th className="p-2.5 border-r">Date Leaving</th>
-                  <th className="p-2.5">Entered By</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {occupants.filter(o => o.campNo === activeCamp?.campNo).map((occ, idx) => (
-                  <tr key={occ.employeeId} className="hover:bg-slate-50">
-                    <td className="p-2.5 border-r text-center font-mono">{idx + 1}</td>
-                    <td className="p-2.5 border-r font-mono font-bold text-cyan-700">#{occ.employeeId}</td>
-                    <td className="p-2.5 border-r font-bold text-slate-900">{occ.employeeName}</td>
-                    <td className="p-2.5 border-r">{occ.title}</td>
-                    <td className="p-2.5 border-r font-mono">{occ.costCenter}</td>
-                    <td className="p-2.5 border-r font-mono">{occ.roomNo}</td>
-                    <td className="p-2.5 border-r font-bold text-cyan-800">{occ.employeeStatus}</td>
-                    <td className="p-2.5 border-r font-mono">{occ.entryDate}</td>
-                    <td className="p-2.5 border-r font-mono text-slate-500">{occ.exitDate || '-'}</td>
-                    <td className="p-2.5 font-semibold text-slate-600">Camp Coordinator</td>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 font-bold text-center">
+                    <th rowSpan={2} className="border border-black p-1.5">Sr. No.</th>
+                    <th colSpan={4} className="border border-black p-1.5">Employee</th>
+                    <th colSpan={2} className="border border-black p-1.5">Occupancy</th>
+                    <th colSpan={2} className="border border-black p-1.5">Date</th>
+                    <th rowSpan={2} className="border border-black p-1.5">Entered by</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-          <div className="text-[11px] text-slate-500 italic">
-            * Note: Employee code refers herein to Al Dhow ID No, Civil ID No. and Passport No.
-          </div>
-        </div>
-      )}
-
-      {/* TEMPLATE 6: EMPLOYEE DISCIPLINARY ACTION LOG */}
-      {selectedTemplateTab === 't6' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
-            <div>
-              <h2 className="text-base font-black tracking-tight text-slate-900 uppercase">
-                EMPLOYEE DISCIPLINARY ACTION LOG
-              </h2>
-              <p className="text-xs text-slate-500 font-mono">Template 6 • Accommodation Misconduct Register</p>
-            </div>
-
-            <button
-              type="button"
-              onClick={onExportMisconductLog}
-              className="px-4 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <Download className="w-4 h-4" /> Export Disciplinary Log (.xlsx)
-            </button>
-          </div>
-
-          <div className="border border-slate-300 rounded-xl overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
-              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
-                <tr>
-                  <th className="p-2.5 border-r">Sl N.</th>
-                  <th className="p-2.5 border-r">ID</th>
-                  <th className="p-2.5 border-r">Name</th>
-                  <th className="p-2.5 border-r">Designation</th>
-                  <th className="p-2.5 border-r">Incident Date</th>
-                  <th className="p-2.5 border-r">Incident Location</th>
-                  <th className="p-2.5 border-r">Type of Violation</th>
-                  <th className="p-2.5 border-r">Doc Ref</th>
-                  <th className="p-2.5 border-r">Cost Center</th>
-                  <th className="p-2.5">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {misconductLogs.map((item, idx) => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="p-2.5 border-r text-center font-mono">{idx + 1}</td>
-                    <td className="p-2.5 border-r font-mono font-bold text-rose-700">#{item.employeeId}</td>
-                    <td className="p-2.5 border-r font-bold text-slate-900">{item.employeeName}</td>
-                    <td className="p-2.5 border-r">{item.title}</td>
-                    <td className="p-2.5 border-r font-mono">{item.incidentDate}</td>
-                    <td className="p-2.5 border-r">{item.incidentLocation}</td>
-                    <td className="p-2.5 border-r font-bold text-rose-800">{item.typeOfViolation}</td>
-                    <td className="p-2.5 border-r font-mono">{item.docRef}</td>
-                    <td className="p-2.5 border-r font-mono">{item.costCenter}</td>
-                    <td className="p-2.5 text-slate-600">{item.remarks}</td>
+                  <tr className="bg-slate-100 font-bold text-center">
+                    <th className="border border-black p-1.5">Code*</th>
+                    <th className="border border-black p-1.5">Name</th>
+                    <th className="border border-black p-1.5">Designation</th>
+                    <th className="border border-black p-1.5">Project/ Dept. No.</th>
+                    <th className="border border-black p-1.5">Room No.</th>
+                    <th className="border border-black p-1.5">Status</th>
+                    <th className="border border-black p-1.5">Arrival</th>
+                    <th className="border border-black p-1.5">Leaving</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {Array.from({ length: Math.max(20, occupants.filter(o => o.campNo === targetReportCamp?.campNo).length) }).map((_, idx) => {
+                    const campOccs = occupants.filter(o => o.campNo === targetReportCamp?.campNo);
+                    const occ = campOccs[idx];
+                    return (
+                      <tr key={idx} className="h-5">
+                        <td className="border border-black px-2 py-0.5 text-center">{occ ? idx + 1 : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center font-mono">{occ ? occ.employeeId : ''}</td>
+                        <td className="border border-black px-2 py-0.5 font-semibold">{occ ? occ.employeeName : ''}</td>
+                        <td className="border border-black px-2 py-0.5">{occ ? occ.title : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{occ ? occ.costCenter : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{occ ? occ.roomNo : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{occ ? occ.employeeStatus : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{occ ? occ.entryDate : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{occ ? (occ.exitDate || '-') : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{occ ? 'Camp Coordinator' : ''}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+              <div className="text-[10px] italic mt-1.5">
+                Note: * - Employee code refers herein Al Dhow ID No, Civil ID No. and Passport No.
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
 
-      {/* TEMPLATE 7: ACCOMMODATION MAINTENANCE LOG */}
-      {selectedTemplateTab === 't7' && (
-        <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
-          <div className="flex flex-wrap items-center justify-between gap-4 border-b pb-4">
-            <div>
-              <h2 className="text-base font-black tracking-tight text-slate-900 uppercase">
-                ACCOMMODATION MAINTENANCE LOG
-              </h2>
-              <p className="text-xs text-slate-500 font-mono">Template 7 • Complaints, Inspections & Work Orders</p>
+        {/* 2. WEEKLY REPORT (Individual Camp) */}
+        {selectedTemplateTab === 'weekly' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-10 w-auto" />
+              <h1 className="text-lg font-bold uppercase text-center flex-1 pr-14">WEEKLY CAMP OCCUPANCY & INSPECTION REPORT</h1>
             </div>
 
-            <button
-              type="button"
-              onClick={onExportMaintenanceLog}
-              className="px-4 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
-            >
-              <Download className="w-4 h-4" /> Export Maintenance Log (.xlsx)
-            </button>
-          </div>
+            <div className="border-2 border-black p-3 space-y-3">
+              <div className="flex justify-between text-xs font-bold">
+                <span>Facility: {targetReportCamp?.campNo} ({targetReportCamp?.campArea})</span>
+                <span>Week Ending: {todayFormatted}</span>
+              </div>
 
-          <div className="border border-slate-300 rounded-xl overflow-x-auto">
-            <table className="w-full text-left text-xs whitespace-nowrap">
-              <thead className="bg-slate-100 text-slate-800 font-bold border-b border-slate-300">
-                <tr>
-                  <th className="p-2.5 border-r">Uni.ID</th>
-                  <th className="p-2.5 border-r">Date</th>
-                  <th className="p-2.5 border-r">Month</th>
-                  <th className="p-2.5 border-r">Issue Details</th>
-                  <th className="p-2.5 border-r">Reported By</th>
-                  <th className="p-2.5 border-r">Room</th>
-                  <th className="p-2.5 border-r">Inspected By</th>
-                  <th className="p-2.5 border-r">Action Taken By</th>
-                  <th className="p-2.5 border-r">Status</th>
-                  <th className="p-2.5 border-r">Cost (KWD)</th>
-                  <th className="p-2.5">Remarks</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-slate-200">
-                {maintenanceLogs.map((item) => (
-                  <tr key={item.id} className="hover:bg-slate-50">
-                    <td className="p-2.5 border-r font-mono font-bold text-cyan-700">{item.id}</td>
-                    <td className="p-2.5 border-r font-mono">{item.date}</td>
-                    <td className="p-2.5 border-r">{item.month}</td>
-                    <td className="p-2.5 border-r font-semibold text-slate-900">{item.issueDetails}</td>
-                    <td className="p-2.5 border-r font-mono">#{item.reportedByEmpId} ({item.employeeName})</td>
-                    <td className="p-2.5 border-r font-mono">{item.roomNo}</td>
-                    <td className="p-2.5 border-r">{item.inspectedBy}</td>
-                    <td className="p-2.5 border-r">{item.actionTakenBy}</td>
-                    <td className="p-2.5 border-r">
-                      <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
-                        item.status === 'Completed' ? 'bg-emerald-100 text-emerald-800' : 'bg-amber-100 text-amber-800'
-                      }`}>
-                        {item.status}
-                      </span>
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 font-bold text-center">
+                    <th className="border border-black p-2">Metric</th>
+                    <th className="border border-black p-2">Count / Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Total Building Capacity</td>
+                    <td className="border border-black p-2 text-center font-bold">
+                      {targetReportCamp?.floors.reduce((acc, fl) => acc + fl.flats.reduce((fa, ft) => fa + ft.rooms.reduce((ra, rm) => ra + rm.capacity, 0), 0), 0)} Beds
                     </td>
-                    <td className="p-2.5 border-r font-mono font-bold text-slate-900">{item.replacedMaterialCost}</td>
-                    <td className="p-2.5 text-slate-600">{item.remarks}</td>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Active Residents On Job</td>
+                    <td className="border border-black p-2 text-center font-bold text-cyan-700">
+                      {occupants.filter(o => o.campNo === targetReportCamp?.campNo && o.employeeStatus === 'On Job').length}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Residents On Leave (Beds Held)</td>
+                    <td className="border border-black p-2 text-center font-bold text-amber-700">
+                      {occupants.filter(o => o.campNo === targetReportCamp?.campNo && o.employeeStatus === 'On Leave').length}
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Vacant / Available Beds</td>
+                    <td className="border border-black p-2 text-center font-bold text-emerald-700">
+                      {targetReportCamp?.floors.reduce((acc, fl) => acc + fl.flats.reduce((fa, ft) => fa + ft.rooms.reduce((ra, rm) => ra + rm.capacity, 0), 0), 0) - occupants.filter(o => o.campNo === targetReportCamp?.campNo && !o.employeeStatus.startsWith('RTD')).length}
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div className="p-3 bg-slate-50 border border-black space-y-1 text-xs">
+                <div className="font-bold">Weekly Camp Boss Inspection Sign-Off:</div>
+                <div>Status: Fully compliant with Kuwait Labour & Fire Safety Regulations.</div>
+                <div>Inspected by: Camp Supervisor & Safety Officer</div>
+              </div>
+            </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* 3. MONTHLY REPORT (All Camps Combined) */}
+        {selectedTemplateTab === 'monthly' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-11 w-auto" />
+              <h1 className="text-lg font-bold tracking-wide text-black uppercase flex-1 text-center pr-16">
+                CAMP OCCUPANCY SUMMARY STATUS
+              </h1>
+            </div>
+
+            <div className="border-2 border-black p-2">
+              <div className="flex justify-end items-center mb-2">
+                <span className="text-xs font-bold mr-3">Date:</span>
+                <span className="border border-black px-6 py-0.5 text-xs font-bold text-center min-w-[120px]">
+                  {todayFormatted}
+                </span>
+              </div>
+
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 font-bold text-center">
+                    <th className="border border-black py-1.5 px-2 w-12">Sr.<br />No.</th>
+                    <th className="border border-black py-1.5 px-3">Accommodation No.</th>
+                    <th className="border border-black py-1.5 px-2 w-28">Total Capacity<br />[No. of Beds]</th>
+                    <th className="border border-black py-1.5 px-2 w-36">Total Bed Space<br />Occupied as on {yesterdayFormatted}</th>
+                    <th className="border border-black py-1.5 px-2 w-20">Vacation</th>
+                    <th className="border border-black py-1.5 px-2 w-20">RTD</th>
+                    <th className="border border-black py-1.5 px-3 w-40">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: totalSummaryRows }).map((_, idx) => {
+                    const camp = camps[idx];
+                    let cap = 0;
+                    let onJob = 0;
+                    let onLeave = 0;
+                    let rtdCount = 0;
+
+                    if (camp) {
+                      camp.floors.forEach(fl => fl.flats.forEach(ft => ft.rooms.forEach(rm => { cap += rm.capacity; })));
+                      const inCamp = occupants.filter(o => o.campNo === camp.campNo);
+                      onJob = inCamp.filter(o => o.employeeStatus === 'On Job').length;
+                      onLeave = inCamp.filter(o => o.employeeStatus === 'On Leave').length;
+                      rtdCount = rtdLogs.filter(r => r.vacatedCampNo === camp.campNo).length;
+                    }
+
+                    return (
+                      <tr key={idx} className="h-5">
+                        <td className="border border-black px-2 py-0.5 text-center">{camp ? idx + 1 : ''}</td>
+                        <td className="border border-black px-2 py-0.5 font-semibold">{camp ? `${camp.campNo} (${camp.campArea})` : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{camp ? cap : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center font-bold">{camp ? onJob + onLeave : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{camp ? onLeave : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{camp ? rtdCount : ''}</td>
+                        <td className="border border-black px-2 py-0.5">{camp ? `${cap - (onJob + onLeave)} Beds Vacant` : ''}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+
+              <table className="w-full border-collapse text-xs mt-2">
+                <tbody>
+                  <tr className="bg-slate-100">
+                    <td colSpan={6} className="border border-black px-2 py-1 font-bold">Inspection Details</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black px-2 py-1 font-bold w-40">Type of Inspection:</td>
+                    <td colSpan={2} className="border border-black px-2 py-1">
+                      <input type="text" value={inspectionType} onChange={e => setInspectionType(e.target.value)} className="w-full text-xs focus:outline-none" />
+                    </td>
+                    <td className="border border-black px-2 py-1 font-bold w-28">Conducted at:</td>
+                    <td colSpan={2} className="border border-black px-2 py-1">
+                      <input type="text" value={conductedAt} onChange={e => setConductedAt(e.target.value)} className="w-full text-xs focus:outline-none" />
+                    </td>
+                  </tr>
+                  <tr className="bg-slate-100">
+                    <td colSpan={6} className="border border-black px-2 py-1 font-bold">Accommodation Department Head's approval</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black px-2 py-1 font-bold">Remarks:</td>
+                    <td colSpan={5} className="border border-black px-2 py-1">
+                      <input type="text" value={reportRemarks} onChange={e => setReportRemarks(e.target.value)} className="w-full text-xs focus:outline-none" />
+                    </td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black px-2 py-1.5 font-bold">Name:</td>
+                    <td className="border border-black px-2 py-1.5 font-semibold">
+                      <input type="text" value={approverName} onChange={e => setApproverName(e.target.value)} className="w-full text-xs font-bold focus:outline-none" />
+                    </td>
+                    <td className="border border-black px-2 py-1.5 font-bold">Signature:</td>
+                    <td className="border border-black px-2 py-1.5 w-36"></td>
+                    <td className="border border-black px-2 py-1.5 font-bold w-16">Date:</td>
+                    <td className="border border-black px-2 py-1.5 text-center">{todayFormatted}</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 6. DISCIPLINARY LOG */}
+        {selectedTemplateTab === 't6' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-10 w-auto" />
+              <h1 className="text-lg font-bold uppercase text-center flex-1 pr-14">EMPLOYEE DISCIPLINARY ACTION LOG</h1>
+            </div>
+            <div className="border-2 border-black p-2">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 font-bold text-center">
+                    <th className="border border-black p-1.5">Sl N.</th>
+                    <th className="border border-black p-1.5">ID</th>
+                    <th className="border border-black p-1.5">Name</th>
+                    <th className="border border-black p-1.5">Designation</th>
+                    <th className="border border-black p-1.5">Incident Date</th>
+                    <th className="border border-black p-1.5">Incident Location</th>
+                    <th className="border border-black p-1.5">Type of Violation</th>
+                    <th className="border border-black p-1.5">Doc Ref</th>
+                    <th className="border border-black p-1.5">Cost Center</th>
+                    <th className="border border-black p-1.5">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: Math.max(20, misconductLogs.length) }).map((_, i) => {
+                    const item = misconductLogs[i];
+                    return (
+                      <tr key={i} className="h-5">
+                        <td className="border border-black px-2 py-0.5 text-center">{item ? i + 1 : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{item ? item.employeeId : ''}</td>
+                        <td className="border border-black px-2 py-0.5 font-semibold">{item ? item.employeeName : ''}</td>
+                        <td className="border border-black px-2 py-0.5">{item ? item.title : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{item ? item.incidentDate : ''}</td>
+                        <td className="border border-black px-2 py-0.5">{item ? item.incidentLocation : ''}</td>
+                        <td className="border border-black px-2 py-0.5">{item ? item.typeOfViolation : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{item ? item.docRef : ''}</td>
+                        <td className="border border-black px-2 py-0.5 text-center">{item ? item.costCenter : ''}</td>
+                        <td className="border border-black px-2 py-0.5">{item ? item.remarks : ''}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 7. MAINTENANCE LOG */}
+        {selectedTemplateTab === 't7' && (
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-10 w-auto" />
+              <h1 className="text-lg font-bold uppercase text-center flex-1 pr-14">ACCOMMODATION MAINTENANCE LOG</h1>
+            </div>
+            <div className="border-2 border-black p-2 overflow-x-auto">
+              <table className="w-full border-collapse text-[11px]">
+                <thead>
+                  <tr className="bg-slate-100 font-bold text-center">
+                    <th className="border border-black p-1">Uni.ID</th>
+                    <th className="border border-black p-1">Date</th>
+                    <th className="border border-black p-1">Month</th>
+                    <th className="border border-black p-1">Maintenance Issue Details</th>
+                    <th className="border border-black p-1">Emp. ID#</th>
+                    <th className="border border-black p-1">Employee Name</th>
+                    <th className="border border-black p-1">Room</th>
+                    <th className="border border-black p-1">Area / Facility</th>
+                    <th className="border border-black p-1">Inspected by</th>
+                    <th className="border border-black p-1">Action Taken by</th>
+                    <th className="border border-black p-1">Status</th>
+                    <th className="border border-black p-1">Cost</th>
+                    <th className="border border-black p-1">Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {Array.from({ length: Math.max(20, maintenanceLogs.length) }).map((_, i) => {
+                    const item = maintenanceLogs[i];
+                    return (
+                      <tr key={i} className="h-5">
+                        <td className="border border-black px-1.5 py-0.5 text-center">{item ? item.id : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5 text-center">{item ? item.date : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5 text-center">{item ? item.month : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5">{item ? item.issueDetails : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5 text-center">{item ? item.reportedByEmpId : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5">{item ? item.employeeName : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5 text-center">{item ? item.roomNo : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5">{item ? item.areaFacility : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5">{item ? item.inspectedBy : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5">{item ? item.actionTakenBy : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5 text-center font-bold">{item ? item.status : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5 text-center">{item ? item.replacedMaterialCost : ''}</td>
+                        <td className="border border-black px-1.5 py-0.5">{item ? item.remarks : ''}</td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
