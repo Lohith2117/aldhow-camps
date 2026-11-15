@@ -159,7 +159,7 @@ export default function ReportsTab({
         </div>
       </div>
 
-      {/* COMPACT A4 PREVIEW CONTAINER (Guaranteed 1-Page Fit & Zero Overlap) */}
+      {/* COMPACT A4 PREVIEW CONTAINER */}
       <div id="excel-print-area" className="bg-white border border-slate-300 shadow-lg mx-auto max-w-[950px] p-5 text-black font-sans text-xs">
         
         {/* 1. DAILY REPORT */}
