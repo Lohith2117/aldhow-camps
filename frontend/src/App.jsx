@@ -138,7 +138,7 @@ export default function App() {
   const [editingCostCenterModal, setEditingCostCenterModal] = useState(null);
   const [decommissionLockoutModal, setDecommissionLockoutModal] = useState(null);
 
-  // Report & Form Preview Modal (Preview before Print or Download)
+  // Report & Form Preview Modal
   const [reportPreviewModal, setReportPreviewModal] = useState(null);
 
   // Floor Configurator sub-modal inside Edit Camp
@@ -190,7 +190,7 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Pre-Add Employee Form (Before assigning to a camp bed)
+  // Pre-Add Employee Form
   const [preAddForm, setPreAddForm] = useState({
     employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer',
     productiveType: 'Direct Employee (DE)', roomGrade: 'Manual',
@@ -199,7 +199,7 @@ export default function App() {
     entryDate: todayStr
   });
 
-  // Bed Check-In Form (With Auto-Fill, Manual/Non-Manual, Doc Ref #, & Material Issuance)
+  // Bed Check-In Form
   const [checkInForm, setCheckInForm] = useState({
     campId: 'camp-1', floorNo: 1, flatCode: '1-01-01-NM', roomNo: '1-01-01-B',
     roomGrade: 'Non-Manual', productiveType: 'Direct Employee (DE)',
@@ -3438,7 +3438,7 @@ export default function App() {
                   viewingEmployeeDossier.stayHistory.map((hist, idx) => (
                     <div key={idx} className="border-l-2 border-cyan-600 pl-3">
                       <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
-                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
+                      <div className="test-[11px] text-slate-600">{hist.reason}</div>
                     </div>
                   ))
                 ) : (
