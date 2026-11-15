@@ -69,7 +69,7 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
         <style>
           @page {
             size: A4 portrait;
-            margin: 10mm;
+            margin: 8mm;
           }
           * {
             box-sizing: border-box;
@@ -82,13 +82,29 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
             padding: 0;
             background: #ffffff;
             color: #000000;
+            font-size: 10px;
           }
           img {
-            max-height: 42px !important;
-            max-width: 140px !important;
+            max-height: 32px !important;
+            max-width: 110px !important;
             width: auto !important;
             height: auto !important;
             object-fit: contain !important;
+          }
+          h1, h2, .report-title {
+            font-size: 12px !important;
+            font-weight: 800 !important;
+            text-transform: uppercase;
+            margin: 0;
+          }
+          .report-meta {
+            font-size: 10px !important;
+            font-weight: 700 !important;
+          }
+          .report-note {
+            font-size: 8px !important;
+            font-style: italic !important;
+            margin-top: 4px;
           }
           .no-print {
             display: none !important;
@@ -99,11 +115,13 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
           }
           th, td {
             border: 1px solid #000000;
-            padding: 4px 6px;
-            font-size: 11px;
+            padding: 3px 4px;
+            font-size: 9.5px;
+            height: 20px;
+            vertical-align: middle;
           }
           th {
-            background-color: #f3f4f6;
+            background-color: #f3f4f6 !important;
             font-weight: 700;
             text-align: center;
           }
@@ -111,8 +129,8 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
             border: none !important;
             background: transparent !important;
             font-family: inherit;
-            font-size: inherit;
-            font-weight: inherit;
+            font-size: 10px !important;
+            font-weight: 700;
             color: inherit;
             width: 100%;
             padding: 0;
@@ -136,7 +154,6 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
   `);
   printWin.document.close();
 }
-
 // ============================================================================
 // 1. CAMP OCCUPANCY SUMMARY STATUS (Matches Template 1 Layout)
 // ============================================================================
