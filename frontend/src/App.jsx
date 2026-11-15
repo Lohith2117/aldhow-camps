@@ -2514,6 +2514,111 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
+      {/* MODAL: EDIT EMPLOYEE DETAILS (Z-[70] OVERLAY FIX)                   */}
+      {/* =================================================================== */}
+      {editingEmployeeModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[70] flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Edit3 className="w-5 h-5 text-cyan-600" /> Edit Employee Details (#{editingEmployeeModal.originalId})
+              </h3>
+              <button type="button" onClick={() => setEditingEmployeeModal(null)} className="text-slate-400 hover:text-slate-700 cursor-pointer"><X className="w-5 h-5" /></button>
+            </div>
+
+            <form onSubmit={handleSaveEmployeeEdit} className="space-y-3">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Employee ID</label>
+                  <input type="text" required value={editingEmployeeModal.employeeId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Full Name</label>
+                  <input type="text" required value={editingEmployeeModal.employeeName} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Productive Type</label>
+                  <select value={editingEmployeeModal.productiveType || 'Direct Employee (DE)'} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, productiveType: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold">
+                    <option value="Direct Employee (DE)">Direct Employee (DE)</option>
+                    <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
+                    <option value="Shutdown">Shutdown</option>
+                    <option value="Others">Others</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Manual / Non-Manual Grade</label>
+                  <select value={editingEmployeeModal.roomGrade || 'Manual'} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, roomGrade: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700">
+                    <option value="Manual">Manual</option>
+                    <option value="Non-Manual">Non-Manual</option>
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Nationality</label>
+                  <input type="text" value={editingEmployeeModal.nationality} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, nationality: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Mobile Number</label>
+                  <input type="text" value={editingEmployeeModal.mobileNo} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, mobileNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Passport Number</label>
+                  <input type="text" value={editingEmployeeModal.passportNo} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, passportNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Kuwait Civil ID</label>
+                  <input type="text" value={editingEmployeeModal.civilId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, civilId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Job Title</label>
+                  <input type="text" value={editingEmployeeModal.title} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, title: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Cost Center</label>
+                  <select value={editingEmployeeModal.costCenter} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, costCenter: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-mono font-bold">
+                    {costCenters.map(cc => <option key={cc.id} value={cc.code}>{cc.code}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Division</label>
+                  <select value={editingEmployeeModal.division} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, division: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-bold">
+                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Name</label>
+                  <input type="text" value={editingEmployeeModal.emergencyContactName || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Phone</label>
+                  <input type="text" value={editingEmployeeModal.emergencyContactPhone || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-3 border-t">
+                <button type="button" onClick={() => setEditingEmployeeModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer">Save Changes</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
       {/* CHECK-IN MODAL                                                      */}
       {/* =================================================================== */}
       {showCheckInModal && (
@@ -2996,7 +3101,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* INVOICE PREVIEW MODAL (PHASE 3 FIX)                                 */}
+      {/* INVOICE PREVIEW MODAL                                               */}
       {/* =================================================================== */}
       {selectedInvoiceModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
@@ -3241,7 +3346,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* EMPLOYEE DOSSIER MODAL (WITH IN-PLACE EDIT SWITCH - SOLVED)         */}
+      {/* EMPLOYEE DOSSIER MODAL                                              */}
       {/* =================================================================== */}
       {viewingEmployeeDossier && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3264,15 +3369,12 @@ export default function App() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
-                {/* IN-PLACE EDIT SWITCH: Closes dossier and opens edit modal seamlessly */}
                 <button
                   type="button"
                   onClick={() => {
                     const occ = viewingEmployeeDossier;
                     setViewingEmployeeDossier(null);
-                    setTimeout(() => {
-                      setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
-                    }, 50);
+                    setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
                   }}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
                 >
