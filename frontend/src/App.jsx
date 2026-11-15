@@ -967,7 +967,7 @@ export default function App() {
     }
   };
 
-  // Save Edited Employee Details (Point 4)
+  // Save Edited Employee Details
   const handleSaveEmployeeEdit = (e) => {
     e.preventDefault();
     if (!editingEmployeeModal) return;
@@ -1002,7 +1002,7 @@ export default function App() {
     setEditingEmployeeModal(null);
   };
 
-  // Occupant Bed Check-In Submit (Auto-triggers Material Issuance Preview Modal)
+  // Occupant Bed Check-In Submit
   const handleCheckInSubmit = (e) => {
     e.preventDefault();
     const empId = checkInForm.employeeId.trim();
@@ -1073,7 +1073,6 @@ export default function App() {
     setShowCheckInModal(false);
     logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${assignedOcc.employeeName} (${assignedOcc.productiveType} • ${assignedOcc.roomGrade}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo} [Ref: ${assignedOcc.afrEntryRef}]`, targetCamp.campNo);
 
-    // Automatically open the Material Issuance Form (Doc. Ref: 150-04) Preview Modal!
     setReportPreviewModal({
       type: 'issuance',
       occupant: assignedOcc,
@@ -1332,35 +1331,6 @@ export default function App() {
       type: 'relocation',
       record: relocRecord
     });
-  };
-
-  // Misconduct & Maintenance Actions
-  const handleSaveMisconduct = (e) => {
-    e.preventDefault();
-    const newEntry = {
-      id: `disc-${Date.now()}`,
-      ...misconductForm,
-      docRef: `DISC-${misconductForm.employeeId}-${Date.now().toString().slice(-4)}`
-    };
-
-    setMisconductLogs(prev => [newEntry, ...prev]);
-    logActivity('DISCIPLINARY', `Filed Misconduct for #${newEntry.employeeId}`, `${newEntry.employeeName}: ${newEntry.typeOfViolation}`);
-    exportAccommodationMisconductReport(newEntry);
-    setShowMisconductModal(false);
-    alert(`Misconduct recorded and Report (.xlsx) generated.`);
-  };
-
-  const handleSaveMaintenance = (e) => {
-    e.preventDefault();
-    const newEntry = {
-      id: `MNT-${Math.floor(100 + Math.random() * 900)}`,
-      ...maintenanceForm
-    };
-
-    setMaintenanceLogs(prev => [newEntry, ...prev]);
-    logActivity('MAINTENANCE', `Logged Work Order for Room ${newEntry.roomNo}`, `${newEntry.issueDetails} (Status: ${newEntry.status})`);
-    setShowMaintenanceModal(false);
-    alert(`Maintenance issue logged in register.`);
   };
 
   // User Creation with Neon DB Sync
@@ -2124,7 +2094,7 @@ export default function App() {
           </div>
         )}
 
-        {/* TAB 2: OCCUPANTS DIRECTORY (With Pre-Add Employee, Edit, & Direct Material Issuance) */}
+        {/* TAB 2: OCCUPANTS DIRECTORY */}
         {activeTab === 'occupants' && (
           <div className="space-y-4">
             <div className="bg-white border border-slate-200 p-4 rounded-2xl flex flex-col md:flex-row items-center justify-between gap-4 shadow-xs">
@@ -2174,7 +2144,6 @@ export default function App() {
                   {divisions.map(d => <option key={d} value={d}>{d}</option>)}
                 </select>
 
-                {/* Download Import Template Button */}
                 <button
                   onClick={exportImportTemplate}
                   className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
@@ -2439,7 +2408,7 @@ export default function App() {
       </main>
 
       {/* =================================================================== */}
-      {/* MODAL: PRE-REGISTER EMPLOYEE (BEFORE BED ASSIGNMENT)                */}
+      {/* MODAL: PRE-REGISTER EMPLOYEE                                        */}
       {/* =================================================================== */}
       {showPreAddEmployeeModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -2545,112 +2514,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* MODAL: EDIT EMPLOYEE DETAILS (POINT 4)                              */}
-      {/* =================================================================== */}
-      {editingEmployeeModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
-                <Edit3 className="w-5 h-5 text-cyan-600" /> Edit Employee Details (#{editingEmployeeModal.originalId})
-              </h3>
-              <button onClick={() => setEditingEmployeeModal(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
-            </div>
-
-            <form onSubmit={handleSaveEmployeeEdit} className="space-y-3">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Employee ID</label>
-                  <input type="text" required value={editingEmployeeModal.employeeId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Full Name</label>
-                  <input type="text" required value={editingEmployeeModal.employeeName} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Productive Type</label>
-                  <select value={editingEmployeeModal.productiveType || 'Direct Employee (DE)'} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, productiveType: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold">
-                    <option value="Direct Employee (DE)">Direct Employee (DE)</option>
-                    <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
-                    <option value="Shutdown">Shutdown</option>
-                    <option value="Others">Others</option>
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Manual / Non-Manual Grade</label>
-                  <select value={editingEmployeeModal.roomGrade || 'Manual'} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, roomGrade: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700">
-                    <option value="Manual">Manual</option>
-                    <option value="Non-Manual">Non-Manual</option>
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Nationality</label>
-                  <input type="text" value={editingEmployeeModal.nationality} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, nationality: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Mobile Number</label>
-                  <input type="text" value={editingEmployeeModal.mobileNo} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, mobileNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Passport Number</label>
-                  <input type="text" value={editingEmployeeModal.passportNo} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, passportNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Kuwait Civil ID</label>
-                  <input type="text" value={editingEmployeeModal.civilId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, civilId: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Job Title</label>
-                  <input type="text" value={editingEmployeeModal.title} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, title: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Cost Center</label>
-                  <select value={editingEmployeeModal.costCenter} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, costCenter: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-mono font-bold">
-                    {costCenters.map(cc => <option key={cc.id} value={cc.code}>{cc.code}</option>)}
-                  </select>
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Division</label>
-                  <select value={editingEmployeeModal.division} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, division: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-bold">
-                    {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-                  </select>
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Emergency Contact Name</label>
-                  <input type="text" value={editingEmployeeModal.emergencyContactName || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Emergency Contact Phone</label>
-                  <input type="text" value={editingEmployeeModal.emergencyContactPhone || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
-                </div>
-              </div>
-
-              <div className="flex justify-end gap-2 pt-3 border-t">
-                <button type="button" onClick={() => setEditingEmployeeModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold cursor-pointer">Save Changes</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* CHECK-IN MODAL (WITH ID AUTO-FILL, MANUAL/NON-MANUAL, & ISSUANCE)   */}
+      {/* CHECK-IN MODAL                                                      */}
       {/* =================================================================== */}
       {showCheckInModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -2668,7 +2532,6 @@ export default function App() {
             </div>
 
             <form onSubmit={handleCheckInSubmit} className="space-y-3">
-              {/* Auto-Fill Lookup by Employee ID */}
               <div className="p-3 bg-blue-50/70 border border-blue-200 rounded-xl space-y-2">
                 <label className="block font-bold text-blue-900">
                   Enter Employee ID (Auto-fills details if pre-registered in Occupants):
@@ -2705,7 +2568,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Explicit Productive Type + Manual / Non-Manual Grade */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Employee Productive Type</label>
@@ -2733,7 +2595,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Arrival / Camp Shift Type + Manual Document Reference Number (Point 6) */}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Arrival / Transfer Type</label>
@@ -2809,7 +2670,6 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Built-In Material Issuance Checklist (Doc. Ref: 150-04 - Point 7) */}
               <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
                 <div className="font-bold text-emerald-900 flex items-center justify-between">
                   <span>Material Issuance Checklist (Doc. Ref: 150-04)</span>
@@ -2844,7 +2704,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* UNIVERSAL DOCUMENT PREVIEW MODAL (PREVIEW BEFORE PRINT / DOWNLOAD)  */}
+      {/* UNIVERSAL DOCUMENT PREVIEW MODAL                                    */}
       {/* =================================================================== */}
       {reportPreviewModal && (
         <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -2902,9 +2762,7 @@ export default function App() {
               </div>
             </div>
 
-            {/* A4 Printable Preview Container */}
             <div id="modal-preview-print-area" className="border border-slate-300 p-6 bg-white text-black font-sans overflow-x-auto">
-              {/* PREVIEW 1: MATERIAL ISSUANCE FORM (DOC REF 150-04) */}
               {reportPreviewModal.type === 'issuance' && reportPreviewModal.occupant && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b-2 border-black pb-3">
@@ -3012,7 +2870,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* PREVIEW 2: CAMP OCCUPANCY SUMMARY STATUS (T1) */}
               {reportPreviewModal.type === 'summary' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -3057,7 +2914,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* PREVIEW 3: DAILY OCCUPANCY REPORT (T2) */}
               {reportPreviewModal.type === 'daily' && (
                 <div className="space-y-3">
                   <div className="flex items-center justify-between">
@@ -3098,7 +2954,6 @@ export default function App() {
                 </div>
               )}
 
-              {/* PREVIEW 4: OCCUPANTS RELOCATION FORM (T4) */}
               {reportPreviewModal.type === 'relocation' && reportPreviewModal.record && (
                 <div className="space-y-4">
                   <div className="flex items-center justify-between border-b-2 border-black pb-3">
@@ -3141,7 +2996,113 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* MODAL: BED RELOCATION (WITH MANUAL DOC REF # INPUT - POINT 6)       */}
+      {/* INVOICE PREVIEW MODAL (PHASE 3 FIX)                                 */}
+      {/* =================================================================== */}
+      {selectedInvoiceModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex justify-between items-center border-b pb-3 no-print">
+              <span className="font-mono font-bold text-slate-800">INVOICE PREVIEW — {selectedInvoiceModal.costCenter}</span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}-${billingPeriod}`)}
+                  className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Print / Save PDF
+                </button>
+                <button type="button" onClick={() => setSelectedInvoiceModal(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div id="invoice-print-area" className="p-6 bg-white text-black font-sans space-y-4 border border-slate-300">
+              <div className="flex items-center justify-between border-b-2 border-black pb-3">
+                <DhowLogo className="h-9 w-auto" />
+                <div className="text-center">
+                  <h2 className="text-sm font-black tracking-wider uppercase">PROJECT ACCOMMODATION RECHARGE INVOICE</h2>
+                  <p className="text-[11px] text-slate-600 font-semibold">Master Cost Center: 1ACD000 • Billing Period: {billingPeriod}</p>
+                </div>
+                <div className="text-right font-mono text-[11px]">
+                  <div><strong>Inv No:</strong> INV-{selectedInvoiceModal.costCenter}</div>
+                  <div><strong>Date:</strong> {todayStr}</div>
+                </div>
+              </div>
+
+              <div className="border border-black p-3 bg-slate-50 grid grid-cols-2 gap-3">
+                <div>
+                  <div className="text-[10px] text-slate-500 uppercase font-bold">Client / Project Site</div>
+                  <div className="text-xs font-bold text-slate-900">{selectedInvoiceModal.costCenter} — {selectedInvoiceModal.projectName}</div>
+                  <div className="text-[11px] text-slate-700">Division: {selectedInvoiceModal.division}</div>
+                </div>
+                <div className="text-right">
+                  <div className="text-[10px] text-slate-500 uppercase font-bold">Total Assigned Occupants</div>
+                  <div className="text-xs font-bold text-cyan-800">{selectedInvoiceModal.totalOccupants} Active Personnel</div>
+                </div>
+              </div>
+
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="bg-slate-100 text-center font-bold">
+                    <th className="border border-black p-2">Description / Grade</th>
+                    <th className="border border-black p-2">Headcount / Beds</th>
+                    <th className="border border-black p-2">Unit Rate (KWD)</th>
+                    <th className="border border-black p-2">Subtotal (KWD)</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Non-Manual Accommodation Beds</td>
+                    <td className="border border-black p-2 text-center">{selectedInvoiceModal.nonManualBeds} Beds</td>
+                    <td className="border border-black p-2 text-center">{rates.nonManual}.000 KWD</td>
+                    <td className="border border-black p-2 text-right font-mono font-bold">{selectedInvoiceModal.nonManualAmountKWD.toFixed(3)} KWD</td>
+                  </tr>
+                  <tr>
+                    <td className="border border-black p-2 font-semibold">Manual Accommodation Beds</td>
+                    <td className="border border-black p-2 text-center">{selectedInvoiceModal.manualBeds} Beds</td>
+                    <td className="border border-black p-2 text-center">{rates.manual}.000 KWD</td>
+                    <td className="border border-black p-2 text-right font-mono font-bold">{selectedInvoiceModal.manualAmountKWD.toFixed(3)} KWD</td>
+                  </tr>
+                  {selectedInvoiceModal.otherCostKWD > 0 && (
+                    <tr>
+                      <td className="border border-black p-2 font-semibold">
+                        Miscellaneous / Others Cost ({selectedInvoiceModal.otherCostDesc || 'General Utilities'})
+                      </td>
+                      <td className="border border-black p-2 text-center">1 Lump Sum</td>
+                      <td className="border border-black p-2 text-center">Custom</td>
+                      <td className="border border-black p-2 text-right font-mono font-bold">{selectedInvoiceModal.otherCostKWD.toFixed(3)} KWD</td>
+                    </tr>
+                  )}
+                  <tr className="bg-slate-100 font-bold">
+                    <td colSpan={3} className="border border-black p-2 text-right uppercase">Grand Total Recharge:</td>
+                    <td className="border border-black p-2 text-right font-mono text-cyan-900 text-sm">
+                      {selectedInvoiceModal.totalAmountKWD.toFixed(3)} KWD
+                    </td>
+                  </tr>
+                </tbody>
+              </table>
+
+              <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-6 text-[11px]">
+                <div>
+                  <div className="font-bold text-slate-800">Payment Terms & Instructions:</div>
+                  <p className="text-slate-600 mt-0.5">Payable upon receipt to Dhow Engineering General Trading & Contracting Co. Account # KW-DHOW-001.</p>
+                </div>
+                <div className="text-right space-y-4">
+                  <div>
+                    <span className="font-bold">Authorized Signatory:</span>
+                    <div className="h-8"></div>
+                    <div className="border-t border-black w-48 ml-auto pt-1 font-semibold">Accommodation Department Head</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL: BED RELOCATION                                               */}
       {/* =================================================================== */}
       {relocatingOccupant && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
@@ -3280,7 +3241,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* EMPLOYEE DOSSIER MODAL                                              */}
+      {/* EMPLOYEE DOSSIER MODAL (WITH IN-PLACE EDIT SWITCH - SOLVED)         */}
       {/* =================================================================== */}
       {viewingEmployeeDossier && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3303,8 +3264,13 @@ export default function App() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                {/* IN-PLACE EDIT SWITCH: Closes dossier and opens edit modal seamlessly */}
                 <button
-                  onClick={() => setEditingEmployeeModal({ ...viewingEmployeeDossier, originalId: viewingEmployeeDossier.employeeId })}
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setViewingEmployeeDossier(null);
+                    setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
+                  }}
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" /> Edit Details
@@ -3430,7 +3396,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* Relocation History */}
             <div className="space-y-2">
               <h4 className="text-xs font-bold text-slate-800 uppercase">Accommodation & Shift History Ledger</h4>
               <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
@@ -3438,7 +3403,7 @@ export default function App() {
                   viewingEmployeeDossier.stayHistory.map((hist, idx) => (
                     <div key={idx} className="border-l-2 border-cyan-600 pl-3">
                       <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
-                      <div className="test-[11px] text-slate-600">{hist.reason}</div>
+                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
                     </div>
                   ))
                 ) : (
@@ -3451,7 +3416,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* REMAINING MODALS (EDIT CAMP, ADD BUILDING, COST CENTERS, ETC.)      */}
+      {/* OTHER MODALS (EDIT CAMP, ADD BUILDING, COST CENTERS, USERS)         */}
       {/* =================================================================== */}
       {editingCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
@@ -3681,22 +3646,6 @@ export default function App() {
                 <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Create Building</button>
               </div>
             </form>
-          </div>
-        </div>
-      )}
-
-      {selectedInvoiceModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div id="invoice-print-area" className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <span className="font-mono font-bold">INV-{selectedInvoiceModal.costCenter}-{billingPeriod}</span>
-              <button onClick={() => setSelectedInvoiceModal(null)} className="no-print"><X className="w-5 h-5" /></button>
-            </div>
-            <div className="flex justify-end gap-2 no-print">
-              <button onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}`)} className="px-4 py-2 bg-slate-900 text-white rounded-xl font-bold flex items-center gap-1.5">
-                <Printer className="w-3.5 h-3.5" /> Print Invoice
-              </button>
-            </div>
           </div>
         </div>
       )}
