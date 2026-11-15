@@ -35,7 +35,7 @@ export default function ReportsTab({
   yesterday.setDate(today.getDate() - 1);
   const yesterdayFormatted = yesterday.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: '2-digit' }).replace(/ /g, '-');
 
-  const totalSummaryRows = Math.max(34, camps.length);
+  const totalSummaryRows = Math.max(30, camps.length);
 
   return (
     <div className="space-y-5">
@@ -106,10 +106,10 @@ export default function ReportsTab({
 
           <button
             type="button"
-            onClick={() => printFormattedElement('excel-print-area', 'Al-Dhow Official Report')}
+            onClick={() => printFormattedElement('excel-print-area', 'Al-Dhow Official Report', selectedTemplateTab === 'daily')}
             className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
           >
-            <Printer className="w-4 h-4" /> Print / Save PDF
+            <Printer className="w-4 h-4" /> Print / Save PDF (1 Page Fit)
           </button>
 
           {(selectedTemplateTab === 'daily' || selectedTemplateTab === 'weekly') && (
@@ -159,27 +159,27 @@ export default function ReportsTab({
         </div>
       </div>
 
-      {/* EXCEL SHEET FORMATTED PREVIEW CONTAINER */}
-      <div id="excel-print-area" className="bg-white border border-slate-300 shadow-lg mx-auto max-w-[950px] p-6 text-black font-sans text-xs">
+      {/* COMPACT A4 PREVIEW CONTAINER (Guaranteed 1-Page Fit & Zero Overlap) */}
+      <div id="excel-print-area" className="bg-white border border-slate-300 shadow-lg mx-auto max-w-[950px] p-5 text-black font-sans text-xs">
         
-        {/* 1. DAILY REPORT (Individual Camp) */}
+        {/* 1. DAILY REPORT */}
         {selectedTemplateTab === 'daily' && (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between border-b-2 border-black pb-2">
-              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-8 w-auto object-contain" />
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-7 w-auto object-contain" />
               <div className="report-title text-xs font-black tracking-wider uppercase text-center flex-1">
                 DAILY OCCUPANCY REPORT
               </div>
               <div className="w-16"></div>
             </div>
 
-            <div className="border-2 border-black p-2.5 space-y-2.5 bg-white">
+            <div className="border-2 border-black p-2 space-y-2 bg-white">
               <div className="flex justify-between items-center report-meta text-[11px] font-bold px-1">
                 <span>Accommodation No.: {targetReportCamp?.campNo}</span>
                 <span>Area: {targetReportCamp?.campArea}</span>
               </div>
 
-              <table className="w-full border-collapse text-[11px]">
+              <table className="w-full border-collapse text-[10.5px]">
                 <thead>
                   <tr className="bg-slate-100 font-bold text-center">
                     <th rowSpan={2} className="border border-black p-1 w-10">Sr. No.</th>
@@ -200,11 +200,11 @@ export default function ReportsTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: Math.max(20, occupants.filter(o => o.campNo === targetReportCamp?.campNo).length) }).map((_, idx) => {
+                  {Array.from({ length: Math.max(16, occupants.filter(o => o.campNo === targetReportCamp?.campNo).length) }).map((_, idx) => {
                     const campOccs = occupants.filter(o => o.campNo === targetReportCamp?.campNo);
                     const occ = campOccs[idx];
                     return (
-                      <tr key={idx} style={{ height: '22px' }}>
+                      <tr key={idx} style={{ height: '20px' }}>
                         <td className="border border-black px-1.5 py-0.5 text-center">{occ ? idx + 1 : ''}</td>
                         <td className="border border-black px-1.5 py-0.5 text-center font-mono">{occ ? occ.employeeId : ''}</td>
                         <td className="border border-black px-1.5 py-0.5 font-semibold">{occ ? occ.employeeName : ''}</td>
@@ -221,25 +221,25 @@ export default function ReportsTab({
                 </tbody>
               </table>
 
-              <div className="report-note text-[9px] italic pt-1">
+              <div className="report-note text-[9px] italic pt-0.5">
                 Note: * - Employee code refers herein Al Dhow ID No, Civil ID No. and Passport No.
               </div>
             </div>
           </div>
         )}
 
-        {/* 2. WEEKLY REPORT (Individual Camp) */}
+        {/* 2. WEEKLY REPORT */}
         {selectedTemplateTab === 'weekly' && (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between border-b-2 border-black pb-2">
-              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-8 w-auto object-contain" />
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-7 w-auto object-contain" />
               <div className="report-title text-xs font-black tracking-wider uppercase text-center flex-1">
                 WEEKLY CAMP OCCUPANCY & INSPECTION REPORT
               </div>
               <div className="w-16"></div>
             </div>
 
-            <div className="border-2 border-black p-3 space-y-3 bg-white">
+            <div className="border-2 border-black p-3 space-y-2.5 bg-white">
               <div className="flex justify-between report-meta text-xs font-bold">
                 <span>Facility: {targetReportCamp?.campNo} ({targetReportCamp?.campArea})</span>
                 <span>Week Ending: {todayFormatted}</span>
@@ -253,25 +253,25 @@ export default function ReportsTab({
                   </tr>
                 </thead>
                 <tbody>
-                  <tr style={{ height: '22px' }}>
+                  <tr style={{ height: '20px' }}>
                     <td className="border border-black p-1.5 font-semibold">Total Building Capacity</td>
                     <td className="border border-black p-1.5 text-center font-bold">
                       {targetReportCamp?.floors.reduce((acc, fl) => acc + fl.flats.reduce((fa, ft) => fa + ft.rooms.reduce((ra, rm) => ra + rm.capacity, 0), 0), 0)} Beds
                     </td>
                   </tr>
-                  <tr style={{ height: '22px' }}>
+                  <tr style={{ height: '20px' }}>
                     <td className="border border-black p-1.5 font-semibold">Active Residents On Job</td>
                     <td className="border border-black p-1.5 text-center font-bold text-cyan-700">
                       {occupants.filter(o => o.campNo === targetReportCamp?.campNo && o.employeeStatus === 'On Job').length}
                     </td>
                   </tr>
-                  <tr style={{ height: '22px' }}>
+                  <tr style={{ height: '20px' }}>
                     <td className="border border-black p-1.5 font-semibold">Residents On Leave (Beds Held)</td>
                     <td className="border border-black p-1.5 text-center font-bold text-amber-700">
                       {occupants.filter(o => o.campNo === targetReportCamp?.campNo && o.employeeStatus === 'On Leave').length}
                     </td>
                   </tr>
-                  <tr style={{ height: '22px' }}>
+                  <tr style={{ height: '20px' }}>
                     <td className="border border-black p-1.5 font-semibold">Vacant / Available Beds</td>
                     <td className="border border-black p-1.5 text-center font-bold text-emerald-700">
                       {targetReportCamp?.floors.reduce((acc, fl) => acc + fl.flats.reduce((fa, ft) => fa + ft.rooms.reduce((ra, rm) => ra + rm.capacity, 0), 0), 0) - occupants.filter(o => o.campNo === targetReportCamp?.campNo && !o.employeeStatus.startsWith('RTD')).length}
@@ -280,7 +280,7 @@ export default function ReportsTab({
                 </tbody>
               </table>
 
-              <div className="p-2.5 bg-slate-50 border border-black space-y-1 text-xs">
+              <div className="p-2 bg-slate-50 border border-black space-y-1 text-xs">
                 <div className="font-bold">Weekly Camp Boss Inspection Sign-Off:</div>
                 <div>Status: Fully compliant with Kuwait Labour & Fire Safety Regulations.</div>
                 <div>Inspected by: Camp Supervisor & Safety Officer</div>
@@ -289,21 +289,21 @@ export default function ReportsTab({
           </div>
         )}
 
-        {/* 3. MONTHLY SUMMARY (All Camps Combined) */}
+        {/* 3. MONTHLY SUMMARY */}
         {selectedTemplateTab === 'monthly' && (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between border-b-2 border-black pb-2">
-              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-8 w-auto object-contain" />
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-7 w-auto object-contain" />
               <div className="report-title text-xs font-black tracking-wider uppercase text-center flex-1">
                 CAMP OCCUPANCY SUMMARY STATUS
               </div>
               <div className="w-16"></div>
             </div>
 
-            <div className="border-2 border-black p-3 space-y-2.5 bg-white">
-              <div className="flex justify-end items-center mb-2">
-                <span className="report-meta text-xs font-bold mr-3">Date:</span>
-                <span className="border border-black px-4 py-0.5 text-xs font-bold text-center min-w-[100px]">
+            <div className="border-2 border-black p-2.5 space-y-2 bg-white">
+              <div className="flex justify-end items-center mb-1.5">
+                <span className="report-meta text-xs font-bold mr-2">Date:</span>
+                <span className="border border-black px-4 py-0.5 text-xs font-bold text-center min-w-[90px]">
                   {todayFormatted}
                 </span>
               </div>
@@ -311,13 +311,13 @@ export default function ReportsTab({
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="bg-slate-100 font-bold text-center">
-                    <th className="border border-black py-1 px-1.5 w-10">Sr. No.</th>
+                    <th className="border border-black py-1 px-1 w-10">Sr. No.</th>
                     <th className="border border-black py-1 px-2">Accommodation No.</th>
-                    <th className="border border-black py-1 px-1.5 w-24">Total Capacity [No. of Beds]</th>
-                    <th className="border border-black py-1 px-1.5 w-32">Total Bed Space Occupied as on {yesterdayFormatted}</th>
-                    <th className="border border-black py-1 px-1.5 w-16">Vacation</th>
-                    <th className="border border-black py-1 px-1.5 w-16">RTD</th>
-                    <th className="border border-black py-1 px-2 w-32">Remarks</th>
+                    <th className="border border-black py-1 px-1 w-24">Total Capacity [No. of Beds]</th>
+                    <th className="border border-black py-1 px-1 w-32">Total Bed Space Occupied as on {yesterdayFormatted}</th>
+                    <th className="border border-black py-1 px-1 w-16">Vacation</th>
+                    <th className="border border-black py-1 px-1 w-16">RTD</th>
+                    <th className="border border-black py-1 px-2 w-28">Remarks</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -337,7 +337,7 @@ export default function ReportsTab({
                     }
 
                     return (
-                      <tr key={idx} style={{ height: '22px' }}>
+                      <tr key={idx} style={{ height: '18px' }}>
                         <td className="border border-black px-1.5 py-0.5 text-center">{camp ? idx + 1 : ''}</td>
                         <td className="border border-black px-1.5 py-0.5 font-semibold">{camp ? `${camp.campNo} (${camp.campArea})` : ''}</td>
                         <td className="border border-black px-1.5 py-0.5 text-center">{camp ? cap : ''}</td>
@@ -351,39 +351,39 @@ export default function ReportsTab({
                 </tbody>
               </table>
 
-              <table className="w-full border-collapse text-xs mt-2">
+              <table className="w-full border-collapse text-xs mt-1.5">
                 <tbody>
                   <tr className="bg-slate-100">
-                    <td colSpan={6} className="border border-black px-2 py-1 font-bold">Inspection Details</td>
+                    <td colSpan={6} className="border border-black px-2 py-0.5 font-bold">Inspection Details</td>
                   </tr>
-                  <tr style={{ height: '22px' }}>
-                    <td className="border border-black px-2 py-1 font-bold w-36">Type of Inspection:</td>
-                    <td colSpan={2} className="border border-black px-2 py-1">
+                  <tr style={{ height: '20px' }}>
+                    <td className="border border-black px-2 py-0.5 font-bold w-36">Type of Inspection:</td>
+                    <td colSpan={2} className="border border-black px-2 py-0.5">
                       <input type="text" value={inspectionType} onChange={e => setInspectionType(e.target.value)} className="w-full text-xs focus:outline-none" />
                     </td>
-                    <td className="border border-black px-2 py-1 font-bold w-24">Conducted at:</td>
-                    <td colSpan={2} className="border border-black px-2 py-1">
+                    <td className="border border-black px-2 py-0.5 font-bold w-24">Conducted at:</td>
+                    <td colSpan={2} className="border border-black px-2 py-0.5">
                       <input type="text" value={conductedAt} onChange={e => setConductedAt(e.target.value)} className="w-full text-xs focus:outline-none" />
                     </td>
                   </tr>
                   <tr className="bg-slate-100">
-                    <td colSpan={6} className="border border-black px-2 py-1 font-bold">Accommodation Department Head's approval</td>
+                    <td colSpan={6} className="border border-black px-2 py-0.5 font-bold">Accommodation Department Head's approval</td>
                   </tr>
-                  <tr style={{ height: '22px' }}>
-                    <td className="border border-black px-2 py-1 font-bold">Remarks:</td>
-                    <td colSpan={5} className="border border-black px-2 py-1">
+                  <tr style={{ height: '20px' }}>
+                    <td className="border border-black px-2 py-0.5 font-bold">Remarks:</td>
+                    <td colSpan={5} className="border border-black px-2 py-0.5">
                       <input type="text" value={reportRemarks} onChange={e => setReportRemarks(e.target.value)} className="w-full text-xs focus:outline-none" />
                     </td>
                   </tr>
-                  <tr style={{ height: '22px' }}>
-                    <td className="border border-black px-2 py-1 font-bold">Name:</td>
-                    <td className="border border-black px-2 py-1 font-semibold">
+                  <tr style={{ height: '20px' }}>
+                    <td className="border border-black px-2 py-0.5 font-bold">Name:</td>
+                    <td className="border border-black px-2 py-0.5 font-semibold">
                       <input type="text" value={approverName} onChange={e => setApproverName(e.target.value)} className="w-full text-xs font-bold focus:outline-none" />
                     </td>
-                    <td className="border border-black px-2 py-1 font-bold">Signature:</td>
-                    <td className="border border-black px-2 py-1 w-32"></td>
-                    <td className="border border-black px-2 py-1 font-bold w-14">Date:</td>
-                    <td className="border border-black px-2 py-1 text-center">{todayFormatted}</td>
+                    <td className="border border-black px-2 py-0.5 font-bold">Signature:</td>
+                    <td className="border border-black px-2 py-0.5 w-28"></td>
+                    <td className="border border-black px-2 py-0.5 font-bold w-12">Date:</td>
+                    <td className="border border-black px-2 py-0.5 text-center">{todayFormatted}</td>
                   </tr>
                 </tbody>
               </table>
@@ -393,9 +393,9 @@ export default function ReportsTab({
 
         {/* 6. DISCIPLINARY LOG */}
         {selectedTemplateTab === 't6' && (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between border-b-2 border-black pb-2">
-              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-8 w-auto object-contain" />
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-7 w-auto object-contain" />
               <div className="report-title text-xs font-black tracking-wider uppercase text-center flex-1">
                 EMPLOYEE DISCIPLINARY ACTION LOG
               </div>
@@ -418,10 +418,10 @@ export default function ReportsTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: Math.max(20, misconductLogs.length) }).map((_, i) => {
+                  {Array.from({ length: Math.max(16, misconductLogs.length) }).map((_, i) => {
                     const item = misconductLogs[i];
                     return (
-                      <tr key={i} style={{ height: '22px' }}>
+                      <tr key={i} style={{ height: '20px' }}>
                         <td className="border border-black px-1.5 py-0.5 text-center">{item ? i + 1 : ''}</td>
                         <td className="border border-black px-1.5 py-0.5 text-center">{item ? item.employeeId : ''}</td>
                         <td className="border border-black px-1.5 py-0.5 font-semibold">{item ? item.employeeName : ''}</td>
@@ -443,9 +443,9 @@ export default function ReportsTab({
 
         {/* 7. MAINTENANCE LOG */}
         {selectedTemplateTab === 't7' && (
-          <div className="space-y-2.5">
+          <div className="space-y-2">
             <div className="flex items-center justify-between border-b-2 border-black pb-2">
-              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-8 w-auto object-contain" />
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-7 w-auto object-contain" />
               <div className="report-title text-xs font-black tracking-wider uppercase text-center flex-1">
                 ACCOMMODATION MAINTENANCE LOG
               </div>
@@ -471,10 +471,10 @@ export default function ReportsTab({
                   </tr>
                 </thead>
                 <tbody>
-                  {Array.from({ length: Math.max(20, maintenanceLogs.length) }).map((_, i) => {
+                  {Array.from({ length: Math.max(16, maintenanceLogs.length) }).map((_, i) => {
                     const item = maintenanceLogs[i];
                     return (
-                      <tr key={i} style={{ height: '22px' }}>
+                      <tr key={i} style={{ height: '20px' }}>
                         <td className="border border-black px-1 py-0.5 text-center">{item ? item.id : ''}</td>
                         <td className="border border-black px-1 py-0.5 text-center">{item ? item.date : ''}</td>
                         <td className="border border-black px-1 py-0.5 text-center">{item ? item.month : ''}</td>
