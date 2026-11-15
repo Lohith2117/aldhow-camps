@@ -69,7 +69,7 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
         <style>
           @page {
             size: A4 portrait;
-            margin: 8mm;
+            margin: 6mm;
           }
           * {
             box-sizing: border-box;
@@ -86,23 +86,27 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
           }
           img {
             max-height: 32px !important;
-            max-width: 110px !important;
+            max-width: 100px !important;
             width: auto !important;
             height: auto !important;
             object-fit: contain !important;
           }
-          h1, h2, .report-title {
-            font-size: 12px !important;
-            font-weight: 800 !important;
+          .report-title {
+            font-size: 13px !important;
+            font-weight: 900 !important;
+            letter-spacing: 0.5px;
             text-transform: uppercase;
-            margin: 0;
           }
           .report-meta {
-            font-size: 10px !important;
+            font-size: 10.5px !important;
             font-weight: 700 !important;
+            border: 2px solid #000000;
+            border-bottom: none;
+            padding: 8px 10px;
+            background: #ffffff;
           }
           .report-note {
-            font-size: 8px !important;
+            font-size: 8.5px !important;
             font-style: italic !important;
             margin-top: 4px;
           }
@@ -117,11 +121,11 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
             border: 1px solid #000000;
             padding: 3px 4px;
             font-size: 9.5px;
-            height: 20px;
+            height: 22px;
             vertical-align: middle;
           }
           th {
-            background-color: #f3f4f6 !important;
+            background-color: #f1f5f9 !important;
             font-weight: 700;
             text-align: center;
           }
