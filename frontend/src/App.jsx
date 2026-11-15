@@ -23,6 +23,7 @@ import {
   exportAccommodationMisconductReport,
   exportMisconductLog,
   exportMaintenanceLog,
+  exportImportTemplate,
   printFormattedElement
 } from './utils/reportGenerators';
 
@@ -2190,6 +2191,67 @@ export default function App() {
                 </button>
               </div>
             </div>
+            <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+                <select
+                  value={productiveTypeFilter}
+                  onChange={(e) => setProductiveTypeFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2"
+                >
+                  <option value="ALL">All Productive Types</option>
+                  <option value="Direct Employee (DE)">Direct Employee (DE)</option>
+                  <option value="Manpower Supply (MPS)">Manpower Supply (MPS)</option>
+                  <option value="Shutdown">Shutdown</option>
+                  <option value="Others">Others</option>
+                </select>
+
+                <select
+                  value={statusFilter}
+                  onChange={(e) => setStatusFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2"
+                >
+                  <option value="ALL">All Statuses</option>
+                  <option value="Unassigned">Unassigned (Pending Bed)</option>
+                  <option value="On Job">On Job</option>
+                  <option value="On Leave">On Leave</option>
+                  <option value="RTD - Resigned">RTD - Resigned</option>
+                  <option value="RTD - Terminated">RTD - Terminated</option>
+                </select>
+
+                <select
+                  value={divisionFilter}
+                  onChange={(e) => setDivisionFilter(e.target.value)}
+                  className="bg-slate-50 border border-slate-300 text-slate-700 text-xs font-semibold rounded-xl px-3 py-2"
+                >
+                  <option value="ALL">All Divisions</option>
+                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+
+                {/* NEW: Download Template Button */}
+                <button
+                  onClick={exportImportTemplate}
+                  className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                  title="Download blank Excel template with correct columns"
+                >
+                  <Download className="w-4 h-4 text-cyan-400" />
+                  <span>Download Template</span>
+                </button>
+
+                <button
+                  onClick={() => setShowPreAddEmployeeModal(true)}
+                  className="px-3.5 py-2 bg-cyan-600 hover:bg-cyan-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <UserPlus className="w-4 h-4" />
+                  <span>+ Add Employee</span>
+                </button>
+
+                <button
+                  onClick={() => excelFileInputRef.current?.click()}
+                  className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
+                >
+                  <FileUp className="w-4 h-4" />
+                  <span>Import Excel</span>
+                </button>
+              </div>
 
             <div className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-xs">
               <div className="px-5 py-3.5 bg-slate-50 border-b border-slate-200 flex items-center justify-between text-xs font-bold text-slate-800">
