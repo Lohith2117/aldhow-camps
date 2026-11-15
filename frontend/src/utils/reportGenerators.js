@@ -48,7 +48,7 @@ const headerFill = {
 // ============================================================================
 // PRINT ISOLATION ENGINE (Prints ONLY the Excel-styled Sheet or Preview Modal)
 // ============================================================================
-export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Report') {
+export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Report', isLandscape = true) {
   const el = document.getElementById(elementId);
   if (!el) {
     window.print();
@@ -68,7 +68,7 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
         <title>${docTitle}</title>
         <style>
           @page {
-            size: A4 portrait;
+            size: A4 ${isLandscape ? 'landscape' : 'portrait'};
             margin: 6mm;
           }
           * {
@@ -82,23 +82,31 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
             padding: 0;
             background: #ffffff;
             color: #000000;
-            font-size: 10px;
+            width: 100%;
+          }
+          #${elementId} {
+            width: 100% !important;
+            max-width: none !important;
+            border: none !important;
+            box-shadow: none !important;
+            padding: 0 !important;
+            margin: 0 !important;
           }
           img {
-            max-height: 32px !important;
-            max-width: 100px !important;
+            max-height: 36px !important;
+            max-width: 120px !important;
             width: auto !important;
             height: auto !important;
             object-fit: contain !important;
           }
           .report-title {
-            font-size: 13px !important;
+            font-size: 14px !important;
             font-weight: 900 !important;
             letter-spacing: 0.5px;
             text-transform: uppercase;
           }
           .report-meta {
-            font-size: 10.5px !important;
+            font-size: 11px !important;
             font-weight: 700 !important;
             border: 2px solid #000000;
             border-bottom: none;
@@ -106,22 +114,22 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
             background: #ffffff;
           }
           .report-note {
-            font-size: 8.5px !important;
+            font-size: 9px !important;
             font-style: italic !important;
-            margin-top: 4px;
+            margin-top: 6px;
           }
           .no-print {
             display: none !important;
           }
           table {
-            width: 100%;
+            width: 100% !important;
             border-collapse: collapse;
           }
           th, td {
             border: 1px solid #000000;
-            padding: 3px 4px;
-            font-size: 9.5px;
-            height: 22px;
+            padding: 5px 6px;
+            font-size: 10.5px;
+            height: 26px;
             vertical-align: middle;
           }
           th {
@@ -133,7 +141,7 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
             border: none !important;
             background: transparent !important;
             font-family: inherit;
-            font-size: 10px !important;
+            font-size: 11px !important;
             font-weight: 700;
             color: inherit;
             width: 100%;
@@ -143,7 +151,7 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
         </style>
       </head>
       <body>
-        ${el.innerHTML}
+        ${el.outerHTML}
         <script>
           window.onload = function() {
             setTimeout(function() {
