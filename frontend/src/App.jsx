@@ -460,45 +460,47 @@ export default function App() {
   // FLOOR MANAGEMENT HANDLERS (EDIT CAMP)
   // =========================================================
   const handleOpenAddFloorConfig = () => {
-    setNewFloorDraft({ flatsCount: 3, nonManualFlats: 1 });
-    setShowAddFloorConfigModal(true);
-  };
-
-  const handleCommitNewFloorToCamp = (e) => {
-    e.preventDefault();
     if (!editingCampModal) return;
-
     const nextFloorNo = editingCampModal.floors.length + 1;
     const campDigit = editingCampModal.campDigit || editingCampModal.campNo.replace(/\D/g, '') || '1';
     const flStr = String(nextFloorNo).padStart(2, '0');
-    const totalFlats = parseInt(newFloorDraft.flatsCount, 10) || 3;
-    const nmFlats = parseInt(newFloorDraft.nonManualFlats, 10) || 0;
 
-    const newFlats = [];
-    for (let fl = 1; fl <= totalFlats; fl++) {
-      const flatStr = String(fl).padStart(2, '0');
-      const isNM = fl <= nmFlats;
-      const flatGrade = isNM ? 'Non-Manual' : 'Manual';
-      const gradeInitial = isNM ? 'NM' : 'M';
-      const roomCapacity = isNM ? 2 : 3;
-
-      newFlats.push({
-        flatNo: fl,
-        flatCode: `${campDigit}-${flStr}-${flatStr}-${gradeInitial}`,
-        roomGrade: flatGrade,
+    const newFlats = [
+      {
+        flatNo: 1,
+        flatCode: `${campDigit}-${flStr}-01-NM`,
+        roomGrade: 'Non-Manual',
         rooms: [
-          { roomNo: `${campDigit}-${flStr}-${flatStr}-A`, capacity: roomCapacity, occupants: [] },
-          { roomNo: `${campDigit}-${flStr}-${flatStr}-B`, capacity: roomCapacity, occupants: [] },
-          { roomNo: `${campDigit}-${flStr}-${flatStr}-C`, capacity: roomCapacity, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-01-A`, capacity: 2, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-01-B`, capacity: 2, occupants: [] }
         ]
-      });
-    }
+      },
+      {
+        flatNo: 2,
+        flatCode: `${campDigit}-${flStr}-02-M`,
+        roomGrade: 'Manual',
+        rooms: [
+          { roomNo: `${campDigit}-${flStr}-02-A`, capacity: 3, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-02-B`, capacity: 3, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-02-C`, capacity: 3, occupants: [] }
+        ]
+      },
+      {
+        flatNo: 3,
+        flatCode: `${campDigit}-${flStr}-03-M`,
+        roomGrade: 'Manual',
+        rooms: [
+          { roomNo: `${campDigit}-${flStr}-03-A`, capacity: 3, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-03-B`, capacity: 3, occupants: [] },
+          { roomNo: `${campDigit}-${flStr}-03-C`, capacity: 3, occupants: [] }
+        ]
+      }
+    ];
 
     setEditingCampModal(prev => ({
       ...prev,
       floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }]
     }));
-    setShowAddFloorConfigModal(false);
   };
 
   const handleRemoveTopFloorDraft = () => {

@@ -83,6 +83,13 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
             background: #ffffff;
             color: #000000;
           }
+          img {
+            max-height: 42px !important;
+            max-width: 140px !important;
+            width: auto !important;
+            height: auto !important;
+            object-fit: contain !important;
+          }
           .no-print {
             display: none !important;
           }
