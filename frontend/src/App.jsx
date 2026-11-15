@@ -3275,7 +3275,19 @@ export default function App() {
                 >
                   <Edit3 className="w-3.5 h-3.5" /> Edit Details
                 </button>
-                <button onClick={() => setViewingEmployeeDossier(null)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setViewingEmployeeDossier(null);
+                    setTimeout(() => {
+                      setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
+                    }, 50);
+                  }}
+                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Edit3 className="w-3.5 h-3.5" /> Edit Details
+                </button>
               </div>
             </div>
 
