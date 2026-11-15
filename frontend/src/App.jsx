@@ -3266,16 +3266,6 @@ export default function App() {
               <div className="flex items-center gap-2">
                 {/* IN-PLACE EDIT SWITCH: Closes dossier and opens edit modal seamlessly */}
                 <button
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setViewingEmployeeDossier(null);
-                    setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
-                  }}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5" /> Edit Details
-                </button>
-                <button
                   type="button"
                   onClick={() => {
                     const occ = viewingEmployeeDossier;
@@ -3287,6 +3277,9 @@ export default function App() {
                   className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
                 >
                   <Edit3 className="w-3.5 h-3.5" /> Edit Details
+                </button>
+                <button type="button" onClick={() => setViewingEmployeeDossier(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+                  <X className="w-5 h-5" />
                 </button>
               </div>
             </div>
