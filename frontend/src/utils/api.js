@@ -1,6 +1,7 @@
+// frontend/src/utils/api.js
 const getAuthHeaders = () => {
   try {
-    const session = JSON.parse(sessionStorage.getItem('dhow_session')); // Switched to sessionStorage for safety
+    const session = JSON.parse(sessionStorage.getItem('dhow_session'));
     if (session && session.token) {
       return { 'Content-Type': 'application/json', 'Authorization': `Bearer ${session.token}` };
     }

@@ -6,16 +6,10 @@ import {
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
   Archive, Tag, Phone, Clock, Layers, Globe, FileUp, Wrench, ShieldAlert, FileCheck
 } from 'lucide-react';
-import ExcelJS from 'exceljs'; // <-- Secure replacement for xlsx
+import ExcelJS from 'exceljs';
 import dhowLogoImg from './assets/dhow-logo.png';
+import { apiFetch } from './utils/api';
 import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
-import { fetchCloudData, saveCloudData } from './utils/apiSync';
-import {
-  INITIAL_USERS, INITIAL_COST_CENTERS, INITIAL_CAMPS, INITIAL_OCCUPANTS,
-  INITIAL_LEAVE_LOGS, INITIAL_RTD_LOGS, INITIAL_TRANSFER_REQUESTS,
-  INITIAL_BILLING_OTHER_COSTS, INITIAL_ACTIVITY_LOGS
-} from './data/initialDatabase';
-
 import {
   exportCampOccupancySummary,
   exportDailyOccupancyReport,
@@ -28,7 +22,6 @@ import {
   printFormattedElement
 } from './utils/reportGenerators';
 
-import { apiFetch } from './utils/api';
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
 import ActivityLogTab from './components/ActivityLogTab';
@@ -38,88 +31,37 @@ const DhowLogo = ({ className = "h-8 w-auto" }) => (
   <img src={dhowLogoImg} alt="Dhow Engineering" className={className} />
 );
 
-// M4: Safe loader for corrupt localStorage
-const safeLoad = (key, fallback) => {
-  try {
-    const item = localStorage.getItem(key);
-    return item ? JSON.parse(item) : fallback;
-  } catch (err) {
-    console.warn(`Corrupt storage key "${key}" detected. Resetting to fallback.`);
-    localStorage.removeItem(key);
-    return fallback;
-  }
-};
-
-const DEFAULT_MISCONDUCT_LOGS = [
-  {
-    id: 'disc-1',
-    employeeId: '5912',
-    employeeName: 'Syed Tanveer Hussain',
-    title: 'QA/QC Inspector',
-    incidentDate: '2026-10-15',
-    incidentTime: '22:30',
-    incidentLocation: 'CAMP-01, Flat 1-01-02-M, Room B',
-    typeOfViolation: 'Cooking inside bedroom against fire safety policy',
-    docRef: 'DISC-5912-01',
-    costCenter: '1CIV011-KOC',
-    division: 'CIVIL',
-    campNo: 'CAMP-01',
-    roomNo: '1-01-02-B',
-    contactNo: '+965 99882211',
-    reportedBy: 'Tariq Al-Mansoor',
-    witnessName: 'Amr Mohamed Ali',
-    witnessId: '5838',
-    witnessRoom: '1-01-01-A',
-    witnessPhone: '+965 98765432',
-    description: 'Use of high-voltage electric hotplate inside sleeping quarters.',
-    remarks: 'First written warning issued by HR.'
-  }
-];
-
-const DEFAULT_MAINTENANCE_LOGS = [
-  {
-    id: 'MNT-101',
-    date: '2026-11-02',
-    month: 'November',
-    issueDetails: 'Split A/C cooling compressor failure and water leakage',
-    reportedByEmpId: '6410',
-    employeeName: 'Kamineni Lohith',
-    floorNo: 1,
-    flatCode: '1-01-01-NM',
-    roomNo: '1-01-01-B',
-    areaFacility: 'Bedroom AC',
-    inspectedBy: 'Facilities Supervisor',
-    actionTakenBy: 'HVAC Maintenance Team',
-    status: 'Completed',
-    replacedMaterialCost: '18.500',
-    chargeToEmpId: 'N/A (Wear & Tear)',
-    remarks: 'Replaced fan motor and cleared drain pipe.'
-  }
-];
-
 export default function App() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
   // ==========================================
-  // STATE PERSISTENCE
+  // PHASE 3: CLOUD STATE (NO LOCAL STORAGE)
   // ==========================================
-  const [users, setUsers] = useState(() => safeLoad('dhow_users_v14', INITIAL_USERS));
-  const [currentUser, setCurrentUser] = useState(() => safeLoad('dhow_session_v14', null));
-  const [camps, setCamps] = useState(() => safeLoad('dhow_camps_v14', INITIAL_CAMPS));
-  const [occupants, setOccupants] = useState(() => safeLoad('dhow_occupants_v14', INITIAL_OCCUPANTS));
-  const [costCenters, setCostCenters] = useState(() => safeLoad('dhow_cc_v14', INITIAL_COST_CENTERS));
-  const [divisions, setDivisions] = useState(() => safeLoad('dhow_div_v14', ['IDS', 'MEP', 'CIVIL', 'OIL & GAS', 'MARINE']));
-  const [leaveLogs, setLeaveLogs] = useState(() => safeLoad('dhow_leave_v14', INITIAL_LEAVE_LOGS));
-  const [rtdLogs, setRtdLogs] = useState(() => safeLoad('dhow_rtd_v14', INITIAL_RTD_LOGS));
-  const [transferRequests, setTransferRequests] = useState(() => safeLoad('dhow_tr_v14', INITIAL_TRANSFER_REQUESTS));
-  const [otherCosts, setOtherCosts] = useState(() => safeLoad('dhow_others_v14', INITIAL_BILLING_OTHER_COSTS));
-  const [activityLogs, setActivityLogs] = useState(() => safeLoad('dhow_act_v14', INITIAL_ACTIVITY_LOGS));
-  const [maintenanceLogs, setMaintenanceLogs] = useState(() => safeLoad('dhow_mnt_v14', DEFAULT_MAINTENANCE_LOGS));
-  const [misconductLogs, setMisconductLogs] = useState(() => safeLoad('dhow_disc_v14', DEFAULT_MISCONDUCT_LOGS));
+  const [users, setUsers] = useState([]);
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const session = sessionStorage.getItem('dhow_session');
+      return session ? JSON.parse(session).user : null;
+    } catch (e) { return null; }
+  });
+  
+  const [camps, setCamps] = useState([]);
+  const [occupants, setOccupants] = useState([]);
+  const [costCenters, setCostCenters] = useState([]);
+  const [divisions, setDivisions] = useState(['IDS', 'MEP', 'CIVIL', 'OIL & GAS', 'MARINE']);
+  const [leaveLogs, setLeaveLogs] = useState([]);
+  const [rtdLogs, setRtdLogs] = useState([]);
+  const [transferRequests, setTransferRequests] = useState([]);
+  const [otherCosts, setOtherCosts] = useState([]);
+  const [activityLogs, setActivityLogs] = useState([]);
+  const [maintenanceLogs, setMaintenanceLogs] = useState([]);
+  const [misconductLogs, setMisconductLogs] = useState([]);
+
+  const [isSyncing, setIsSyncing] = useState(false); // UI Addition allowed
 
   // Navigation
   const [activeTab, setActiveTab] = useState('map');
-  const [selectedCampId, setSelectedCampId] = useState(INITIAL_CAMPS[0].id);
+  const [selectedCampId, setSelectedCampId] = useState(null);
   const [selectedFloorNo, setSelectedFloorNo] = useState(1);
 
   // Invoicing & Rate Card
@@ -149,16 +91,10 @@ export default function App() {
   const [showAddCampModal, setShowAddCampModal] = useState(false);
   const [editingCampModal, setEditingCampModal] = useState(null);
   const [showManageCostCentersModal, setShowManageCostCentersModal] = useState(false);
-  const [editingCostCenterModal, setEditingCostCenterModal] = useState(null);
 
-  // Report & Form Preview Modal
   const [reportPreviewModal, setReportPreviewModal] = useState(null);
-
-  // Floor Configurator sub-modal inside Edit Camp
   const [showAddFloorConfigModal, setShowAddFloorConfigModal] = useState(false);
   const [newFloorDraft, setNewFloorDraft] = useState({ flatsCount: 3, nonManualFlats: 1 });
-
-  // Dynamic Divisions
   const [newDivisionInput, setNewDivisionInput] = useState('');
 
   // Excel Roster Import
@@ -168,8 +104,6 @@ export default function App() {
   const [excelImportStats, setExcelImportStats] = useState({ total: 0, valid: 0, errors: 0 });
   const excelFileInputRef = useRef(null);
 
-  // Misconduct & Maintenance Modals
-  const [showMisconductModal, setShowMisconductModal] = useState(false);
   const [misconductForm, setMisconductForm] = useState({
     employeeId: '', employeeName: '', title: '', division: '', costCenter: '',
     campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: todayStr,
@@ -187,7 +121,6 @@ export default function App() {
     status: 'Pending', replacedMaterialCost: '0.000', chargeToEmpId: 'N/A (Wear & Tear)', remarks: ''
   });
 
-  // User Management Modals (RBAC)
   const [showAddUserModal, setShowAddUserModal] = useState(false);
   const [showResetPasswordModal, setShowResetPasswordModal] = useState(false);
   const [targetUserForReset, setTargetUserForReset] = useState(null);
@@ -195,7 +128,6 @@ export default function App() {
   const [confirmPasswordValue, setConfirmPasswordValue] = useState('');
   const [resetSuccessMessage, setResetSuccessMessage] = useState('');
 
-  // Login Form States
   const [loginEmail, setLoginEmail] = useState('');
   const [loginPassword, setLoginPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -203,7 +135,6 @@ export default function App() {
   const [loginError, setLoginError] = useState('');
   const [loginLoading, setLoginLoading] = useState(false);
 
-  // Pre-Add Employee Form
   const [preAddForm, setPreAddForm] = useState({
     employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer',
     productiveType: 'Direct Employee (DE)', roomGrade: 'Manual',
@@ -212,7 +143,6 @@ export default function App() {
     entryDate: todayStr
   });
 
-  // Bed Check-In Form
   const [checkInForm, setCheckInForm] = useState({
     campId: 'camp-1', floorNo: 1, flatCode: '1-01-01-NM', roomNo: '1-01-01-B',
     roomGrade: 'Non-Manual', productiveType: 'Direct Employee (DE)',
@@ -244,13 +174,7 @@ export default function App() {
   const [newCostCenterForm, setNewCostCenterForm] = useState({ code: '', name: '', division: 'IDS' });
 
   const [newCampForm, setNewCampForm] = useState({
-    campNo: 'CAMP-04',
-    campArea: 'Ahmadi Sector 4',
-    campDigit: '4',
-    startingFloorNo: 1,
-    campStartDate: todayStr,
-    floorsCount: 3,
-    roomsPerFlat: 3,
+    campNo: 'CAMP-04', campArea: 'Ahmadi Sector 4', campDigit: '4', startingFloorNo: 1, campStartDate: todayStr, floorsCount: 3, roomsPerFlat: 3,
     floorConfigs: [
       { floorNo: 1, flatsCount: 2, nonManualFlats: 1 },
       { floorNo: 2, flatsCount: 3, nonManualFlats: 0 },
@@ -258,74 +182,68 @@ export default function App() {
     ]
   });
 
-  const handleFloorsCountChange = (count) => {
-    const val = Math.max(1, Math.min(20, parseInt(count, 10) || 1));
-    setNewCampForm(prev => {
-      const currentConfigs = [...prev.floorConfigs];
-      if (val > currentConfigs.length) {
-        for (let i = currentConfigs.length + 1; i <= val; i++) {
-          currentConfigs.push({ floorNo: i, flatsCount: 3, nonManualFlats: 0 });
-        }
-      } else if (val < currentConfigs.length) {
-        currentConfigs.length = val;
-      }
-      return { ...prev, floorsCount: val, floorConfigs: currentConfigs };
-    });
-  };
-
   const [newUserForm, setNewUserForm] = useState({
     staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR',
     campScope: 'ALL', canManageUsers: false, canAddCamps: false, canDeleteCamps: true,
     canEditOccupants: true, canExportReports: true, canApproveTransfers: false
   });
 
-  // LocalStorage Sync
-  useEffect(() => { localStorage.setItem('dhow_users_v14', JSON.stringify(users)); }, [users]);
-  useEffect(() => { localStorage.setItem('dhow_camps_v14', JSON.stringify(camps)); }, [camps]);
-  useEffect(() => { localStorage.setItem('dhow_occupants_v14', JSON.stringify(occupants)); }, [occupants]);
-  useEffect(() => { localStorage.setItem('dhow_cc_v14', JSON.stringify(costCenters)); }, [costCenters]);
-  useEffect(() => { localStorage.setItem('dhow_div_v14', JSON.stringify(divisions)); }, [divisions]);
-  useEffect(() => { localStorage.setItem('dhow_leave_v14', JSON.stringify(leaveLogs)); }, [leaveLogs]);
-  useEffect(() => { localStorage.setItem('dhow_rtd_v14', JSON.stringify(rtdLogs)); }, [rtdLogs]);
-  useEffect(() => { localStorage.setItem('dhow_tr_v14', JSON.stringify(transferRequests)); }, [transferRequests]);
-  useEffect(() => { localStorage.setItem('dhow_others_v14', JSON.stringify(otherCosts)); }, [otherCosts]);
-  useEffect(() => { localStorage.setItem('dhow_act_v14', JSON.stringify(activityLogs)); }, [activityLogs]);
-  useEffect(() => { localStorage.setItem('dhow_mnt_v14', JSON.stringify(maintenanceLogs)); }, [maintenanceLogs]);
-  useEffect(() => { localStorage.setItem('dhow_disc_v14', JSON.stringify(misconductLogs)); }, [misconductLogs]);
-  useEffect(() => {
-    if (currentUser && rememberMe) localStorage.setItem('dhow_session_v14', JSON.stringify(currentUser));
-    else if (!currentUser) localStorage.removeItem('dhow_session_v14');
-  }, [currentUser, rememberMe]);
-
-  const logActivity = (category, actionTitle, details, campNo = 'ALL') => {
-    const newLog = {
-      id: `act-${crypto.randomUUID()}`,
-      timestamp: new Date().toISOString(),
-      actorName: currentUser ? currentUser.name : 'System Admin',
-      actorRole: currentUser ? currentUser.role : 'SUPER_ADMIN',
-      category, actionTitle, details, campNo
-    };
-    setActivityLogs(prev => [newLog, ...prev]);
+  // ==========================================
+  // CLOUD SYNC LOGIC (PHASE 3)
+  // ==========================================
+  const syncCloudDatabase = async () => {
+    if (!currentUser) return;
+    try {
+      setIsSyncing(true);
+      const data = await apiFetch('bootstrap', 'GET');
+      if (data) {
+        setUsers(data.users || []);
+        setOccupants(data.occupants || []);
+        setCamps(data.camps || []);
+        if (data.camps && data.camps.length > 0 && !selectedCampId) setSelectedCampId(data.camps[0].id);
+        setCostCenters(data.costCenters || []);
+        setLeaveLogs(data.leaveLogs || []);
+        setRtdLogs(data.rtdLogs || []);
+        setTransferRequests(data.transferRequests || []);
+        setActivityLogs(data.activityLogs || []);
+        setOtherCosts(data.otherCosts || []);
+        setMaintenanceLogs(data.maintenanceLogs || []);
+        setMisconductLogs(data.misconductLogs || []);
+        
+        const divs = Array.from(new Set((data.costCenters || []).map(c => c.division)));
+        if (divs.length > 0) setDivisions(divs);
+      }
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSyncing(false);
+    }
   };
 
+  useEffect(() => {
+    syncCloudDatabase();
+    const interval = setInterval(syncCloudDatabase, 30000);
+    const handleFocus = () => syncCloudDatabase();
+    window.addEventListener('focus', handleFocus);
+    return () => {
+      clearInterval(interval);
+      window.removeEventListener('focus', handleFocus);
+    };
+  }, [currentUser]);
 
   const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
     setLoginLoading(true);
-    
     try {
-      // Calls the secure POST /api/auth/login endpoint
       const response = await fetch('/api/auth/login', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ login: loginEmail.trim(), password: loginPassword })
       });
-      
       const data = await response.json();
-      if (!response.ok) throw new Error(data.error);
-      
-      sessionStorage.setItem('dhow_session', JSON.stringify(data)); // Save token safely
+      if (!response.ok) throw new Error(data.error || 'Login failed');
+      sessionStorage.setItem('dhow_session', JSON.stringify(data));
       setCurrentUser(data.user);
     } catch (err) {
       setLoginError(err.message || 'Invalid credentials');
@@ -346,11 +264,7 @@ export default function App() {
 
   // Global Telemetry
   const globalStats = useMemo(() => {
-    let totalFlats = 0;
-    let totalRooms = 0;
-    let totalBeds = 0;
-    let occupiedBeds = 0;
-
+    let totalFlats = 0; let totalRooms = 0; let totalBeds = 0; let occupiedBeds = 0;
     activeCamps.forEach(c => {
       c.floors.forEach(fl => {
         totalFlats += fl.flats.length;
@@ -371,24 +285,16 @@ export default function App() {
     const freeBeds = Math.max(0, totalBeds - occupiedBeds);
     const occupancyPct = totalBeds > 0 ? Math.round((occupiedBeds / totalBeds) * 100) : 0;
 
-    return {
-      campsCount: activeCamps.length,
-      totalFlats, totalRooms, totalBeds, occupiedBeds,
-      freeBeds, occupancyPct, activeStaffCount: activeStaff.length,
-      onJobCount, onLeaveCount, unassignedCount
-    };
+    return { campsCount: activeCamps.length, totalFlats, totalRooms, totalBeds, occupiedBeds, freeBeds, occupancyPct, activeStaffCount: activeStaff.length, onJobCount, onLeaveCount, unassignedCount };
   }, [activeCamps, occupants]);
 
   const universalSearchResults = useMemo(() => {
     const q = universalSearchQuery.trim().toLowerCase();
     if (!q) return [];
     return occupants.filter(occ =>
-      occ.employeeId.toLowerCase().includes(q) ||
-      occ.employeeName.toLowerCase().includes(q) ||
-      (occ.civilId && occ.civilId.toString().includes(q)) ||
-      (occ.passportNo && occ.passportNo.toLowerCase().includes(q)) ||
-      (occ.nationality && occ.nationality.toLowerCase().includes(q)) ||
-      (occ.mobileNo && occ.mobileNo.includes(q)) ||
+      occ.employeeId.toLowerCase().includes(q) || occ.employeeName.toLowerCase().includes(q) ||
+      (occ.civilId && occ.civilId.toString().includes(q)) || (occ.passportNo && occ.passportNo.toLowerCase().includes(q)) ||
+      (occ.nationality && occ.nationality.toLowerCase().includes(q)) || (occ.mobileNo && occ.mobileNo.includes(q)) ||
       (occ.productiveType && occ.productiveType.toLowerCase().includes(q))
     ).slice(0, 8);
   }, [occupants, universalSearchQuery]);
@@ -396,20 +302,14 @@ export default function App() {
   const filteredOccupants = useMemo(() => {
     return occupants.filter(occ => {
       const q = searchTerm.toLowerCase();
-      const matchesSearch =
-        occ.employeeName.toLowerCase().includes(q) ||
-        occ.employeeId.toLowerCase().includes(q) ||
-        (occ.nationality && occ.nationality.toLowerCase().includes(q)) ||
-        (occ.civilId && occ.civilId.toString().includes(q)) ||
-        (occ.passportNo && occ.passportNo.toLowerCase().includes(q)) ||
-        (occ.mobileNo && occ.mobileNo.toLowerCase().includes(q)) ||
-        (occ.flatCode && occ.flatCode.toLowerCase().includes(q)) ||
-        (occ.roomNo && occ.roomNo.toLowerCase().includes(q));
+      const matchesSearch = occ.employeeName.toLowerCase().includes(q) || occ.employeeId.toLowerCase().includes(q) ||
+        (occ.nationality && occ.nationality.toLowerCase().includes(q)) || (occ.civilId && occ.civilId.toString().includes(q)) ||
+        (occ.passportNo && occ.passportNo.toLowerCase().includes(q)) || (occ.mobileNo && occ.mobileNo.toLowerCase().includes(q)) ||
+        (occ.flatCode && occ.flatCode.toLowerCase().includes(q)) || (occ.roomNo && occ.roomNo.toLowerCase().includes(q));
 
       const matchesStatus = statusFilter === 'ALL' || occ.employeeStatus === statusFilter;
       const matchesDivision = divisionFilter === 'ALL' || occ.division === divisionFilter;
       const matchesProductiveType = productiveTypeFilter === 'ALL' || (occ.productiveType || 'Direct Employee (DE)') === productiveTypeFilter;
-
       return matchesSearch && matchesStatus && matchesDivision && matchesProductiveType;
     });
   }, [occupants, searchTerm, statusFilter, divisionFilter, productiveTypeFilter]);
@@ -423,18 +323,11 @@ export default function App() {
       if (!costCenterMap[cc]) {
         const found = costCenters.find(c => c.code === cc);
         costCenterMap[cc] = {
-          costCenter: cc,
-          projectName: found ? found.name : 'Project Site',
-          division: occ.division || (found ? found.division : 'General'),
-          totalOccupants: 0,
-          nonManualBeds: 0,
-          manualBeds: 0,
-          nonManualAmountKWD: 0,
-          manualAmountKWD: 0,
-          otherCostKWD: otherCosts[cc]?.amount || 0,
-          otherCostDesc: otherCosts[cc]?.description || '',
-          totalAmountKWD: 0,
-          occupants: []
+          costCenter: cc, projectName: found ? found.name : 'Project Site', division: occ.division || (found ? found.division : 'General'),
+          totalOccupants: 0, nonManualBeds: 0, manualBeds: 0, nonManualAmountKWD: 0, manualAmountKWD: 0,
+          otherCostKWD: otherCosts.find(oc => oc.cost_center === cc && oc.billing_period === billingPeriod)?.other_cost_kwd || 0,
+          otherCostDesc: otherCosts.find(oc => oc.cost_center === cc && oc.billing_period === billingPeriod)?.other_cost_description || '',
+          totalAmountKWD: 0, occupants: []
         };
       }
 
@@ -450,98 +343,62 @@ export default function App() {
       }
     });
 
-    const items = Object.values(costCenterMap).map(item => {
-      const others = otherCosts[item.costCenter]?.amount || 0;
-      return {
-        ...item,
-        otherCostKWD: others,
-        otherCostDesc: otherCosts[item.costCenter]?.description || '',
-        totalAmountKWD: item.nonManualAmountKWD + item.manualAmountKWD + others
-      };
-    });
+    const items = Object.values(costCenterMap).map(item => ({
+      ...item,
+      totalAmountKWD: item.nonManualAmountKWD + item.manualAmountKWD + Number(item.otherCostKWD)
+    }));
 
     const grandTotalKWD = items.reduce((acc, curr) => acc + curr.totalAmountKWD, 0);
     const totalNonManualKWD = items.reduce((acc, curr) => acc + curr.nonManualAmountKWD, 0);
     const totalManualKWD = items.reduce((acc, curr) => acc + curr.manualAmountKWD, 0);
-    const totalOthersKWD = items.reduce((acc, curr) => acc + curr.otherCostKWD, 0);
+    const totalOthersKWD = items.reduce((acc, curr) => acc + Number(curr.otherCostKWD), 0);
 
     return { items, grandTotalKWD, totalNonManualKWD, totalManualKWD, totalOthersKWD };
-  }, [occupants, costCenters, rates, otherCosts]);
+  }, [occupants, costCenters, rates, otherCosts, billingPeriod]);
 
   // =========================================================
-  // FLOOR MANAGEMENT HANDLERS (EDIT CAMP)
+  // API MUTATION HANDLERS (Replaced localStorage with DB Fetch)
   // =========================================================
+
+  const handleFloorsCountChange = (count) => {
+    const val = Math.max(1, Math.min(20, parseInt(count, 10) || 1));
+    setNewCampForm(prev => {
+      const currentConfigs = [...prev.floorConfigs];
+      if (val > currentConfigs.length) {
+        for (let i = currentConfigs.length + 1; i <= val; i++) currentConfigs.push({ floorNo: i, flatsCount: 3, nonManualFlats: 0 });
+      } else if (val < currentConfigs.length) {
+        currentConfigs.length = val;
+      }
+      return { ...prev, floorsCount: val, floorConfigs: currentConfigs };
+    });
+  };
+
   const handleOpenAddFloorConfig = () => {
     if (!editingCampModal) return;
     const nextFloorNo = editingCampModal.floors.length + 1;
     const campDigit = editingCampModal.campDigit || editingCampModal.campNo.replace(/\D/g, '') || '1';
     const flStr = String(nextFloorNo).padStart(2, '0');
-
     const newFlats = [
-      {
-        flatNo: 1,
-        flatCode: `${campDigit}-${flStr}-01-NM`,
-        roomGrade: 'Non-Manual',
-        rooms: [
-          { roomNo: `${campDigit}-${flStr}-01-A`, capacity: 2, occupants: [] },
-          { roomNo: `${campDigit}-${flStr}-01-B`, capacity: 2, occupants: [] }
-        ]
-      },
-      {
-        flatNo: 2,
-        flatCode: `${campDigit}-${flStr}-02-M`,
-        roomGrade: 'Manual',
-        rooms: [
-          { roomNo: `${campDigit}-${flStr}-02-A`, capacity: 3, occupants: [] },
-          { roomNo: `${campDigit}-${flStr}-02-B`, capacity: 3, occupants: [] },
-          { roomNo: `${campDigit}-${flStr}-02-C`, capacity: 3, occupants: [] }
-        ]
-      },
-      {
-        flatNo: 3,
-        flatCode: `${campDigit}-${flStr}-03-M`,
-        roomGrade: 'Manual',
-        rooms: [
-          { roomNo: `${campDigit}-${flStr}-03-A`, capacity: 3, occupants: [] },
-          { roomNo: `${campDigit}-${flStr}-03-B`, capacity: 3, occupants: [] },
-          { roomNo: `${campDigit}-${flStr}-03-C`, capacity: 3, occupants: [] }
-        ]
-      }
+      { flatNo: 1, flatCode: `${campDigit}-${flStr}-01-NM`, roomGrade: 'Non-Manual', rooms: [{ roomNo: `${campDigit}-${flStr}-01-A`, capacity: 2, occupants: [] }, { roomNo: `${campDigit}-${flStr}-01-B`, capacity: 2, occupants: [] }] },
+      { flatNo: 2, flatCode: `${campDigit}-${flStr}-02-M`, roomGrade: 'Manual', rooms: [{ roomNo: `${campDigit}-${flStr}-02-A`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-02-B`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-02-C`, capacity: 3, occupants: [] }] },
+      { flatNo: 3, flatCode: `${campDigit}-${flStr}-03-M`, roomGrade: 'Manual', rooms: [{ roomNo: `${campDigit}-${flStr}-03-A`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-03-B`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-03-C`, capacity: 3, occupants: [] }] }
     ];
-
-    setEditingCampModal(prev => ({
-      ...prev,
-      floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }]
-    }));
+    setEditingCampModal(prev => ({ ...prev, floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }] }));
   };
 
   const handleRemoveTopFloorDraft = () => {
     if (!editingCampModal || editingCampModal.floors.length <= 1) return;
     const lastFloor = editingCampModal.floors[editingCampModal.floors.length - 1];
-
     let hasOccupants = false;
-    lastFloor.flats.forEach(fl => {
-      fl.rooms.forEach(rm => {
-        if (rm.occupants && rm.occupants.length > 0) hasOccupants = true;
-      });
-    });
-
-    if (hasOccupants) {
-      alert(`Cannot remove Floor ${lastFloor.floorNo} because it contains active occupants. Please relocate them first.`);
-      return;
-    }
-
-    setEditingCampModal(prev => ({
-      ...prev,
-      floors: prev.floors.slice(0, -1)
-    }));
+    lastFloor.flats.forEach(fl => { fl.rooms.forEach(rm => { if (rm.occupants && rm.occupants.length > 0) hasOccupants = true; }); });
+    if (hasOccupants) { alert(`Cannot remove Floor ${lastFloor.floorNo} because it contains active occupants. Please relocate them first.`); return; }
+    setEditingCampModal(prev => ({ ...prev, floors: prev.floors.slice(0, -1) }));
   };
 
   const handleAddFlatWithGrade = (floorNo, grade) => {
     if (!editingCampModal) return;
     const targetFloor = editingCampModal.floors.find(f => f.floorNo === floorNo);
     if (!targetFloor) return;
-
     const nextFlatNo = targetFloor.flats.length + 1;
     const campDigit = editingCampModal.campDigit || '1';
     const flStr = String(floorNo).padStart(2, '0');
@@ -549,60 +406,40 @@ export default function App() {
     const isNM = grade === 'Non-Manual';
     const gradeInitial = isNM ? 'NM' : 'M';
     const capacity = isNM ? 2 : 3;
-
     const newFlat = {
-      flatNo: nextFlatNo,
-      flatCode: `${campDigit}-${flStr}-${flatStr}-${gradeInitial}`,
-      roomGrade: grade,
-      rooms: [
-        { roomNo: `${campDigit}-${flStr}-${flatStr}-A`, capacity, occupants: [] },
-        { roomNo: `${campDigit}-${flStr}-${flatStr}-B`, capacity, occupants: [] },
-        { roomNo: `${campDigit}-${flStr}-${flatStr}-C`, capacity, occupants: [] },
-      ]
+      flatNo: nextFlatNo, flatCode: `${campDigit}-${flStr}-${flatStr}-${gradeInitial}`, roomGrade: grade,
+      rooms: [ { roomNo: `${campDigit}-${flStr}-${flatStr}-A`, capacity, occupants: [] }, { roomNo: `${campDigit}-${flStr}-${flatStr}-B`, capacity, occupants: [] }, { roomNo: `${campDigit}-${flStr}-${flatStr}-C`, capacity, occupants: [] } ]
     };
-
-    setEditingCampModal(prev => ({
-      ...prev,
-      floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: [...f.flats, newFlat] } : f)
-    }));
+    setEditingCampModal(prev => ({ ...prev, floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: [...f.flats, newFlat] } : f) }));
   };
 
   const handleRemoveFlatFromFloor = (floorNo) => {
     if (!editingCampModal) return;
     const targetFloor = editingCampModal.floors.find(f => f.floorNo === floorNo);
     if (!targetFloor || targetFloor.flats.length <= 1) return;
-
     const lastFlat = targetFloor.flats[targetFloor.flats.length - 1];
     let hasOccupants = false;
-    lastFlat.rooms.forEach(rm => {
-      if (rm.occupants && rm.occupants.length > 0) hasOccupants = true;
-    });
-
-    if (hasOccupants) {
-      alert(`Cannot remove Flat ${lastFlat.flatCode} because it has active occupants.`);
-      return;
-    }
-
-    setEditingCampModal(prev => ({
-      ...prev,
-      floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: f.flats.slice(0, -1) } : f)
-    }));
+    lastFlat.rooms.forEach(rm => { if (rm.occupants && rm.occupants.length > 0) hasOccupants = true; });
+    if (hasOccupants) { alert(`Cannot remove Flat ${lastFlat.flatCode} because it has active occupants.`); return; }
+    setEditingCampModal(prev => ({ ...prev, floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: f.flats.slice(0, -1) } : f) }));
   };
 
-  const handleSaveCampEdits = (e) => {
+  const handleSaveCampEdits = async (e) => {
     e.preventDefault();
     if (!editingCampModal) return;
-    setCamps(prev => prev.map(c => c.id === editingCampModal.id ? editingCampModal : c));
-    logActivity('CAMP_CONFIG', `Updated Camp ${editingCampModal.campNo}`, `Updated floor geometry for ${editingCampModal.campNo}`, editingCampModal.campNo);
-    setEditingCampModal(null);
+    try {
+      setIsSyncing(true);
+      await apiFetch(`camps/${editingCampModal.campNo}`, 'PUT', editingCampModal);
+      setEditingCampModal(null);
+      await syncCloudDatabase();
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleFlatGradeChange = (campId, floorNo, flatCode, newGrade) => {
+  const handleFlatGradeChange = async (campId, floorNo, flatCode, newGrade) => {
     const newCapacity = newGrade === 'Non-Manual' ? 2 : 3;
     const targetCamp = camps.find(c => c.id === campId);
     const targetFloor = targetCamp?.floors.find(f => f.floorNo === floorNo);
     const targetFlat = targetFloor?.flats.find(f => f.flatCode === flatCode);
-
     if (!targetFlat) return;
 
     const overCapacityRoom = targetFlat.rooms.find(r => r.occupants.length > newCapacity);
@@ -616,80 +453,46 @@ export default function App() {
     flatParts[flatParts.length - 1] = gradeSuffix;
     const newFlatCode = flatParts.join('-');
 
-    setCamps(prevCamps =>
-      prevCamps.map(camp => {
-        if (camp.id !== campId) return camp;
+    const newCampObj = {
+      ...targetCamp,
+      floors: targetCamp.floors.map(floor => {
+        if (floor.floorNo !== floorNo) return floor;
         return {
-          ...camp,
-          floors: camp.floors.map(floor => {
-            if (floor.floorNo !== floorNo) return floor;
+          ...floor,
+          flats: floor.flats.map(flat => {
+            if (flat.flatCode !== flatCode) return flat;
             return {
-              ...floor,
-              flats: floor.flats.map(flat => {
-                if (flat.flatCode !== flatCode) return flat;
-                return {
-                  ...flat,
-                  flatCode: newFlatCode,
-                  roomGrade: newGrade,
-                  rooms: flat.rooms.map(room => ({
-                    ...room,
-                    capacity: newCapacity
-                  }))
-                };
-              })
+              ...flat, flatCode: newFlatCode, roomGrade: newGrade, rooms: flat.rooms.map(room => ({ ...room, capacity: newCapacity }))
             };
           })
         };
       })
-    );
-
-    setOccupants(prevOccs =>
-      prevOccs.map(occ => {
-        if (occ.campNo === targetCamp.campNo && occ.floorNo === floorNo && occ.flatCode === flatCode) {
-          return { ...occ, flatCode: newFlatCode, roomGrade: newGrade };
-        }
-        return occ;
-      })
-    );
-
-    logActivity('CAMP_CONFIG', `Changed Grade of Flat ${flatCode}`, `Switched Flat ${flatCode} to ${newGrade} in ${targetCamp.campNo}`, targetCamp.campNo);
+    };
+    try {
+      setIsSyncing(true);
+      await apiFetch(`camps/${targetCamp.campNo}`, 'PUT', newCampObj);
+      await syncCloudDatabase();
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  // =========================================================
-  // DYNAMIC DIVISION MANAGEMENT
-  // =========================================================
   const handleAddDivision = (e) => {
     e.preventDefault();
     const cleanDiv = newDivisionInput.trim().toUpperCase();
     if (!cleanDiv) return;
-    if (divisions.includes(cleanDiv)) {
-      alert(`Division "${cleanDiv}" already exists.`);
-      return;
-    }
-    const updated = [...divisions, cleanDiv];
-    setDivisions(updated);
-    logActivity('DIVISION_MGMT', `Added Division ${cleanDiv}`, `Added new operating division: ${cleanDiv}`);
+    if (divisions.includes(cleanDiv)) { alert(`Division "${cleanDiv}" already exists.`); return; }
+    setDivisions([...divisions, cleanDiv]);
     setNewDivisionInput('');
   };
 
   const handleRemoveDivision = (divToRemove) => {
     const inUseCostCenter = costCenters.some(c => c.division === divToRemove);
     const inUseOccupant = occupants.some(o => o.division === divToRemove && !o.employeeStatus.startsWith('RTD'));
-
     if (inUseCostCenter || inUseOccupant) {
-      alert(`Cannot remove Division "${divToRemove}" because it is currently assigned to active cost centers or occupants.`);
-      return;
+      alert(`Cannot remove Division "${divToRemove}" because it is currently assigned to active cost centers or occupants.`); return;
     }
-
-    if (confirm(`Remove division "${divToRemove}"?`)) {
-      setDivisions(prev => prev.filter(d => d !== divToRemove));
-      logActivity('DIVISION_MGMT', `Removed Division ${divToRemove}`, `Archived division ${divToRemove}`);
-    }
+    if (confirm(`Remove division "${divToRemove}"?`)) { setDivisions(prev => prev.filter(d => d !== divToRemove)); }
   };
 
-  // =========================================================
-  // EXCEL ROSTER IMPORT ENGINE (H1 & H6 FIX USING EXCELJS)
-  // =========================================================
   const handleExcelFileUpload = (e) => {
     const file = e.target.files[0];
     if (!file) return;
@@ -704,15 +507,10 @@ export default function App() {
         await wb.xlsx.load(buffer);
         const ws = wb.worksheets[0];
 
-        if (!ws) {
-          alert('Spreadsheet is empty or could not be read.');
-          return;
-        }
+        if (!ws) { alert('Spreadsheet is empty or could not be read.'); return; }
 
         const headers = [];
-        ws.getRow(1).eachCell((cell, colNumber) => {
-          headers[colNumber] = String(cell.value || '').trim();
-        });
+        ws.getRow(1).eachCell((cell, colNumber) => { headers[colNumber] = String(cell.value || '').trim(); });
 
         const rawJson = [];
         ws.eachRow((row, rowNumber) => {
@@ -720,18 +518,12 @@ export default function App() {
           const rowData = {};
           row.eachCell((cell, colNumber) => {
             let val = cell.value;
-            if (val instanceof Date) {
-              val = val.toISOString().split('T')[0];
-            } else if (val && val.text) {
-              val = val.text;
-            } else if (val && val.result !== undefined) {
-              val = val.result;
-            }
+            if (val instanceof Date) { val = val.toISOString().split('T')[0]; } 
+            else if (val && val.text) { val = val.text; } 
+            else if (val && val.result !== undefined) { val = val.result; }
             rowData[headers[colNumber]] = String(val || '').trim();
           });
-          if (Object.keys(rowData).length > 0) {
-            rawJson.push(rowData);
-          }
+          if (Object.keys(rowData).length > 0) rawJson.push(rowData);
         });
 
         const seenIdsInFile = new Set();
@@ -771,222 +563,67 @@ export default function App() {
           if (empId) seenIdsInFile.add(empId);
 
           return {
-            rowIdx: idx + 2,
-            employeeId: empId,
-            employeeName: empName,
-            civilId,
-            passportNo,
-            nationality,
-            mobileNo,
-            title,
-            productiveType,
-            campNo,
-            flatCode,
-            roomNo,
-            roomGrade,
-            division,
-            costCenter,
-            entryDate,
-            emergencyContactName: getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact',
-            emergencyContactPhone: getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ',
-            errors,
-            status: errors.length === 0 ? 'VALID' : 'ERROR'
+            rowIdx: idx + 2, employeeId: empId, employeeName: empName, civilId, passportNo, nationality, mobileNo, title, productiveType, campNo, flatCode, roomNo, roomGrade, division, costCenter, entryDate, emergencyContactName: getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact', emergencyContactPhone: getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ', errors, status: errors.length === 0 ? 'VALID' : 'ERROR'
           };
         });
 
         const validCount = parsedRows.filter(r => r.status === 'VALID').length;
         const errorCount = parsedRows.filter(r => r.status === 'ERROR').length;
-
-        setExcelParsedRows(parsedRows);
-        setExcelImportStats({ total: parsedRows.length, valid: validCount, errors: errorCount });
-        setShowExcelImportModal(true);
-      } catch (err) {
-        alert(`Failed to parse Excel file: ${err.message}`);
-      }
+        setExcelParsedRows(parsedRows); setExcelImportStats({ total: parsedRows.length, valid: validCount, errors: errorCount }); setShowExcelImportModal(true);
+      } catch (err) { alert(`Failed to parse Excel file: ${err.message}`); }
     };
 
     reader.readAsArrayBuffer(file);
     e.target.value = '';
   };
 
-  const handleCommitExcelImport = () => {
+  const handleCommitExcelImport = async () => {
     const validRows = excelParsedRows.filter(r => r.status === 'VALID');
-    if (validRows.length === 0) {
-      alert('No valid rows available to import.');
-      return;
-    }
-
-    const newOccupantsList = [...occupants];
-    let updatedCamps = [...camps];
-    let anyRoomFull = false;
-
-    validRows.forEach((row) => {
-      const hasValidRoom = row.roomNo && row.roomNo !== 'PENDING' && row.campNo !== 'UNASSIGNED';
-      
-      if (hasValidRoom) {
-        const targetCamp = updatedCamps.find(c => c.campNo === row.campNo);
-        const targetFloor = targetCamp?.floors.find(fl => fl.floorNo === Number(row.flatCode.split('-')[1] || 1));
-        const targetFlat = targetFloor?.flats.find(ft => ft.flatCode === row.flatCode);
-        const targetRoom = targetFlat?.rooms.find(rm => rm.roomNo === row.roomNo);
-
-        if (!targetRoom || targetRoom.occupants.length >= targetRoom.capacity) {
-          anyRoomFull = true;
-          return;
-        }
-
-        updatedCamps = updatedCamps.map(c => {
-          if (c.campNo !== row.campNo) return c;
-          return {
-            ...c,
-            floors: c.floors.map(fl => ({
-              ...fl,
-              flats: fl.flats.map(ft => ({
-                ...ft,
-                rooms: ft.rooms.map(rm => {
-                  if (rm.roomNo === row.roomNo) {
-                    return { ...rm, occupants: [...rm.occupants, row.employeeId] };
-                  }
-                  return rm;
-                })
-              }))
-            }))
-          };
-        });
-      }
-
-      const newOcc = {
-        srNo: newOccupantsList.length + 1,
-        campNo: hasValidRoom ? row.campNo : 'UNASSIGNED',
-        campArea: camps.find(c => c.campNo === row.campNo)?.campArea || 'Pending Assignment',
-        status: 'Permanent',
-        division: row.division,
-        costCenter: row.costCenter,
-        employeeId: row.employeeId,
-        employeeName: row.employeeName,
-        nationality: row.nationality,
-        title: row.title,
-        productiveType: row.productiveType || 'Direct Employee (DE)',
-        entryDate: row.entryDate,
-        passportNo: row.passportNo,
-        civilId: row.civilId,
-        mobileNo: row.mobileNo,
-        emergencyContactName: row.emergencyContactName,
-        emergencyContactPhone: row.emergencyContactPhone,
-        homeCountryAddress: 'Permanent Address on File',
-        roomGrade: row.roomGrade,
-        floorNo: Number(row.flatCode.split('-')[1] || 1),
-        flatNo: Number(row.flatCode.split('-')[2] || 1),
-        flatCode: row.flatCode || 'PENDING',
-        roomNo: hasValidRoom ? row.roomNo : 'PENDING',
-        employeeStatus: hasValidRoom ? 'On Job' : 'Unassigned',
-        leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
-        rtdType: '', rtdDate: '',
-        afrEntryRef: 'EXCEL-IMPORT',
-        afrLogNo: `LOG-${row.employeeId}`,
-        residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
-        reallocationCostCenter: row.costCenter.split('-')[0],
-        exitDate: '', afrExitRef: '', remarks: `Imported via ${excelImportFileName}`,
-        stayHistory: []
-      };
-
-      newOccupantsList.push(newOcc);
-    });
-
-    if (anyRoomFull) {
-      alert("Some employees could not be imported because their target room is full or does not exist.");
-    }
-
-    setOccupants(newOccupantsList);
-    setCamps(updatedCamps);
-    logActivity('EXCEL_IMPORT', `Bulk Imported ${validRows.length} Employees`, `Imported from ${excelImportFileName}`);
-    setShowExcelImportModal(false);
-    alert(`Success: Import process completed.`);
+    if (validRows.length === 0) { alert('No valid rows available to import.'); return; }
+    try {
+      setIsSyncing(true);
+      await apiFetch('employees/bulk', 'POST', { occupants: validRows });
+      setShowExcelImportModal(false);
+      await syncCloudDatabase();
+      alert(`Success: Import process completed.`);
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleCreateCostCenter = (e) => {
+  const handleCreateCostCenter = async (e) => {
     e.preventDefault();
     const cleanCode = newCostCenterForm.code.trim().toUpperCase();
     if (!cleanCode) return;
-    if (costCenters.some(c => c.code === cleanCode)) {
-      alert(`Cost Center code "${cleanCode}" already exists.`);
-      return;
-    }
-    const newCC = {
-      id: `cc-${Date.now()}`,
-      code: cleanCode,
-      name: newCostCenterForm.name.trim() || 'Project Site',
-      division: newCostCenterForm.division,
-      status: 'Active'
-    };
-    setCostCenters(prev => [...prev, newCC]);
-    logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
-    setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
+    if (costCenters.some(c => c.code === cleanCode)) { alert(`Cost Center code "${cleanCode}" already exists.`); return; }
+
+    try {
+      setIsSyncing(true);
+      await apiFetch('cost-centers', 'POST', newCostCenterForm);
+      setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
+      setShowManageCostCentersModal(false);
+      await syncCloudDatabase();
+      alert(isSuperAdmin ? `Cost center ${cleanCode} created successfully!` : `Cost center request submitted to Approvals & Logs for Super Admin sign-off.`);
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleToggleCostCenterStatus = (id) => {
-    setCostCenters(prev => prev.map(c => {
-      if (c.id === id) {
-        const nextStatus = c.status === 'Active' ? 'Inactive' : 'Active';
-        logActivity('COST_CENTER', `Changed Status of ${c.code}`, `Status changed to ${nextStatus}`);
-        return { ...c, status: nextStatus };
-      }
-      return c;
-    }));
+  const handleToggleCostCenterStatus = async (id) => {
+    try {
+      setIsSyncing(true);
+      await apiFetch(`cost-centers/${id}/toggle`, 'PATCH');
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handlePreAddEmployeeSubmit = (e) => {
+  const handlePreAddEmployeeSubmit = async (e) => {
     e.preventDefault();
     const empId = preAddForm.employeeId.trim();
-    if (occupants.some(o => o.employeeId === empId)) {
-      alert(`Employee ID #${empId} already exists in the system.`);
-      return;
-    }
-
-    const newOcc = {
-      srNo: occupants.length + 1,
-      campNo: 'UNASSIGNED',
-      campArea: 'Pending Bed Assignment',
-      status: 'Permanent',
-      division: preAddForm.division,
-      costCenter: preAddForm.costCenter,
-      employeeId: empId,
-      employeeName: preAddForm.employeeName,
-      nationality: preAddForm.nationality,
-      title: preAddForm.title,
-      productiveType: preAddForm.productiveType,
-      roomGrade: preAddForm.roomGrade,
-      entryDate: preAddForm.entryDate,
-      passportNo: preAddForm.passportNo,
-      civilId: preAddForm.civilId,
-      mobileNo: preAddForm.mobileNo,
-      emergencyContactName: preAddForm.emergencyContactName,
-      emergencyContactPhone: preAddForm.emergencyContactPhone,
-      homeCountryAddress: '',
-      floorNo: 0,
-      flatNo: 0,
-      flatCode: 'PENDING',
-      roomNo: 'PENDING',
-      employeeStatus: 'Unassigned',
-      leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
-      rtdType: '', rtdDate: '',
-      afrEntryRef: 'PRE-REG',
-      afrLogNo: `LOG-${empId}`,
-      residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
-      reallocationCostCenter: preAddForm.costCenter.split('-')[0],
-      exitDate: '', afrExitRef: '', remarks: 'Pre-registered in Occupants Directory',
-      stayHistory: []
-    };
-
-    setOccupants(prev => [newOcc, ...prev]);
-    setShowPreAddEmployeeModal(false);
-    logActivity('OCCUPANT_REG', `Pre-Registered Employee #${empId}`, `${newOcc.employeeName} (${newOcc.productiveType} • ${newOcc.roomGrade}) added to directory`);
-    setPreAddForm({
-      employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer',
-      productiveType: 'Direct Employee (DE)', roomGrade: 'Manual',
-      division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '',
-      mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ',
-      entryDate: todayStr
-    });
+    if (occupants.some(o => o.employeeId === empId)) { alert(`Employee ID #${empId} already exists in the system.`); return; }
+    try {
+      setIsSyncing(true);
+      await apiFetch('employees', 'POST', { ...preAddForm, campNo: 'UNASSIGNED', roomNo: 'PENDING' });
+      setShowPreAddEmployeeModal(false);
+      setPreAddForm({ employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer', productiveType: 'Direct Employee (DE)', roomGrade: 'Manual', division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ', entryDate: todayStr });
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
   const handleCheckInEmployeeIdChange = (idVal) => {
@@ -994,297 +631,86 @@ export default function App() {
     const existing = occupants.find(o => o.employeeId.toLowerCase() === cleanId.toLowerCase());
     if (existing) {
       setCheckInForm(prev => ({
-        ...prev,
-        employeeId: existing.employeeId,
-        employeeName: existing.employeeName || prev.employeeName,
-        nationality: existing.nationality || prev.nationality,
-        title: existing.title || prev.title,
-        productiveType: existing.productiveType || prev.productiveType,
-        roomGrade: existing.roomGrade || prev.roomGrade,
-        division: existing.division || prev.division,
-        costCenter: existing.costCenter || prev.costCenter,
-        passportNo: existing.passportNo || prev.passportNo,
-        civilId: existing.civilId || prev.civilId,
-        mobileNo: existing.mobileNo || prev.mobileNo,
-        emergencyContactName: existing.emergencyContactName || prev.emergencyContactName,
-        emergencyContactPhone: existing.emergencyContactPhone || prev.emergencyContactPhone
+        ...prev, employeeId: existing.employeeId, employeeName: existing.employeeName || prev.employeeName, nationality: existing.nationality || prev.nationality, title: existing.title || prev.title, productiveType: existing.productiveType || prev.productiveType, roomGrade: existing.roomGrade || prev.roomGrade, division: existing.division || prev.division, costCenter: existing.costCenter || prev.costCenter, passportNo: existing.passportNo || prev.passportNo, civilId: existing.civilId || prev.civilId, mobileNo: existing.mobileNo || prev.mobileNo, emergencyContactName: existing.emergencyContactName || prev.emergencyContactName, emergencyContactPhone: existing.emergencyContactPhone || prev.emergencyContactPhone
       }));
-    } else {
-      setCheckInForm(prev => ({ ...prev, employeeId: idVal }));
-    }
+    } else { setCheckInForm(prev => ({ ...prev, employeeId: idVal })); }
   };
 
-  const handleSaveEmployeeEdit = (e) => {
+  const handleSaveEmployeeEdit = async (e) => {
     e.preventDefault();
     if (!editingEmployeeModal) return;
-
-    setOccupants(prev => prev.map(o => o.employeeId === editingEmployeeModal.originalId ? {
-      ...editingEmployeeModal,
-      employeeId: editingEmployeeModal.employeeId.trim()
-    } : o));
-
-    if (editingEmployeeModal.originalId !== editingEmployeeModal.employeeId.trim()) {
-      const newId = editingEmployeeModal.employeeId.trim();
-      setCamps(prev => prev.map(c => ({
-        ...c,
-        floors: c.floors.map(fl => ({
-          ...fl,
-          flats: fl.flats.map(ft => ({
-            ...ft,
-            rooms: ft.rooms.map(rm => ({
-              ...rm,
-              occupants: rm.occupants.map(id => id === editingEmployeeModal.originalId ? newId : id)
-            }))
-          }))
-        }))
-      })));
-    }
-
-    if (viewingEmployeeDossier && viewingEmployeeDossier.employeeId === editingEmployeeModal.originalId) {
-      setViewingEmployeeDossier({ ...editingEmployeeModal, employeeId: editingEmployeeModal.employeeId.trim() });
-    }
-
-    logActivity('OCCUPANT_EDIT', `Edited Details for #${editingEmployeeModal.employeeId}`, `Updated profile for ${editingEmployeeModal.employeeName}`);
-    setEditingEmployeeModal(null);
+    try {
+      setIsSyncing(true);
+      await apiFetch(`employees/${editingEmployeeModal.originalId}`, 'PUT', editingEmployeeModal);
+      if (viewingEmployeeDossier && viewingEmployeeDossier.employeeId === editingEmployeeModal.originalId) {
+        setViewingEmployeeDossier({ ...editingEmployeeModal, employeeId: editingEmployeeModal.employeeId.trim() });
+      }
+      setEditingEmployeeModal(null);
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleCheckInSubmit = (e) => {
+  const handleCheckInSubmit = async (e) => {
     e.preventDefault();
-    const empId = checkInForm.employeeId.trim();
-    const existingActiveInRoom = occupants.find(o => o.employeeId === empId && o.employeeStatus !== 'Unassigned' && !o.employeeStatus.startsWith('RTD'));
-    if (existingActiveInRoom) {
-      alert(`Employee #${empId} is already assigned to ${existingActiveInRoom.campNo} Room ${existingActiveInRoom.roomNo}. Use Relocate instead.`);
-      return;
-    }
-
-    const targetCamp = camps.find(c => c.id === checkInForm.campId) || activeCamp;
-    const targetFloor = targetCamp.floors.find(f => f.floorNo === Number(checkInForm.floorNo));
-    const targetFlat = targetFloor?.flats.find(f => f.flatCode === checkInForm.flatCode);
-    const targetRoom = targetFlat?.rooms.find(r => r.roomNo === checkInForm.roomNo);
-
-    if (!targetRoom || targetRoom.occupants.length >= targetRoom.capacity) {
-      alert(`Capacity Error: Room ${checkInForm.roomNo} is already at full capacity (${targetRoom?.capacity || 0} beds). Check-in rejected.`);
-      return;
-    }
-
-    const existingRecord = occupants.find(o => o.employeeId === empId);
-
-    const assignedOcc = {
-      srNo: existingRecord ? existingRecord.srNo : occupants.length + 1,
-      campNo: targetCamp.campNo,
-      campArea: targetCamp.campArea,
-      status: 'Permanent',
-      division: checkInForm.division,
-      costCenter: checkInForm.costCenter,
-      employeeId: empId,
-      employeeName: checkInForm.employeeName,
-      nationality: checkInForm.nationality,
-      title: checkInForm.title,
-      productiveType: checkInForm.productiveType || 'Direct Employee (DE)',
-      roomGrade: checkInForm.roomGrade,
-      entryDate: checkInForm.entryDate,
-      passportNo: checkInForm.passportNo,
-      civilId: checkInForm.civilId,
-      mobileNo: checkInForm.mobileNo,
-      emergencyContactName: checkInForm.emergencyContactName,
-      emergencyContactPhone: checkInForm.emergencyContactPhone,
-      homeCountryAddress: checkInForm.homeCountryAddress,
-      floorNo: Number(checkInForm.floorNo),
-      flatNo: Number(checkInForm.flatCode.split('-')[2] || 1),
-      flatCode: checkInForm.flatCode,
-      roomNo: checkInForm.roomNo,
-      employeeStatus: 'On Job',
-      leaveStartDate: '', leaveEndDate: '', leaveReturnDate: '',
-      rtdType: '', rtdDate: '',
-      afrEntryRef: checkInForm.docRef || '150-04',
-      afrLogNo: checkInForm.docRef || `LOG-${empId}`,
-      residencyCompany: 'Dhow Engineering General Trading & Contracting Company',
-      reallocationCostCenter: checkInForm.costCenter.split('-')[0],
-      exitDate: '', afrExitRef: '',
-      remarks: `Assigned Bed (Ref: ${checkInForm.docRef || '150-04'})`,
-      materialsIssued: checkInForm.materials,
-      arrivalType: checkInForm.arrivalType,
-      stayHistory: existingRecord?.stayHistory || []
-    };
-
-    if (existingRecord) {
-      setOccupants(prev => prev.map(o => o.employeeId === empId ? assignedOcc : o));
-    } else {
-      setOccupants(prev => [assignedOcc, ...prev]);
-    }
-
-    setCamps(prev => prev.map(c => c.id !== targetCamp.id ? c : {
-      ...c,
-      floors: c.floors.map(fl => ({
-        ...fl,
-        flats: fl.flats.map(ft => ({
-          ...ft,
-          rooms: ft.rooms.map(rm => rm.roomNo === checkInForm.roomNo ? { ...rm, occupants: [...rm.occupants, empId] } : rm)
-        }))
-      }))
-    }));
-
-    setShowCheckInModal(false);
-    logActivity('CHECK_IN', `Assigned #${empId} to Room ${checkInForm.roomNo}`, `${assignedOcc.employeeName} (${assignedOcc.productiveType} • ${assignedOcc.roomGrade}) assigned to ${targetCamp.campNo} Room ${checkInForm.roomNo} [Ref: ${assignedOcc.afrEntryRef}]`, targetCamp.campNo);
-
-    setReportPreviewModal({
-      type: 'issuance',
-      occupant: assignedOcc,
-      arrivalType: checkInForm.arrivalType,
-      docRef: checkInForm.docRef || '150-04',
-      materials: checkInForm.materials
-    });
+    try {
+      setIsSyncing(true);
+      await apiFetch('employees', 'POST', { ...checkInForm, materialsIssued: checkInForm.materials });
+      setShowCheckInModal(false);
+      setReportPreviewModal({ type: 'issuance', occupant: { ...checkInForm, employeeStatus: 'On Job' }, arrivalType: checkInForm.arrivalType, docRef: checkInForm.docRef || '150-04', materials: checkInForm.materials });
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleLeaveSubmit = (e) => {
+  const handleLeaveSubmit = async (e) => {
     e.preventDefault();
-    if (new Date(leaveForm.expectedEndDate) < new Date(leaveForm.startDate)) {
-      alert('Expected return date cannot be before leave start date.');
-      return;
-    }
-
-    const emp = showLeaveModal;
-    setOccupants(prev => prev.map(o => o.employeeId === emp.employeeId ? {
-      ...o, employeeStatus: 'On Leave', leaveStartDate: leaveForm.startDate, leaveEndDate: leaveForm.expectedEndDate, leaveReturnDate: ''
-    } : o));
-
-    const newLeaveLog = {
-      id: `lv-${Date.now()}`,
-      employeeId: emp.employeeId,
-      employeeName: emp.employeeName,
-      campNo: emp.campNo,
-      roomNo: emp.roomNo,
-      leaveStartDate: leaveForm.startDate,
-      expectedEndDate: leaveForm.expectedEndDate,
-      actualReturnDate: '',
-      afrLogNo: leaveForm.afrLogNo,
-      remarks: leaveForm.remarks,
-      status: 'Active Leave',
-      createdBy: currentUser.name,
-      createdAt: new Date().toISOString()
-    };
-    setLeaveLogs(prev => [newLeaveLog, ...prev]);
-    logActivity('LEAVE_START', `Marked #${emp.employeeId} On Leave`, `${emp.employeeName} on vacation from ${leaveForm.startDate} to ${leaveForm.expectedEndDate}`, emp.campNo);
-    setShowLeaveModal(null);
-    setManageOccupantModal(null);
+    try {
+      setIsSyncing(true);
+      await apiFetch(`employees/${showLeaveModal.employeeId}/leave`, 'POST', leaveForm);
+      setShowLeaveModal(null);
+      setManageOccupantModal(null);
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleReturnJobSubmit = (e) => {
+  const handleReturnJobSubmit = async (e) => {
     e.preventDefault();
-    const emp = showReturnJobModal;
-    setOccupants(prev => prev.map(o => o.employeeId === emp.employeeId ? {
-      ...o, employeeStatus: 'On Job', leaveReturnDate: returnJobForm.actualReturnDate
-    } : o));
-
-    setLeaveLogs(prev => prev.map(l => (l.employeeId === emp.employeeId && l.status === 'Active Leave') ? {
-      ...l, actualReturnDate: returnJobForm.actualReturnDate, status: 'Returned', remarks: `${l.remarks} • Note: ${returnJobForm.remarks}`
-    } : l));
-
-    logActivity('LEAVE_RETURN', `Marked #${emp.employeeId} Returned`, `${emp.employeeName} returned on ${returnJobForm.actualReturnDate}`, emp.campNo);
-    setShowReturnJobModal(null);
-    setManageOccupantModal(null);
+    try {
+      setIsSyncing(true);
+      await apiFetch(`employees/${showReturnJobModal.employeeId}/return-job`, 'POST', returnJobForm);
+      setShowReturnJobModal(null);
+      setManageOccupantModal(null);
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleRtdSubmit = (e) => {
+  const handleRtdSubmit = async (e) => {
     e.preventDefault();
-    const emp = showRtdModal;
-    const rtdStatus = `RTD - ${rtdForm.rtdType}`;
-
-    setOccupants(prev => prev.map(o => o.employeeId === emp.employeeId ? {
-      ...o, employeeStatus: rtdStatus, rtdType: rtdForm.rtdType, rtdDate: rtdForm.rtdDate,
-      afrExitRef: rtdForm.afrExitRef, remarks: rtdForm.remarks, exitDate: rtdForm.rtdDate
-    } : o));
-
-    setLeaveLogs(prev => prev.map(l => (l.employeeId === emp.employeeId && l.status === 'Active Leave') ? {
-      ...l, status: 'Closed (RTD)', actualReturnDate: rtdForm.rtdDate, remarks: `${l.remarks} • Closed due to RTD (${rtdForm.rtdType})`
-    } : l));
-
-    setCamps(prev => prev.map(c => ({
-      ...c,
-      floors: c.floors.map(fl => ({
-        ...fl,
-        flats: fl.flats.map(ft => ({
-          ...ft,
-          rooms: ft.rooms.map(rm => ({
-            ...rm, occupants: rm.occupants.filter(id => id !== emp.employeeId)
-          }))
-        }))
-      }))
-    })));
-
-    const newRtdLog = {
-      id: `rtd-${Date.now()}`,
-      employeeId: emp.employeeId,
-      employeeName: emp.employeeName,
-      rtdType: rtdForm.rtdType,
-      rtdDate: rtdForm.rtdDate,
-      vacatedCampNo: emp.campNo,
-      vacatedRoomNo: emp.roomNo,
-      costCenter: emp.costCenter,
-      afrExitRef: rtdForm.afrExitRef,
-      remarks: rtdForm.remarks,
-      recordedBy: currentUser.name,
-      createdAt: new Date().toISOString()
-    };
-    setRtdLogs(prev => [newRtdLog, ...prev]);
-    logActivity('RTD_EXIT', `Processed RTD (${rtdForm.rtdType}) for #${emp.employeeId}`, `${emp.employeeName} vacated room ${emp.roomNo}`, emp.campNo);
-    setShowRtdModal(null);
-    setManageOccupantModal(null);
+    try {
+      setIsSyncing(true);
+      await apiFetch(`employees/${showRtdModal.employeeId}/rtd`, 'POST', rtdForm);
+      setShowRtdModal(null);
+      setManageOccupantModal(null);
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleCostCenterTransferRequest = (e) => {
+  const handleCostCenterTransferRequest = async (e) => {
     e.preventDefault();
-    const emp = showTransferRequestModal;
-    const foundCC = costCenters.find(c => c.code === transferRequestForm.toCostCenter);
-    const toDiv = foundCC ? foundCC.division : transferRequestForm.toDivision;
-
-    if (currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'AUDITOR') {
-      setOccupants(prev => prev.map(o => o.employeeId === emp.employeeId ? {
-        ...o, costCenter: transferRequestForm.toCostCenter, division: toDiv
-      } : o));
-      logActivity('COST_CENTER_TRANSFER', `Direct Transfer #${emp.employeeId}`, `Moved #${emp.employeeId} to ${transferRequestForm.toCostCenter}`);
-      alert(`Cost center for #${emp.employeeId} updated to ${transferRequestForm.toCostCenter}!`);
-    } else {
-      const newReq = {
-        id: `tr-${Date.now()}`,
-        employeeId: emp.employeeId,
-        employeeName: emp.employeeName,
-        fromCostCenter: emp.costCenter,
-        fromDivision: emp.division,
-        toCostCenter: transferRequestForm.toCostCenter,
-        toDivision: toDiv,
-        reason: transferRequestForm.reason,
-        requestedBy: currentUser.name,
-        requestedByRole: currentUser.role,
-        requestDate: new Date().toISOString(),
-        status: 'PENDING',
-        reviewedBy: '', reviewDate: '', reviewRemarks: ''
-      };
-      setTransferRequests(prev => [newReq, ...prev]);
-      logActivity('COST_CENTER_REQUEST', `Requested Transfer #${emp.employeeId}`, `Requested move to ${transferRequestForm.toCostCenter}`);
-      alert(`Transfer request submitted for approval.`);
-    }
-    setShowTransferRequestModal(null);
-    setManageOccupantModal(null);
+    try {
+      setIsSyncing(true);
+      await apiFetch('transfer-requests', 'POST', transferRequestForm);
+      setShowTransferRequestModal(null);
+      setManageOccupantModal(null);
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleReviewTransfer = (reqId, decision) => {
-    const req = transferRequests.find(r => r.id === reqId);
-    if (!req) return;
-    if (req.status !== 'PENDING') return;
-
-    if (decision === 'APPROVED') {
-      setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
-        ...o, costCenter: req.toCostCenter, division: req.toDivision
-      } : o));
-      logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
-    } else {
-      logActivity('COST_CENTER_REJECTION', `Rejected Transfer #${req.employeeId}`, `Rejected move to ${req.toCostCenter}`);
-    }
-
-    setTransferRequests(prev => prev.map(r => r.id === reqId ? {
-      ...r, status: decision, reviewedBy: currentUser.name, reviewDate: new Date().toISOString()
-    } : r));
+  const handleReviewTransfer = async (reqId, decision) => {
+    try {
+      setIsSyncing(true);
+      await apiFetch(`transfer-requests/${reqId}/review`, 'PATCH', { decision });
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
   const handleOpenRelocateModal = (occ) => {
@@ -1292,181 +718,65 @@ export default function App() {
     const defaultFloor = defaultCamp.floors[0];
     const defaultFlat = defaultFloor.flats[0];
     const defaultRoom = defaultFlat.rooms.find(r => r.occupants.length < r.capacity) || defaultFlat.rooms[0];
-
     setRelocatingOccupant(occ);
-    setRelocationForm({
-      targetCampId: defaultCamp.id,
-      targetFloorNo: defaultFloor.floorNo,
-      targetFlatCode: defaultFlat.flatCode,
-      targetRoomNo: defaultRoom.roomNo,
-      transferDate: todayStr,
-      docRef: `REL-${occ.employeeId}-${todayStr.slice(5)}`,
-      reason: 'Project Site Reallocation'
-    });
+    setRelocationForm({ targetCampId: defaultCamp.id, targetFloorNo: defaultFloor.floorNo, targetFlatCode: defaultFlat.flatCode, targetRoomNo: defaultRoom.roomNo, transferDate: todayStr, docRef: `REL-${occ.employeeId}-${todayStr.slice(5)}`, reason: 'Project Site Reallocation' });
   };
 
-  const handleExecuteRelocation = (e) => {
+  const handleExecuteRelocation = async (e) => {
     e.preventDefault();
-    if (!relocatingOccupant) return;
-
-    const targetCamp = camps.find(c => c.id === relocationForm.targetCampId);
-    const targetFloor = targetCamp?.floors.find(f => f.floorNo === Number(relocationForm.targetFloorNo));
-    const targetFlat = targetFloor?.flats.find(f => f.flatCode === relocationForm.targetFlatCode);
-    const targetRoom = targetFlat?.rooms.find(r => r.roomNo === relocationForm.targetRoomNo);
-
-    if (!targetRoom || targetRoom.occupants.length >= targetRoom.capacity) {
-      alert('Selected target room is currently at full capacity.');
-      return;
-    }
-
-    const previousStayRecord = {
-      campNo: relocatingOccupant.campNo,
-      campArea: relocatingOccupant.campArea,
-      flatCode: relocatingOccupant.flatCode,
-      roomNo: relocatingOccupant.roomNo,
-      roomGrade: relocatingOccupant.roomGrade,
-      costCenter: relocatingOccupant.costCenter,
-      startDate: relocatingOccupant.entryDate,
-      endDate: relocationForm.transferDate,
-      docRef: relocationForm.docRef || 'N/A',
-      reason: `${relocationForm.reason || 'Inter-Camp Transfer'} (Doc Ref: ${relocationForm.docRef || 'N/A'})`
-    };
-
-    const updatedStayHistory = [...(relocatingOccupant.stayHistory || []), previousStayRecord];
-
-    setCamps(prevCamps =>
-      prevCamps.map(c => ({
-        ...c,
-        floors: c.floors.map(fl => ({
-          ...fl,
-          flats: fl.flats.map(flat => ({
-            ...flat,
-            rooms: flat.rooms.map(rm => {
-              if (rm.roomNo === relocatingOccupant.roomNo) {
-                return { ...rm, occupants: rm.occupants.filter(id => id !== relocatingOccupant.employeeId) };
-              }
-              if (rm.roomNo === targetRoom.roomNo) {
-                return { ...rm, occupants: [...rm.occupants, relocatingOccupant.employeeId] };
-              }
-              return rm;
-            })
-          }))
-        }))
-      }))
-    );
-
-    const updatedOccupant = {
-      ...relocatingOccupant,
-      campNo: targetCamp.campNo,
-      campArea: targetCamp.campArea,
-      floorNo: targetFloor.floorNo,
-      flatNo: targetFlat.flatNo,
-      flatCode: targetFlat.flatCode,
-      roomNo: targetRoom.roomNo,
-      roomGrade: targetFlat.roomGrade,
-      entryDate: relocationForm.transferDate,
-      afrEntryRef: relocationForm.docRef || relocatingOccupant.afrEntryRef,
-      stayHistory: updatedStayHistory
-    };
-
-    setOccupants(prevOccs =>
-      prevOccs.map(o => o.employeeId === relocatingOccupant.employeeId ? updatedOccupant : o)
-    );
-
-    if (viewingEmployeeDossier && viewingEmployeeDossier.employeeId === relocatingOccupant.employeeId) {
-      setViewingEmployeeDossier(updatedOccupant);
-    }
-
-    logActivity('RELOCATION', `Relocated #${relocatingOccupant.employeeId} to Room ${targetRoom.roomNo}`, `${relocatingOccupant.employeeName} moved to ${targetCamp.campNo} Room ${targetRoom.roomNo} [Doc Ref: ${relocationForm.docRef}]`, targetCamp.campNo);
-
-    const relocRecord = {
-      employeeId: relocatingOccupant.employeeId,
-      employeeName: relocatingOccupant.employeeName,
-      title: relocatingOccupant.title,
-      fromRoom: `${relocatingOccupant.campNo} (${relocatingOccupant.roomNo})`,
-      toRoom: `${targetCamp.campNo} (${targetRoom.roomNo})`,
-      relocationDate: relocationForm.transferDate,
-      docRef: relocationForm.docRef,
-      reason: relocationForm.reason
-    };
-
-    setRelocatingOccupant(null);
-    setReportPreviewModal({
-      type: 'relocation',
-      record: relocRecord
-    });
+    try {
+      setIsSyncing(true);
+      await apiFetch(`employees/${relocatingOccupant.employeeId}/relocate`, 'POST', relocationForm);
+      const targetCamp = camps.find(c => c.id === relocationForm.targetCampId);
+      if (viewingEmployeeDossier) setViewingEmployeeDossier({ ...relocatingOccupant, campNo: targetCamp.campNo, roomNo: relocationForm.targetRoomNo });
+      setRelocatingOccupant(null);
+      setReportPreviewModal({ type: 'relocation', record: { employeeId: relocatingOccupant.employeeId, employeeName: relocatingOccupant.employeeName, title: relocatingOccupant.title, fromRoom: `${relocatingOccupant.campNo} (${relocatingOccupant.roomNo})`, toRoom: `${targetCamp.campNo} (${relocationForm.targetRoomNo})`, relocationDate: relocationForm.transferDate, docRef: relocationForm.docRef, reason: relocationForm.reason } });
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
   const handleCreateUser = async (e) => {
     e.preventDefault();
-    const payload = {
-      staffId: newUserForm.staffId,
-      name: newUserForm.name,
-      email: newUserForm.email,
-      passwordHash: newUserForm.password,
-      title: newUserForm.title || 'Camp Coordinator',
-      role: newUserForm.role,
-      campScope: newUserForm.campScope,
-      permissions: {
-        canManageUsers: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canManageUsers,
-        canAddCamps: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canAddCamps,
-        canDeleteCamps: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canDeleteCamps,
-        canEditOccupants: newUserForm.canEditOccupants,
-        canExportReports: newUserForm.canExportReports,
-        canApproveTransfers: newUserForm.role === 'SUPER_ADMIN' || newUserForm.role === 'AUDITOR'
-      }
-    };
-
     try {
-      const res = await fetch('/api/users', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(payload)
-      });
-      if (!res.ok) throw new Error('Failed to create user in database');
-      const savedUser = await res.json();
-      setUsers(prev => [savedUser, ...prev]);
+      setIsSyncing(true);
+      await apiFetch('users', 'POST', { ...newUserForm, permissions: { canManageUsers: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canManageUsers, canAddCamps: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canAddCamps, canDeleteCamps: newUserForm.role === 'SUPER_ADMIN' || newUserForm.canDeleteCamps, canEditOccupants: newUserForm.canEditOccupants, canExportReports: newUserForm.canExportReports, canApproveTransfers: newUserForm.role === 'SUPER_ADMIN' || newUserForm.role === 'AUDITOR' } });
       setShowAddUserModal(false);
-      logActivity('USER_MGMT', `Created User Account ${savedUser.staffId}`, `Created ${savedUser.name} (${savedUser.role}) in database`);
-    } catch (err) {
-      const fallbackUser = {
-        id: `u-${Date.now()}`,
-        ...payload,
-        status: 'Active',
-        lastLogin: 'Never'
-      };
-      setUsers(prev => [fallbackUser, ...prev]);
-      setShowAddUserModal(false);
-      logActivity('USER_MGMT', `Created User ${fallbackUser.staffId}`, `Created ${fallbackUser.name}`);
-    }
-
-    setNewUserForm({
-      staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR',
-      campScope: 'ALL', canManageUsers: false, canAddCamps: false, canDeleteCamps: true,
-      canEditOccupants: true, canExportReports: true, canApproveTransfers: false
-    });
+      setNewUserForm({ staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR', campScope: 'ALL', canManageUsers: false, canAddCamps: false, canDeleteCamps: true, canEditOccupants: true, canExportReports: true, canApproveTransfers: false });
+      await syncCloudDatabase();
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
-  const handleExecutePasswordReset = (e) => {
+  const handleExecutePasswordReset = async (e) => {
     e.preventDefault();
-    if (newPasswordValue.length < 8) {
-      alert('Password must be at least 8 characters long.');
-      return;
-    }
-    if (newPasswordValue !== confirmPasswordValue) {
-      alert('Passwords do not match.');
-      return;
-    }
-    setUsers(prev => prev.map(u => u.id === targetUserForReset.id ? { ...u, passwordHash: newPasswordValue } : u));
-    setResetSuccessMessage(`Password updated for ${targetUserForReset.name}.`);
-    logActivity('USER_MGMT', `Reset Password for ${targetUserForReset.staffId}`, `Updated password for ${targetUserForReset.name}`);
-    setTimeout(() => {
-      setShowResetPasswordModal(false);
-      setTargetUserForReset(null);
-      setNewPasswordValue('');
-      setConfirmPasswordValue('');
-      setResetSuccessMessage('');
-    }, 1400);
+    if (newPasswordValue !== confirmPasswordValue) { alert('Passwords do not match.'); return; }
+    try {
+      setIsSyncing(true);
+      await apiFetch(`users/${targetUserForReset.id}/reset-password`, 'POST', { password: newPasswordValue });
+      setResetSuccessMessage(`Password updated successfully.`);
+      setTimeout(() => { setShowResetPasswordModal(false); setTargetUserForReset(null); setNewPasswordValue(''); setConfirmPasswordValue(''); setResetSuccessMessage(''); }, 1400);
+    } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
+  };
+
+  const handleSaveMisconduct = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSyncing(true);
+      await apiFetch('misconduct-logs', 'POST', misconductForm);
+      setShowMisconductModal(false);
+      await syncCloudDatabase();
+      alert(`Misconduct recorded successfully.`);
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
+  };
+
+  const handleSaveMaintenance = async (e) => {
+    e.preventDefault();
+    try {
+      setIsSyncing(true);
+      await apiFetch('maintenance-logs', 'POST', maintenanceForm);
+      setShowMaintenanceModal(false);
+      await syncCloudDatabase();
+      alert(`Maintenance issue logged.`);
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
   // Auth Screen
@@ -1777,6 +1087,11 @@ export default function App() {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
               {currentUser.role}
             </span>
+            {isSyncing && (
+              <span className="flex items-center gap-1 text-cyan-600 font-bold ml-2">
+                <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Syncing...
+              </span>
+            )}
             {globalStats.unassignedCount > 0 && (
               <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-100 text-blue-800 border border-blue-200">
                 {globalStats.unassignedCount} Unassigned Staff Ready for Bed
@@ -2358,7 +1673,13 @@ export default function App() {
             rates={rates}
             setRates={setRates}
             otherCosts={otherCosts}
-            onUpdateOtherCost={(cc, amt, desc) => setOtherCosts(prev => ({ ...prev, [cc]: { amount: amt, description: desc } }))}
+            onUpdateOtherCost={async (cc, amt, desc) => {
+              try {
+                setIsSyncing(true);
+                await apiFetch('billing/others', 'PUT', { billingPeriod, costCenter: cc, amount: amt, description: desc });
+                await syncCloudDatabase();
+              } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
+            }}
             projectInvoicingData={projectInvoicingData}
             setShowManageCostCentersModal={setShowManageCostCentersModal}
             setSelectedInvoiceModal={setSelectedInvoiceModal}
@@ -2602,7 +1923,7 @@ export default function App() {
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Employee ID</label>
-                  <input type="text" required value={editingEmployeeModal.employeeId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+                  <input type="text" required value={editingEmployeeModal.employeeId} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" disabled />
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Full Name</label>
@@ -3418,321 +2739,8 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* EMPLOYEE DOSSIER MODAL                                              */}
+      {/* ADD BUILDING MODAL (WITH STARTING FLOOR NUMBER SUPPORT)             */}
       {/* =================================================================== */}
-      {viewingEmployeeDossier && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
-                  #{viewingEmployeeDossier.employeeId}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
-                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
-                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
-                    </span>
-                  </div>
-                  <p className="text-slate-500 font-medium">
-                    {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                {canEditOccupants && (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      const occ = viewingEmployeeDossier;
-                      setViewingEmployeeDossier(null);
-                      setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
-                    }}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" /> Edit Details
-                  </button>
-                )}
-                <button type="button" onClick={() => setViewingEmployeeDossier(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Civil ID</div>
-                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId || 'N/A'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Passport #</div>
-                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo || 'N/A'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Mobile</div>
-                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Nationality</div>
-                <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Status</div>
-                <div className="mt-0.5 font-bold text-emerald-700">{viewingEmployeeDossier.employeeStatus}</div>
-              </div>
-            </div>
-
-            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-cyan-600" /> Current Room Allocation
-                </span>
-                <span className="font-bold px-2.5 py-1 rounded-lg bg-white text-cyan-700 border border-cyan-200">
-                  {viewingEmployeeDossier.roomGrade} Grade
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <span className="text-slate-500">Camp:</span>
-                  <div className="font-bold text-slate-900">{viewingEmployeeDossier.campNo}</div>
-                </div>
-                <div>
-                  <span className="text-slate-500">Room:</span>
-                  <div className="font-bold text-cyan-700 font-mono">Room {viewingEmployeeDossier.roomNo}</div>
-                </div>
-                <div>
-                  <span className="text-slate-500">Entry Date & Ref:</span>
-                  <div className="font-bold text-slate-900 font-mono">{viewingEmployeeDossier.entryDate} ({viewingEmployeeDossier.afrEntryRef || '150-04'})</div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-cyan-200/60">
-                <button
-                  type="button"
-                  onClick={() => setReportPreviewModal({
-                    type: 'issuance',
-                    occupant: viewingEmployeeDossier,
-                    arrivalType: viewingEmployeeDossier.arrivalType || 'Local Residency Transfer',
-                    docRef: viewingEmployeeDossier.afrEntryRef || '150-04',
-                    materials: viewingEmployeeDossier.materialsIssued || { mattress: true, pillow: true, bedsheet: true, blanket: true }
-                  })}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Preview Material Issuance (T3)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setMisconductForm(prev => ({
-                      ...prev,
-                      employeeId: occ.employeeId,
-                      employeeName: occ.employeeName,
-                      title: occ.title,
-                      division: occ.division,
-                      costCenter: occ.costCenter,
-                      campNo: occ.campNo,
-                      roomNo: occ.roomNo,
-                      contactNo: occ.mobileNo || '+965 '
-                    }));
-                    setShowMisconductModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setMaintenanceForm(prev => ({
-                      ...prev,
-                      reportedByEmpId: occ.employeeId,
-                      employeeName: occ.employeeName,
-                      floorNo: occ.floorNo || 1,
-                      flatCode: occ.flatCode,
-                      roomNo: occ.roomNo
-                    }));
-                    setShowMaintenanceModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
-                </button>
-
-                {canEditOccupants && (
-                  <button
-                    onClick={() => {
-                      const occ = viewingEmployeeDossier;
-                      setViewingEmployeeDossier(null);
-                      handleOpenRelocateModal(occ);
-                    }}
-                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                  >
-                    <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
-                  </button>
-                )}
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-800 uppercase">Accommodation & Shift History Ledger</h4>
-              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
-                {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
-                  viewingEmployeeDossier.stayHistory.map((hist, idx) => (
-                    <div key={idx} className="border-l-2 border-cyan-600 pl-3">
-                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
-                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-slate-400 italic">No previous camp shifts recorded.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* OTHER MODALS (EDIT CAMP, ADD BUILDING, COST CENTERS, USERS)         */}
-      {/* =================================================================== */}
-      {editingCampModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900">Edit Camp ({editingCampModal.campNo})</h3>
-              <button onClick={() => setEditingCampModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleSaveCampEdits} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Camp Code</label>
-                  <input type="text" required value={editingCampModal.campNo} onChange={e => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Camp Area</label>
-                  <input type="text" required value={editingCampModal.campArea} onChange={e => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-              </div>
-
-              <div className="p-3.5 bg-slate-100 border rounded-xl flex items-center justify-between">
-                <div className="font-bold">Total Floors: {editingCampModal.floors.length}</div>
-                <div className="flex gap-2">
-                  {editingCampModal.floors.length > 1 && (
-                    <button type="button" onClick={handleRemoveTopFloorDraft} className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold cursor-pointer">
-                      - Remove Top Floor
-                    </button>
-                  )}
-                  <button type="button" onClick={handleOpenAddFloorConfig} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold cursor-pointer">
-                    + Add New Floor
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {editingCampModal.floors.map(fl => (
-                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between">
-                    <span className="font-bold">Floor {fl.floorNo} ({fl.flats.length} Flats)</span>
-                    <div className="flex gap-1.5">
-                      {fl.flats.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveFlatFromFloor(fl.floorNo)} className="px-2 py-1 bg-rose-50 text-rose-700 border rounded font-semibold">- Flat</button>
-                      )}
-                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')} className="px-2 py-1 bg-cyan-50 text-cyan-800 border rounded font-bold">+ NM Flat</button>
-                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')} className="px-2 py-1 bg-amber-50 text-amber-800 border rounded font-bold">+ M Flat</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setEditingCampModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Save Camp</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showAddFloorConfigModal && editingCampModal && (
-        <div className="fixed inset-0 bg-slate-900/70 z-60 flex items-center justify-center p-4">
-          <form onSubmit={handleCommitNewFloorToCamp} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
-            <h3 className="text-base font-bold">Configure Floor {editingCampModal.floors.length + 1}</h3>
-            <div>
-              <label className="block font-semibold mb-1">Total Flats</label>
-              <input type="number" min="1" max="10" required value={newFloorDraft.flatsCount} onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
-            </div>
-            <div>
-              <label className="block font-semibold mb-1">Non-Manual Flats (2 beds/rm)</label>
-              <input type="number" min="0" max={newFloorDraft.flatsCount} required value={newFloorDraft.nonManualFlats} onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowAddFloorConfigModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Add Floor</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {showManageCostCentersModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold">Project Cost Centers & Divisions</h3>
-              <button onClick={() => setShowManageCostCentersModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-              <div className="font-bold text-blue-900">Operating Divisions ({divisions.length})</div>
-              <div className="flex flex-wrap gap-2">
-                {divisions.map(div => (
-                  <span key={div} className="px-3 py-1 bg-white border rounded-lg font-bold flex items-center gap-1.5">
-                    {div}
-                    <button type="button" onClick={() => handleRemoveDivision(div)} className="text-rose-600 font-bold">×</button>
-                  </span>
-                ))}
-              </div>
-              <form onSubmit={handleAddDivision} className="flex gap-2 pt-1">
-                <input type="text" placeholder="New Division..." value={newDivisionInput} onChange={e => setNewDivisionInput(e.target.value)} className="bg-white border rounded-lg px-3 py-1.5 flex-1" />
-                <button type="submit" className="px-3.5 py-1.5 bg-blue-700 text-white font-bold rounded-lg">+ Add Division</button>
-              </form>
-            </div>
-
-            <form onSubmit={handleCreateCostCenter} className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border rounded-xl">
-              <input type="text" required placeholder="Code (1IDS040)" value={newCostCenterForm.code} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5 font-mono uppercase font-bold" />
-              <input type="text" required placeholder="Project Name" value={newCostCenterForm.name} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5" />
-              <div className="flex gap-2">
-                <select value={newCostCenterForm.division} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })} className="border bg-white rounded-lg px-2 py-1.5 flex-1 font-bold">
-                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-                <button type="submit" className="px-4 py-1.5 bg-cyan-600 text-white font-bold rounded-lg">Add</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showExcelImportModal && (
-        <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold">Import Preview: {excelImportFileName} ({excelImportStats.valid} Valid)</h3>
-              <button onClick={() => setShowExcelImportModal(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowExcelImportModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
-              <button onClick={handleCommitExcelImport} className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">
-                Confirm Import ({excelImportStats.valid})
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
@@ -3740,7 +2748,7 @@ export default function App() {
               <h3 className="text-base font-bold">Add Building</h3>
               <button onClick={() => setShowAddCampModal(false)}><X className="w-5 h-5" /></button>
             </div>
-            <form onSubmit={e => {
+            <form onSubmit={async (e) => {
               e.preventDefault();
               const campDigit = newCampForm.campDigit || String(camps.length + 1);
               const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
@@ -3775,20 +2783,21 @@ export default function App() {
                 return { floorNo: actualFloorNo, flats: floorFlats };
               });
 
-              const newCampObj = {
-                id: `camp-${crypto.randomUUID()}`,
+              const payload = {
                 campNo: newCampForm.campNo,
                 campArea: newCampForm.campArea,
-                costCenter: '1ACD000',
                 campDigit,
                 campStartDate: newCampForm.campStartDate,
-                status: 'Active',
                 floors: generatedFloors
               };
-              setCamps(prev => [...prev, newCampObj]);
-              setSelectedCampId(newCampObj.id);
-              setSelectedFloorNo(startFl);
-              setShowAddCampModal(false);
+              try {
+                setIsSyncing(true);
+                await apiFetch('camps', 'POST', payload);
+                setShowAddCampModal(false);
+                setSelectedCampId(newCampForm.campNo);
+                setSelectedFloorNo(startFl);
+                await syncCloudDatabase();
+              } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
             }} className="space-y-4">
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
