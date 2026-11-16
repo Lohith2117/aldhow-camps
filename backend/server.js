@@ -202,6 +202,9 @@ app.put('/api/camps/:campNo', async (req, res) => {
   finally { client.release(); }
 });
 
+// ==========================================
+// COST CENTERS MANAGEMENT ROUTES
+// ==========================================
 app.post('/api/cost-centers', async (req, res) => {
   const { code, name, division } = req.body;
   if (!code || !name || !division) {
@@ -215,7 +218,10 @@ app.post('/api/cost-centers', async (req, res) => {
     
     if (req.user.role === 'SUPER_ADMIN') {
       await client.query(
-        'INSERT INTO cost_centers (code, name, division, status) VALUES ($1, $2, $3, $4) ON CONFLICT (code) DO UPDATE SET name = EXCLUDED.name, division = EXCLUDED.division, status = \'Active\'', 
+        `INSERT INTO cost_centers (code, name, division, status) 
+         VALUES ($1, $2, $3, $4) 
+         ON CONFLICT (code) 
+         DO UPDATE SET name = EXCLUDED.name, division = EXCLUDED.division, status = 'Active'`, 
         [cleanCode, name.trim(), division.trim(), 'Active']
       );
       await logActivity(client, req, 'COST_CENTER', `Created/Updated Cost Center ${cleanCode}`);
@@ -228,6 +234,29 @@ app.post('/api/cost-centers', async (req, res) => {
       await logActivity(client, req, 'COST_CENTER_REQUEST', `Requested Cost Center ${cleanCode}`);
     }
     
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch(err) { 
+    await client.query('ROLLBACK'); 
+    res.status(500).json({ error: err.message || 'Server error' }); 
+  } finally { 
+    client.release(); 
+  }
+});
+
+app.patch('/api/cost-centers/:code/toggle', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cc = await client.query('SELECT status FROM cost_centers WHERE code = $1', [req.params.code]);
+    if (cc.rowCount === 0) { 
+      await client.query('ROLLBACK'); 
+      return res.status(404).json({ error: 'Cost center not found' }); 
+    }
+    const nextStatus = cc.rows[0].status === 'Active' ? 'Inactive' : 'Active';
+    await client.query('UPDATE cost_centers SET status = $1 WHERE code = $2', [nextStatus, req.params.code]);
+    await logActivity(client, req, 'COST_CENTER', `Changed Status of ${req.params.code} to ${nextStatus}`);
     await client.query('COMMIT');
     res.json({ success: true });
   } catch(err) { 
