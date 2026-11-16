@@ -9,6 +9,7 @@ import {
 import ExcelJS from 'exceljs'; // <-- Secure replacement for xlsx
 import dhowLogoImg from './assets/dhow-logo.png';
 import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
+import { fetchCloudData, saveCloudData } from './utils/apiSync';
 import {
   INITIAL_USERS, INITIAL_COST_CENTERS, INITIAL_CAMPS, INITIAL_OCCUPANTS,
   INITIAL_LEAVE_LOGS, INITIAL_RTD_LOGS, INITIAL_TRANSFER_REQUESTS,
@@ -294,6 +295,27 @@ export default function App() {
     if (currentUser && rememberMe) localStorage.setItem('dhow_session_v14', JSON.stringify(currentUser));
     else if (!currentUser) localStorage.removeItem('dhow_session_v14');
   }, [currentUser, rememberMe]);
+
+  // Phase 3: Connected Neon DB API Integration
+  useEffect(() => {
+    async function syncCloudDatabase() {
+      // Only fetch if logged in
+      if (!currentUser || !currentUser.token) return; 
+
+      const cloudData = await fetchCloudData('bootstrap');
+      if (cloudData) {
+        if (cloudData.camps) setCamps(cloudData.camps);
+        if (cloudData.occupants) setOccupants(cloudData.occupants);
+        if (cloudData.users) setUsers(cloudData.users);
+        if (cloudData.costCenters) setCostCenters(cloudData.costCenters);
+        if (cloudData.leaveLogs) setLeaveLogs(cloudData.leaveLogs);
+        if (cloudData.rtdLogs) setRtdLogs(cloudData.rtdLogs);
+        if (cloudData.transferRequests) setTransferRequests(cloudData.transferRequests);
+        if (cloudData.activityLogs) setActivityLogs(cloudData.activityLogs);
+      }
+    }
+    syncCloudDatabase();
+  }, [currentUser]);
 
   const logActivity = (category, actionTitle, details, campNo = 'ALL') => {
     const newLog = {
@@ -904,6 +926,7 @@ export default function App() {
     alert(`Success: Import process completed.`);
   };
 
+  // Cost Center Actions (With Role-Based Approval Workflow)
   const handleCreateCostCenter = (e) => {
     e.preventDefault();
     const cleanCode = newCostCenterForm.code.trim().toUpperCase();
@@ -912,16 +935,42 @@ export default function App() {
       alert(`Cost Center code "${cleanCode}" already exists.`);
       return;
     }
-    const newCC = {
-      id: `cc-${Date.now()}`,
-      code: cleanCode,
-      name: newCostCenterForm.name.trim() || 'Project Site',
-      division: newCostCenterForm.division,
-      status: 'Active'
-    };
-    setCostCenters(prev => [...prev, newCC]);
-    logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
+
+    if (isSuperAdmin) {
+      const newCC = {
+        id: `cc-${Date.now()}`,
+        code: cleanCode,
+        name: newCostCenterForm.name.trim() || 'Project Site',
+        division: newCostCenterForm.division,
+        status: 'Active'
+      };
+      setCostCenters(prev => [...prev, newCC]);
+      logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
+      alert(`Cost center ${cleanCode} created successfully!`);
+    } else {
+      const approvalReq = {
+        id: `tr-${Date.now()}`,
+        type: 'COST_CENTER_CREATION',
+        employeeId: 'SYS-CC',
+        employeeName: `New Cost Center: ${cleanCode} (${newCostCenterForm.name.trim() || 'Project Site'})`,
+        fromCostCenter: 'N/A',
+        fromDivision: 'N/A',
+        toCostCenter: cleanCode,
+        toDivision: newCostCenterForm.division,
+        reason: `New Cost Center Creation Request for ${newCostCenterForm.name.trim() || 'Project Site'}`,
+        requestedBy: currentUser.name,
+        requestedByRole: currentUser.role,
+        requestDate: new Date().toLocaleString(),
+        status: 'PENDING',
+        reviewedBy: '', reviewDate: '', reviewRemarks: ''
+      };
+      setTransferRequests(prev => [approvalReq, ...prev]);
+      logActivity('COST_CENTER_REQUEST', `Requested Cost Center ${cleanCode}`, `Submitted for Super Admin approval by ${currentUser.name}`);
+      alert(`Cost center request submitted to Approvals & Logs for Super Admin sign-off.`);
+    }
+
     setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
+    setShowManageCostCentersModal(false);
   };
 
   const handleToggleCostCenterStatus = (id) => {
@@ -1275,12 +1324,24 @@ export default function App() {
     if (req.status !== 'PENDING') return;
 
     if (decision === 'APPROVED') {
-      setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
-        ...o, costCenter: req.toCostCenter, division: req.toDivision
-      } : o));
-      logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
+      if (req.type === 'COST_CENTER_CREATION') {
+        const newCC = {
+          id: `cc-${Date.now()}`,
+          code: req.toCostCenter,
+          name: req.reason.replace('New Cost Center Creation Request for ', '') || 'Project Site',
+          division: req.toDivision,
+          status: 'Active'
+        };
+        setCostCenters(prev => [...prev, newCC]);
+        logActivity('COST_CENTER', `Approved Cost Center ${req.toCostCenter}`, `Approved by ${currentUser.name}`);
+      } else {
+        setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
+          ...o, costCenter: req.toCostCenter, division: req.toDivision
+        } : o));
+        logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
+      }
     } else {
-      logActivity('COST_CENTER_REJECTION', `Rejected Transfer #${req.employeeId}`, `Rejected move to ${req.toCostCenter}`);
+      logActivity('COST_CENTER_REJECTION', `Rejected Request #${req.id}`, `Rejected by ${currentUser.name}`);
     }
 
     setTransferRequests(prev => prev.map(r => r.id === reqId ? {
