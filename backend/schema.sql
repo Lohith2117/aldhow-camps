@@ -1,5 +1,5 @@
 -- ============================================================================
--- DHOW ENGINEERING CAMP MANAGEMENT ERP - CORRECTED POSTGRESQL SCHEMA
+-- DHOW ENGINEERING CAMP MANAGEMENT ERP - NORMALIZED POSTGRESQL DATABASE SCHEMA
 -- Master Cost Center: 1ACD000
 -- ============================================================================
 
@@ -28,8 +28,7 @@ CREATE TABLE IF NOT EXISTS users (
 
 -- 2. PROJECT COST CENTERS TABLE
 CREATE TABLE IF NOT EXISTS cost_centers (
-    id VARCHAR(50) PRIMARY KEY,
-    code VARCHAR(50) UNIQUE NOT NULL,
+    code VARCHAR(50) PRIMARY KEY,
     name VARCHAR(200) NOT NULL,
     division VARCHAR(50) NOT NULL,
     status VARCHAR(30) DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
@@ -38,8 +37,7 @@ CREATE TABLE IF NOT EXISTS cost_centers (
 
 -- 3. CAMPS / APARTMENT BUILDINGS TABLE
 CREATE TABLE IF NOT EXISTS camps (
-    id VARCHAR(50) PRIMARY KEY,
-    camp_no VARCHAR(50) UNIQUE NOT NULL,
+    camp_no VARCHAR(50) PRIMARY KEY,
     camp_area VARCHAR(150) NOT NULL,
     cost_center VARCHAR(50) DEFAULT '1ACD000',
     camp_digit VARCHAR(10) NOT NULL,
@@ -51,9 +49,9 @@ CREATE TABLE IF NOT EXISTS camps (
 -- 4. FLOORS TABLE 
 CREATE TABLE IF NOT EXISTS floors (
     id SERIAL PRIMARY KEY,
-    camp_id VARCHAR(50) NOT NULL REFERENCES camps(id) ON DELETE CASCADE,
+    camp_no VARCHAR(50) NOT NULL REFERENCES camps(camp_no) ON DELETE CASCADE,
     floor_no INT NOT NULL,
-    UNIQUE (camp_id, floor_no)
+    UNIQUE (camp_no, floor_no)
 );
 
 -- 5. FLATS TABLE 
@@ -82,7 +80,7 @@ CREATE TABLE IF NOT EXISTS employees (
     nationality VARCHAR(80) NOT NULL,
     title VARCHAR(120) NOT NULL,
     grade_type VARCHAR(30) NOT NULL CHECK (grade_type IN ('Non-Manual', 'Manual')),
-    productive_type VARCHAR(60) DEFAULT 'Direct Employee (DE)', -- M2 FIX: Added column
+    productive_type VARCHAR(60) DEFAULT 'Direct Employee (DE)',
     division VARCHAR(50) NOT NULL,
     cost_center VARCHAR(50) NOT NULL REFERENCES cost_centers(code),
     passport_no VARCHAR(50) NOT NULL,
@@ -92,17 +90,12 @@ CREATE TABLE IF NOT EXISTS employees (
     emergency_contact_phone VARCHAR(50),
     home_country_address TEXT,
     camp_no VARCHAR(50),
-    camp_area VARCHAR(150),
-    floor_no INT,
-    flat_no INT,
-    flat_code VARCHAR(50),
     room_no VARCHAR(50),
-    entry_date DATE NOT NULL,
+    entry_date DATE,
     afr_entry_ref VARCHAR(80),
     afr_log_no VARCHAR(80),
-    -- M2 FIX: Added 'Unassigned' to CHECK constraint
     employee_status VARCHAR(40) NOT NULL DEFAULT 'On Job'
-        CHECK (employee_status IN ('Unassigned', 'On Job', 'On Leave', 'RTD - Resigned', 'RTD - Terminated', 'RTD - Dismissed')),
+        CHECK (employee_status IN ('Unassigned', 'On Job', 'On Leave') OR employee_status LIKE 'RTD%'),
     leave_start_date DATE,
     leave_end_date DATE,
     leave_return_date DATE,
@@ -111,13 +104,13 @@ CREATE TABLE IF NOT EXISTS employees (
     afr_exit_ref VARCHAR(80),
     residency_company VARCHAR(200) DEFAULT 'Dhow Engineering General Trading & Contracting Company',
     remarks TEXT,
-    materials_issued JSONB, -- M2 FIX: Added column for JSON checklist
+    materials_issued JSONB,
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 8. LEAVE LOGS TABLE 
 CREATE TABLE IF NOT EXISTS leave_logs (
-    id VARCHAR(50) PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
     employee_name VARCHAR(200) NOT NULL,
     camp_no VARCHAR(50) NOT NULL,
@@ -127,14 +120,14 @@ CREATE TABLE IF NOT EXISTS leave_logs (
     actual_return_date DATE,
     afr_log_no VARCHAR(80),
     remarks TEXT,
-    status VARCHAR(30) DEFAULT 'Active Leave' CHECK (status IN ('Active Leave', 'Returned', 'Closed (RTD)')), -- H4 FIX
+    status VARCHAR(30) DEFAULT 'Active Leave' CHECK (status IN ('Active Leave', 'Returned', 'Closed (RTD)')),
     created_by VARCHAR(150),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
 -- 9. RTD LOGS TABLE
 CREATE TABLE IF NOT EXISTS rtd_logs (
-    id VARCHAR(50) PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
     employee_name VARCHAR(200) NOT NULL,
     rtd_type VARCHAR(30) NOT NULL CHECK (rtd_type IN ('Resigned', 'Terminated', 'Dismissed')),
@@ -153,10 +146,7 @@ CREATE TABLE IF NOT EXISTS stay_history (
     id SERIAL PRIMARY KEY,
     employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
     camp_no VARCHAR(50) NOT NULL,
-    camp_area VARCHAR(150),
-    flat_code VARCHAR(50),
     room_no VARCHAR(50) NOT NULL,
-    room_grade VARCHAR(30) NOT NULL,
     cost_center VARCHAR(50),
     start_date DATE NOT NULL,
     end_date DATE,
@@ -165,13 +155,11 @@ CREATE TABLE IF NOT EXISTS stay_history (
 
 -- 11. COST CENTER TRANSFER APPROVAL REQUESTS TABLE
 CREATE TABLE IF NOT EXISTS transfer_requests (
-    id VARCHAR(50) PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
     employee_name VARCHAR(200) NOT NULL,
     from_cost_center VARCHAR(50) NOT NULL,
-    from_division VARCHAR(50) NOT NULL,
     to_cost_center VARCHAR(50) NOT NULL,
-    to_division VARCHAR(50) NOT NULL,
     reason TEXT,
     requested_by VARCHAR(150) NOT NULL,
     requested_by_role VARCHAR(40) NOT NULL,
@@ -184,10 +172,10 @@ CREATE TABLE IF NOT EXISTS transfer_requests (
 
 -- 12. BILLING "OTHERS" (MISCELLANEOUS CAMP COSTS) TABLE
 CREATE TABLE IF NOT EXISTS billing_other_costs (
-    id VARCHAR(50) PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     billing_period VARCHAR(50) NOT NULL,
     cost_center VARCHAR(50) NOT NULL REFERENCES cost_centers(code),
-    other_cost_kwd NUMERIC(12, 3) DEFAULT 0.000,
+    other_cost_kwd NUMERIC(12, 3) DEFAULT 0.000 CHECK (other_cost_kwd >= 0),
     other_cost_description TEXT,
     updated_by VARCHAR(150),
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
@@ -196,7 +184,7 @@ CREATE TABLE IF NOT EXISTS billing_other_costs (
 
 -- 13. CHROME-STYLE ACTIVITY TIME LOG TABLE
 CREATE TABLE IF NOT EXISTS activity_logs (
-    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Fixed ID generation
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     actor_name VARCHAR(150) NOT NULL,
     actor_role VARCHAR(50) NOT NULL,
@@ -210,11 +198,11 @@ CREATE TABLE IF NOT EXISTS activity_logs (
 CREATE TABLE IF NOT EXISTS maintenance_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     date DATE,
-    issue_details TEXT,
+    issue_details TEXT NOT NULL,
     reported_by_emp_id VARCHAR(50),
     room_no VARCHAR(50),
     status VARCHAR(50) DEFAULT 'Pending',
-    cost DECIMAL(10,3) DEFAULT 0.000
+    cost DECIMAL(10,3) DEFAULT 0.000 CHECK (cost >= 0)
 );
 
 -- 15. MISCONDUCT LOGS (M2 FIX)
@@ -222,6 +210,18 @@ CREATE TABLE IF NOT EXISTS misconduct_logs (
     id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     employee_id VARCHAR(50),
     incident_date DATE,
-    type_of_violation VARCHAR(255),
+    type_of_violation VARCHAR(255) NOT NULL,
     remarks TEXT
+);
+
+-- 16. INVOICE SNAPSHOTS (PHASE 4 PREP)
+CREATE TABLE IF NOT EXISTS invoice_snapshots (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    billing_period VARCHAR(50) NOT NULL,
+    cost_center VARCHAR(50) NOT NULL,
+    rates_used_json JSONB NOT NULL,
+    bed_counts_json JSONB NOT NULL,
+    total_amount_kwd NUMERIC(12, 3) NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE (billing_period, cost_center)
 );

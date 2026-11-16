@@ -28,6 +28,7 @@ import {
   printFormattedElement
 } from './utils/reportGenerators';
 
+import { apiFetch } from './utils/api';
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
 import ActivityLogTab from './components/ActivityLogTab';
@@ -296,27 +297,6 @@ export default function App() {
     else if (!currentUser) localStorage.removeItem('dhow_session_v14');
   }, [currentUser, rememberMe]);
 
-  // Phase 3: Connected Neon DB API Integration
-  useEffect(() => {
-    async function syncCloudDatabase() {
-      // Only fetch if logged in
-      if (!currentUser || !currentUser.token) return; 
-
-      const cloudData = await fetchCloudData('bootstrap');
-      if (cloudData) {
-        if (cloudData.camps) setCamps(cloudData.camps);
-        if (cloudData.occupants) setOccupants(cloudData.occupants);
-        if (cloudData.users) setUsers(cloudData.users);
-        if (cloudData.costCenters) setCostCenters(cloudData.costCenters);
-        if (cloudData.leaveLogs) setLeaveLogs(cloudData.leaveLogs);
-        if (cloudData.rtdLogs) setRtdLogs(cloudData.rtdLogs);
-        if (cloudData.transferRequests) setTransferRequests(cloudData.transferRequests);
-        if (cloudData.activityLogs) setActivityLogs(cloudData.activityLogs);
-      }
-    }
-    syncCloudDatabase();
-  }, [currentUser]);
-
   const logActivity = (category, actionTitle, details, campNo = 'ALL') => {
     const newLog = {
       id: `act-${crypto.randomUUID()}`,
@@ -328,38 +308,35 @@ export default function App() {
     setActivityLogs(prev => [newLog, ...prev]);
   };
 
-  const handleLogin = (e) => {
+
+  const handleLogin = async (e) => {
     e.preventDefault();
     setLoginError('');
     setLoginLoading(true);
-    setTimeout(() => {
-      const q = loginEmail.trim().toLowerCase();
-      const user = users.find(u => u.email.toLowerCase() === q || u.staffId.toLowerCase() === q);
-      if (!user || user.passwordHash !== loginPassword) {
-        setLoginError('Invalid email / Staff ID or password.');
-        setLoginLoading(false);
-        return;
-      }
-      if (user.status !== 'Active') {
-        setLoginError('Account suspended. Contact the Super Administrator.');
-        setLoginLoading(false);
-        return;
-      }
-      const updatedUser = {
-        ...user,
-        lastLogin: new Date().toISOString()
-      };
-      setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
-      setCurrentUser(updatedUser);
+    
+    try {
+      // Calls the secure POST /api/auth/login endpoint
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ login: loginEmail.trim(), password: loginPassword })
+      });
+      
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error);
+      
+      sessionStorage.setItem('dhow_session', JSON.stringify(data)); // Save token safely
+      setCurrentUser(data.user);
+    } catch (err) {
+      setLoginError(err.message || 'Invalid credentials');
+    } finally {
       setLoginLoading(false);
-      logActivity('AUTH', 'User Sign In', `${user.name} logged into Dhow Camp Portal`);
-    }, 300);
+    }
   };
 
   const handleLogout = () => {
-    logActivity('AUTH', 'User Sign Out', `${currentUser?.name} logged out`);
     setCurrentUser(null);
-    localStorage.removeItem('dhow_session_v14');
+    sessionStorage.removeItem('dhow_session');
     setActiveTab('map');
   };
 
@@ -926,7 +903,6 @@ export default function App() {
     alert(`Success: Import process completed.`);
   };
 
-  // Cost Center Actions (With Role-Based Approval Workflow)
   const handleCreateCostCenter = (e) => {
     e.preventDefault();
     const cleanCode = newCostCenterForm.code.trim().toUpperCase();
@@ -935,42 +911,16 @@ export default function App() {
       alert(`Cost Center code "${cleanCode}" already exists.`);
       return;
     }
-
-    if (isSuperAdmin) {
-      const newCC = {
-        id: `cc-${Date.now()}`,
-        code: cleanCode,
-        name: newCostCenterForm.name.trim() || 'Project Site',
-        division: newCostCenterForm.division,
-        status: 'Active'
-      };
-      setCostCenters(prev => [...prev, newCC]);
-      logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
-      alert(`Cost center ${cleanCode} created successfully!`);
-    } else {
-      const approvalReq = {
-        id: `tr-${Date.now()}`,
-        type: 'COST_CENTER_CREATION',
-        employeeId: 'SYS-CC',
-        employeeName: `New Cost Center: ${cleanCode} (${newCostCenterForm.name.trim() || 'Project Site'})`,
-        fromCostCenter: 'N/A',
-        fromDivision: 'N/A',
-        toCostCenter: cleanCode,
-        toDivision: newCostCenterForm.division,
-        reason: `New Cost Center Creation Request for ${newCostCenterForm.name.trim() || 'Project Site'}`,
-        requestedBy: currentUser.name,
-        requestedByRole: currentUser.role,
-        requestDate: new Date().toLocaleString(),
-        status: 'PENDING',
-        reviewedBy: '', reviewDate: '', reviewRemarks: ''
-      };
-      setTransferRequests(prev => [approvalReq, ...prev]);
-      logActivity('COST_CENTER_REQUEST', `Requested Cost Center ${cleanCode}`, `Submitted for Super Admin approval by ${currentUser.name}`);
-      alert(`Cost center request submitted to Approvals & Logs for Super Admin sign-off.`);
-    }
-
+    const newCC = {
+      id: `cc-${Date.now()}`,
+      code: cleanCode,
+      name: newCostCenterForm.name.trim() || 'Project Site',
+      division: newCostCenterForm.division,
+      status: 'Active'
+    };
+    setCostCenters(prev => [...prev, newCC]);
+    logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
     setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
-    setShowManageCostCentersModal(false);
   };
 
   const handleToggleCostCenterStatus = (id) => {
@@ -1324,24 +1274,12 @@ export default function App() {
     if (req.status !== 'PENDING') return;
 
     if (decision === 'APPROVED') {
-      if (req.type === 'COST_CENTER_CREATION') {
-        const newCC = {
-          id: `cc-${Date.now()}`,
-          code: req.toCostCenter,
-          name: req.reason.replace('New Cost Center Creation Request for ', '') || 'Project Site',
-          division: req.toDivision,
-          status: 'Active'
-        };
-        setCostCenters(prev => [...prev, newCC]);
-        logActivity('COST_CENTER', `Approved Cost Center ${req.toCostCenter}`, `Approved by ${currentUser.name}`);
-      } else {
-        setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
-          ...o, costCenter: req.toCostCenter, division: req.toDivision
-        } : o));
-        logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
-      }
+      setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
+        ...o, costCenter: req.toCostCenter, division: req.toDivision
+      } : o));
+      logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
     } else {
-      logActivity('COST_CENTER_REJECTION', `Rejected Request #${req.id}`, `Rejected by ${currentUser.name}`);
+      logActivity('COST_CENTER_REJECTION', `Rejected Transfer #${req.employeeId}`, `Rejected move to ${req.toCostCenter}`);
     }
 
     setTransferRequests(prev => prev.map(r => r.id === reqId ? {
