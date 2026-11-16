@@ -23,3 +23,6 @@ dist-ssr
 *.sln
 *.sw?
 this is in my gitignaore for now
+.env
+*.env
+!.env.example
