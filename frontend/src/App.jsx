@@ -10,17 +10,7 @@ import ExcelJS from 'exceljs';
 import dhowLogoImg from './assets/dhow-logo.png';
 import { apiFetch } from './utils/api';
 import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
-import {
-  exportCampOccupancySummary,
-  exportDailyOccupancyReport,
-  exportMaterialIssuanceForm,
-  exportOccupantsRelocationForm,
-  exportAccommodationMisconductReport,
-  exportMisconductLog,
-  exportMaintenanceLog,
-  exportImportTemplate,
-  printFormattedElement
-} from './utils/reportGenerators';
+
 
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
@@ -31,12 +21,20 @@ const DhowLogo = ({ className = "h-8 w-auto" }) => (
   <img src={dhowLogoImg} alt="Dhow Engineering" className={className} />
 );
 
+const safeLoad = (key, fallback) => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch (err) {
+    console.warn(`Corrupt storage key "${key}" detected. Resetting to fallback.`);
+    localStorage.removeItem(key);
+    return fallback;
+  }
+};
+
 export default function App() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
 
-  // ==========================================
-  // PHASE 3: CLOUD STATE (NO LOCAL STORAGE)
-  // ==========================================
   const [users, setUsers] = useState([]);
   const [currentUser, setCurrentUser] = useState(() => {
     try {
@@ -57,7 +55,7 @@ export default function App() {
   const [maintenanceLogs, setMaintenanceLogs] = useState([]);
   const [misconductLogs, setMisconductLogs] = useState([]);
 
-  const [isSyncing, setIsSyncing] = useState(false); // UI Addition allowed
+  const [isSyncing, setIsSyncing] = useState(false);
 
   // Navigation
   const [activeTab, setActiveTab] = useState('map');
@@ -97,7 +95,6 @@ export default function App() {
   const [newFloorDraft, setNewFloorDraft] = useState({ flatsCount: 3, nonManualFlats: 1 });
   const [newDivisionInput, setNewDivisionInput] = useState('');
 
-  // Excel Roster Import
   const [showExcelImportModal, setShowExcelImportModal] = useState(false);
   const [excelParsedRows, setExcelParsedRows] = useState([]);
   const [excelImportFileName, setExcelImportFileName] = useState('');
@@ -105,20 +102,12 @@ export default function App() {
   const excelFileInputRef = useRef(null);
 
   const [misconductForm, setMisconductForm] = useState({
-    employeeId: '', employeeName: '', title: '', division: '', costCenter: '',
-    campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: todayStr,
-    incidentTime: '14:00', incidentLocation: 'Accommodation Quarters',
-    typeOfViolation: 'Camp Quiet Hours & Residential Safety Violation',
-    description: '', witnessName: '', witnessId: '', witnessRoom: '', witnessPhone: '+965 ',
-    reportedBy: 'Camp Supervisor', remarks: 'Referred to HR Disciplinary Committee'
+    employeeId: '', employeeName: '', title: '', division: '', costCenter: '', campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: todayStr, incidentTime: '14:00', incidentLocation: 'Accommodation Quarters', typeOfViolation: 'Camp Quiet Hours & Residential Safety Violation', description: '', witnessName: '', witnessId: '', witnessRoom: '', witnessPhone: '+965 ', reportedBy: 'Camp Supervisor', remarks: 'Referred to HR Disciplinary Committee'
   });
 
   const [showMaintenanceModal, setShowMaintenanceModal] = useState(false);
   const [maintenanceForm, setMaintenanceForm] = useState({
-    date: todayStr, month: 'November', issueDetails: '', reportedByEmpId: '',
-    employeeName: '', floorNo: 1, flatCode: '', roomNo: '', areaFacility: 'Bedroom AC / Electrical',
-    inspectedBy: 'Camp Facilities Supervisor', actionTakenBy: 'Maintenance Team',
-    status: 'Pending', replacedMaterialCost: '0.000', chargeToEmpId: 'N/A (Wear & Tear)', remarks: ''
+    date: todayStr, month: 'November', issueDetails: '', reportedByEmpId: '', employeeName: '', floorNo: 1, flatCode: '', roomNo: '', areaFacility: 'Bedroom AC / Electrical', inspectedBy: 'Camp Facilities Supervisor', actionTakenBy: 'Maintenance Team', status: 'Pending', replacedMaterialCost: '0.000', chargeToEmpId: 'N/A (Wear & Tear)', remarks: ''
   });
 
   const [showAddUserModal, setShowAddUserModal] = useState(false);
@@ -136,45 +125,29 @@ export default function App() {
   const [loginLoading, setLoginLoading] = useState(false);
 
   const [preAddForm, setPreAddForm] = useState({
-    employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer',
-    productiveType: 'Direct Employee (DE)', roomGrade: 'Manual',
-    division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '',
-    mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ',
-    entryDate: todayStr
+    employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer', productiveType: 'Direct Employee (DE)', roomGrade: 'Manual', division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ', entryDate: todayStr
   });
 
   const [checkInForm, setCheckInForm] = useState({
-    campId: 'camp-1', floorNo: 1, flatCode: '1-01-01-NM', roomNo: '1-01-01-B',
-    roomGrade: 'Non-Manual', productiveType: 'Direct Employee (DE)',
-    arrivalType: 'Local Residency Transfer', docRef: '150-04',
-    employeeId: '', employeeName: '', nationality: 'India',
-    title: 'Site Engineer', division: 'IDS', costCenter: '1IDS038-KIPIC',
-    passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '',
-    emergencyContactPhone: '+965 ', homeCountryAddress: '', entryDate: todayStr,
-    materials: { mattress: true, pillow: true, bedsheet: true, blanket: true }
+    campId: 'camp-1', floorNo: 1, flatCode: '1-01-01-NM', roomNo: '1-01-01-B', roomGrade: 'Non-Manual', productiveType: 'Direct Employee (DE)', arrivalType: 'Local Residency Transfer', docRef: '150-04', employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer', division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ', homeCountryAddress: '', entryDate: todayStr, materials: { mattress: true, pillow: true, bedsheet: true, blanket: true }
   });
 
   const [relocationForm, setRelocationForm] = useState({
-    targetCampId: '', targetFloorNo: '', targetFlatCode: '', targetRoomNo: '',
-    transferDate: todayStr, docRef: 'REL-2026-01', reason: 'Project Site Reallocation'
+    targetCampId: '', targetFloorNo: '', targetFlatCode: '', targetRoomNo: '', transferDate: todayStr, docRef: 'REL-2026-01', reason: 'Project Site Reallocation'
   });
 
-  const [leaveForm, setLeaveForm] = useState({
-    startDate: todayStr, expectedEndDate: todayStr, afrLogNo: 'LOG-VAC', remarks: 'Annual Vacation'
-  });
-  const [returnJobForm, setReturnJobForm] = useState({
-    actualReturnDate: todayStr, remarks: 'Returned on schedule'
-  });
-  const [rtdForm, setRtdForm] = useState({
-    rtdType: 'Resigned', rtdDate: todayStr, afrExitRef: 'EXIT-RTD', remarks: 'Resigned from company'
-  });
-  const [transferRequestForm, setTransferRequestForm] = useState({
-    toCostCenter: '1MEP019-KNPC', toDivision: 'MEP', reason: 'Reassigned to new project site'
-  });
+  const [leaveForm, setLeaveForm] = useState({ startDate: todayStr, expectedEndDate: todayStr, afrLogNo: 'LOG-VAC', remarks: 'Annual Vacation' });
+  const [returnJobForm, setReturnJobForm] = useState({ actualReturnDate: todayStr, remarks: 'Returned on schedule' });
+  
+  // Custom Custom Request: Added reason text box support for RTD Form
+  const [rtdForm, setRtdForm] = useState({ rtdType: 'Resigned', rtdDate: todayStr, afrExitRef: 'EXIT-RTD', reason: '' });
+  const [transferRequestForm, setTransferRequestForm] = useState({ toCostCenter: '1MEP019-KNPC', toDivision: 'MEP', reason: 'Reassigned to new project site' });
   const [newCostCenterForm, setNewCostCenterForm] = useState({ code: '', name: '', division: 'IDS' });
 
+  // Custom Feature Request: Camp Incharges mapped into newCampForm
   const [newCampForm, setNewCampForm] = useState({
     campNo: 'CAMP-04', campArea: 'Ahmadi Sector 4', campDigit: '4', startingFloorNo: 1, campStartDate: todayStr, floorsCount: 3, roomsPerFlat: 3,
+    incharge1Name: '', incharge1Contact: '', incharge2Name: '', incharge2Contact: '',
     floorConfigs: [
       { floorNo: 1, flatsCount: 2, nonManualFlats: 1 },
       { floorNo: 2, flatsCount: 3, nonManualFlats: 0 },
@@ -182,15 +155,8 @@ export default function App() {
     ]
   });
 
-  const [newUserForm, setNewUserForm] = useState({
-    staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR',
-    campScope: 'ALL', canManageUsers: false, canAddCamps: false, canDeleteCamps: true,
-    canEditOccupants: true, canExportReports: true, canApproveTransfers: false
-  });
+  const [newUserForm, setNewUserForm] = useState({ staffId: '', name: '', email: '', password: '', title: '', role: 'CAMP_EDITOR', campScope: 'ALL', canManageUsers: false, canAddCamps: false, canDeleteCamps: true, canEditOccupants: true, canExportReports: true, canApproveTransfers: false });
 
-  // ==========================================
-  // CLOUD SYNC LOGIC (PHASE 3)
-  // ==========================================
   const syncCloudDatabase = async () => {
     if (!currentUser) return;
     try {
@@ -262,7 +228,6 @@ export default function App() {
   const activeCamp = useMemo(() => activeCamps.find(c => c.id === selectedCampId) || activeCamps[0] || camps[0], [activeCamps, camps, selectedCampId]);
   const activeFloor = useMemo(() => activeCamp?.floors.find(f => f.floorNo === selectedFloorNo) || activeCamp?.floors[0], [activeCamp, selectedFloorNo]);
 
-  // Global Telemetry
   const globalStats = useMemo(() => {
     let totalFlats = 0; let totalRooms = 0; let totalBeds = 0; let occupiedBeds = 0;
     activeCamps.forEach(c => {
@@ -314,51 +279,93 @@ export default function App() {
     });
   }, [occupants, searchTerm, statusFilter, divisionFilter, productiveTypeFilter]);
 
+  // PHASE 4: STRICT INTEGER FILS PRORATED BILLING LOGIC
   const projectInvoicingData = useMemo(() => {
-    const activeOccupants = occupants.filter(o => !o.employeeStatus.startsWith('RTD') && o.employeeStatus !== 'Unassigned');
+    // 1. Determine days in selected billing month
+    const [monthName, yearStr] = billingPeriod.split(' ');
+    const monthIdx = new Date(`${monthName} 1, 2000`).getMonth();
+    const year = parseInt(yearStr, 10);
+    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
+    const monthStart = new Date(year, monthIdx, 1);
+    const monthEnd = new Date(year, monthIdx + 1, 0);
+
     const costCenterMap = {};
 
-    activeOccupants.forEach(occ => {
-      const cc = occ.costCenter || 'Unassigned';
-      if (!costCenterMap[cc]) {
-        const found = costCenters.find(c => c.code === cc);
-        costCenterMap[cc] = {
-          costCenter: cc, projectName: found ? found.name : 'Project Site', division: occ.division || (found ? found.division : 'General'),
-          totalOccupants: 0, nonManualBeds: 0, manualBeds: 0, nonManualAmountKWD: 0, manualAmountKWD: 0,
-          otherCostKWD: otherCosts.find(oc => oc.cost_center === cc && oc.billing_period === billingPeriod)?.other_cost_kwd || 0,
-          otherCostDesc: otherCosts.find(oc => oc.cost_center === cc && oc.billing_period === billingPeriod)?.other_cost_description || '',
-          totalAmountKWD: 0, occupants: []
+    // Pre-populate mapping for all active cost centers
+    costCenters.forEach(cc => {
+      if (cc.status === 'Active') {
+        costCenterMap[cc.code] = {
+          costCenter: cc.code, projectName: cc.name, division: cc.division,
+          totalOccupants: 0, nonManualBeds: 0, manualBeds: 0, nonManualAmountFils: 0, manualAmountFils: 0,
+          otherCostFils: Math.round(Number(otherCosts.find(oc => oc.cost_center === cc.code && oc.billing_period === billingPeriod)?.other_cost_kwd || 0) * 1000),
+          otherCostDesc: otherCosts.find(oc => oc.cost_center === cc.code && oc.billing_period === billingPeriod)?.other_cost_description || '',
+          totalAmountFils: 0, occupants: []
         };
       }
+    });
 
-      costCenterMap[cc].totalOccupants += 1;
-      costCenterMap[cc].occupants.push(occ);
-
-      if (occ.roomGrade === 'Non-Manual') {
-        costCenterMap[cc].nonManualBeds += 1;
-        costCenterMap[cc].nonManualAmountKWD += rates.nonManual;
-      } else {
-        costCenterMap[cc].manualBeds += 1;
-        costCenterMap[cc].manualAmountKWD += rates.manual;
+    occupants.forEach(occ => {
+      // Build a comprehensive timeline of stays for this employee to check against billing period
+      const timeline = [...(occ.stayHistory || [])];
+      
+      // If employee is actively using a bed (On Job or On Leave), add current stay to timeline
+      if (!occ.employeeStatus.startsWith('RTD') && occ.campNo !== 'UNASSIGNED') {
+        timeline.push({
+          campNo: occ.campNo, roomGrade: occ.roomGrade, costCenter: occ.costCenter,
+          startDate: occ.entryDate, endDate: null // active
+        });
       }
+
+      timeline.forEach(stay => {
+        if (!stay.costCenter || !costCenterMap[stay.costCenter]) return;
+
+        const stayStart = new Date(stay.startDate);
+        const stayEnd = stay.endDate ? new Date(stay.endDate) : new Date(); // Bill active stays up to today
+
+        // Proration overlap bounds constraint
+        const overlapStart = stayStart > monthStart ? stayStart : monthStart;
+        const overlapEnd = stayEnd < monthEnd ? stayEnd : monthEnd;
+        
+        if (overlapStart <= overlapEnd) {
+          const daysOccupied = Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
+          const rateKwd = stay.roomGrade === 'Non-Manual' ? Number(rates.nonManual || 0) : Number(rates.manual || 0);
+          
+          // Strict integer fils math (KWD * 1000) prevents floating point rounding drift
+          const proratedFils = Math.round((daysOccupied / daysInMonth) * rateKwd * 1000);
+
+          if (stay.roomGrade === 'Non-Manual') {
+            costCenterMap[stay.costCenter].nonManualBeds += (daysOccupied / daysInMonth);
+            costCenterMap[stay.costCenter].nonManualAmountFils += proratedFils;
+          } else {
+            costCenterMap[stay.costCenter].manualBeds += (daysOccupied / daysInMonth);
+            costCenterMap[stay.costCenter].manualAmountFils += proratedFils;
+          }
+
+          if (!costCenterMap[stay.costCenter].occupants.includes(occ)) {
+            costCenterMap[stay.costCenter].occupants.push(occ);
+            costCenterMap[stay.costCenter].totalOccupants += 1;
+          }
+        }
+      });
     });
 
     const items = Object.values(costCenterMap).map(item => ({
       ...item,
-      totalAmountKWD: item.nonManualAmountKWD + item.manualAmountKWD + Number(item.otherCostKWD)
+      nonManualAmountKWD: item.nonManualAmountFils / 1000,
+      manualAmountKWD: item.manualAmountFils / 1000,
+      otherCostKWD: item.otherCostFils / 1000,
+      totalAmountKWD: (item.nonManualAmountFils + item.manualAmountFils + item.otherCostFils) / 1000,
+      nonManualBeds: Math.round(item.nonManualBeds * 10) / 10, // display format
+      manualBeds: Math.round(item.manualBeds * 10) / 10
     }));
 
     const grandTotalKWD = items.reduce((acc, curr) => acc + curr.totalAmountKWD, 0);
     const totalNonManualKWD = items.reduce((acc, curr) => acc + curr.nonManualAmountKWD, 0);
     const totalManualKWD = items.reduce((acc, curr) => acc + curr.manualAmountKWD, 0);
-    const totalOthersKWD = items.reduce((acc, curr) => acc + Number(curr.otherCostKWD), 0);
+    const totalOthersKWD = items.reduce((acc, curr) => acc + curr.otherCostKWD, 0);
 
     return { items, grandTotalKWD, totalNonManualKWD, totalManualKWD, totalOthersKWD };
   }, [occupants, costCenters, rates, otherCosts, billingPeriod]);
-
-  // =========================================================
-  // API MUTATION HANDLERS (Replaced localStorage with DB Fetch)
-  // =========================================================
 
   const handleFloorsCountChange = (count) => {
     const val = Math.max(1, Math.min(20, parseInt(count, 10) || 1));
@@ -1101,7 +1108,10 @@ export default function App() {
 
           <div className="flex items-center gap-2">
             <button
-              onClick={() => setReportPreviewModal({ type: 'summary' })}
+              onClick={async () => {
+                const { exportCampOccupancySummary } = await import('./utils/reportGenerators');
+                setReportPreviewModal({ type: 'summary' });
+              }}
               className="text-slate-700 hover:text-cyan-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
               title="Preview & Export Camp Summary Status"
             >
@@ -1109,7 +1119,10 @@ export default function App() {
               <span>Preview Summary Status (T1)</span>
             </button>
             <button
-              onClick={() => setReportPreviewModal({ type: 'daily', camp: activeCamp })}
+              onClick={async () => {
+                const { exportDailyOccupancyReport } = await import('./utils/reportGenerators');
+                setReportPreviewModal({ type: 'daily', camp: activeCamp });
+              }}
               className="text-slate-700 hover:text-emerald-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
               title="Preview & Export Daily Occupancy Report"
             >
@@ -1412,7 +1425,7 @@ export default function App() {
                                             {occ.roomGrade} • <strong className="text-slate-700">{occ.nationality}</strong> • {occ.division}
                                           </span>
                                           <div className="flex items-center gap-2 shrink-0 ml-2">
-                                            {canEditOccupants && (
+                                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
                                               <button
                                                 onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
                                                 className="text-emerald-700 hover:underline font-bold cursor-pointer"
@@ -1426,7 +1439,7 @@ export default function App() {
                                             >
                                               Dossier
                                             </button>
-                                            {canEditOccupants && (
+                                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
                                               <button
                                                 onClick={() => setManageOccupantModal(occ)}
                                                 className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
@@ -1528,7 +1541,10 @@ export default function App() {
                 </select>
 
                 <button
-                  onClick={exportImportTemplate}
+                  onClick={async () => {
+                    const { exportImportTemplate } = await import('./utils/reportGenerators');
+                    exportImportTemplate();
+                  }}
                   className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-sm cursor-pointer"
                   title="Download blank Excel template with correct columns"
                 >
@@ -1619,7 +1635,7 @@ export default function App() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {canEditOccupants && (
+                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
                               <button
                                 onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
                                 className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] cursor-pointer"
@@ -1646,7 +1662,7 @@ export default function App() {
                             >
                               Dossier
                             </button>
-                            {canEditOccupants && (
+                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
                               <button
                                 onClick={() => setManageOccupantModal(occ)}
                                 className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer"
@@ -1722,8 +1738,14 @@ export default function App() {
             occupants={occupants}
             maintenanceLogs={maintenanceLogs}
             misconductLogs={misconductLogs}
-            onExportMisconductLog={() => exportMisconductLog(misconductLogs)}
-            onExportMaintenanceLog={() => exportMaintenanceLog(maintenanceLogs)}
+            onExportMisconductLog={async () => {
+              const { exportMisconductLog } = await import('./utils/reportGenerators');
+              exportMisconductLog(misconductLogs);
+            }}
+            onExportMaintenanceLog={async () => {
+              const { exportMaintenanceLog } = await import('./utils/reportGenerators');
+              exportMaintenanceLog(maintenanceLogs);
+            }}
             onDownloadSQLSchema={() => alert('PostgreSQL schema downloaded')}
           />
         )}
@@ -1894,6 +1916,17 @@ export default function App() {
                   <select value={preAddForm.division} onChange={e => setPreAddForm({ ...preAddForm, division: e.target.value })} className="w-full border rounded-xl px-2 py-2 font-bold">
                     {divisions.map(d => <option key={d} value={d}>{d}</option>)}
                   </select>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Name</label>
+                  <input type="text" value={preAddForm.emergencyContactName || ''} onChange={e => setPreAddForm({ ...preAddForm, emergencyContactName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Phone</label>
+                  <input type="text" value={preAddForm.emergencyContactPhone || ''} onChange={e => setPreAddForm({ ...preAddForm, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
                 </div>
               </div>
 
@@ -2168,6 +2201,17 @@ export default function App() {
                 </div>
               </div>
 
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Name</label>
+                  <input type="text" value={checkInForm.emergencyContactName || ''} onChange={e => setCheckInForm({ ...checkInForm, emergencyContactName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Emergency Contact Phone</label>
+                  <input type="text" value={checkInForm.emergencyContactPhone || ''} onChange={e => setCheckInForm({ ...checkInForm, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+                </div>
+              </div>
+
               <div className="p-3.5 bg-emerald-50/70 border border-emerald-200 rounded-xl space-y-2">
                 <div className="font-bold text-emerald-900 flex items-center justify-between">
                   <span>Material Issuance Checklist (Doc. Ref: 150-04)</span>
@@ -2231,7 +2275,8 @@ export default function App() {
 
                 <button
                   type="button"
-                  onClick={() => {
+                  onClick={async () => {
+                    const { exportCampOccupancySummary, exportDailyOccupancyReport, exportMaterialIssuanceForm, exportOccupantsRelocationForm } = await import('./utils/reportGenerators');
                     if (reportPreviewModal.type === 'summary') {
                       exportCampOccupancySummary(camps, occupants, leaveLogs, rtdLogs);
                     } else if (reportPreviewModal.type === 'daily') {
@@ -2739,7 +2784,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* ADD BUILDING MODAL (WITH STARTING FLOOR NUMBER SUPPORT)             */}
+      {/* ADD BUILDING MODAL                                                  */}
       {/* =================================================================== */}
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
@@ -2788,6 +2833,10 @@ export default function App() {
                 campArea: newCampForm.campArea,
                 campDigit,
                 campStartDate: newCampForm.campStartDate,
+                incharge1Name: newCampForm.incharge1Name,
+                incharge1Contact: newCampForm.incharge1Contact,
+                incharge2Name: newCampForm.incharge2Name,
+                incharge2Contact: newCampForm.incharge2Contact,
                 floors: generatedFloors
               };
               try {
@@ -2799,6 +2848,7 @@ export default function App() {
                 await syncCloudDatabase();
               } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
             }} className="space-y-4">
+              
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Camp Code</label>
@@ -2818,6 +2868,29 @@ export default function App() {
                 </div>
               </div>
 
+              {/* Incharge Row Addition */}
+              <div className="p-3 bg-slate-50 border rounded-xl space-y-3">
+                <div className="font-bold text-slate-800">Camp Incharge Details</div>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Incharge 1 Name *</label>
+                    <input type="text" required placeholder="Name" value={newCampForm.incharge1Name} onChange={e => setNewCampForm({ ...newCampForm, incharge1Name: e.target.value })} className="w-full border rounded-lg px-2.5 py-1.5" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Contact 1 *</label>
+                    <input type="text" required placeholder="+965..." value={newCampForm.incharge1Contact} onChange={e => setNewCampForm({ ...newCampForm, incharge1Contact: e.target.value })} className="w-full border rounded-lg px-2.5 py-1.5 font-mono" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Incharge 2 Name</label>
+                    <input type="text" placeholder="Optional Name" value={newCampForm.incharge2Name} onChange={e => setNewCampForm({ ...newCampForm, incharge2Name: e.target.value })} className="w-full border rounded-lg px-2.5 py-1.5" />
+                  </div>
+                  <div>
+                    <label className="block font-semibold text-slate-600 mb-1">Contact 2</label>
+                    <input type="text" placeholder="Optional Contact" value={newCampForm.incharge2Contact} onChange={e => setNewCampForm({ ...newCampForm, incharge2Contact: e.target.value })} className="w-full border rounded-lg px-2.5 py-1.5 font-mono" />
+                  </div>
+                </div>
+              </div>
+
               <div className="max-h-56 overflow-y-auto border rounded-xl p-2 space-y-2">
                 {newCampForm.floorConfigs.map((fc, index) => (
                   <div key={fc.floorNo} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
@@ -2828,14 +2901,14 @@ export default function App() {
                         ...prev,
                         floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, flatsCount: val } : f)
                       }));
-                    }} className="border bg-white rounded px-2 py-1" placeholder="Flats" />
+                    }} className="border bg-white rounded px-2 py-1" placeholder="Manual Flats" />
                     <input type="number" min="0" max={fc.flatsCount} value={fc.nonManualFlats} onChange={e => {
                       const val = parseInt(e.target.value, 10) || 0;
                       setNewCampForm(prev => ({
                         ...prev,
                         floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: val } : f)
                       }));
-                    }} className="border bg-white rounded px-2 py-1" placeholder="NM Flats" />
+                    }} className="border bg-white rounded px-2 py-1" placeholder="Non-Manual Flats" />
                   </div>
                 ))}
               </div>
@@ -2857,18 +2930,22 @@ export default function App() {
               <button onClick={() => setManageOccupantModal(null)}><X className="w-5 h-5" /></button>
             </div>
             <div className="grid grid-cols-2 gap-2">
-              <button onClick={() => { setEditingEmployeeModal({ ...manageOccupantModal, originalId: manageOccupantModal.employeeId }); setManageOccupantModal(null); }} className="p-2.5 bg-slate-800 text-white rounded-xl font-bold cursor-pointer">
-                Edit Employee Details
-              </button>
-              <button onClick={() => { handleOpenRelocateModal(manageOccupantModal); setManageOccupantModal(null); }} className="p-2.5 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">
-                Relocate / Shift Bed
-              </button>
-              {manageOccupantModal.employeeStatus !== 'On Leave' && (
+              {!manageOccupantModal.employeeStatus.startsWith('RTD') && (
+                <>
+                  <button onClick={() => { setEditingEmployeeModal({ ...manageOccupantModal, originalId: manageOccupantModal.employeeId }); setManageOccupantModal(null); }} className="p-2.5 bg-slate-800 text-white rounded-xl font-bold cursor-pointer">
+                    Edit Employee Details
+                  </button>
+                  <button onClick={() => { handleOpenRelocateModal(manageOccupantModal); setManageOccupantModal(null); }} className="p-2.5 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">
+                    Relocate / Shift Bed
+                  </button>
+                </>
+              )}
+              {manageOccupantModal.employeeStatus !== 'On Leave' && !manageOccupantModal.employeeStatus.startsWith('RTD') && (
                 <button onClick={() => setShowLeaveModal(manageOccupantModal)} className="p-2.5 bg-amber-500 text-white rounded-xl font-bold cursor-pointer">
                   Mark On Leave
                 </button>
               )}
-              {manageOccupantModal.employeeStatus === 'On Leave' && (
+              {manageOccupantModal.employeeStatus === 'On Leave' && !manageOccupantModal.employeeStatus.startsWith('RTD') && (
                 <button onClick={() => setShowReturnJobModal(manageOccupantModal)} className="p-2.5 bg-emerald-600 text-white rounded-xl font-bold cursor-pointer">
                   Return from Leave
                 </button>
@@ -2876,9 +2953,11 @@ export default function App() {
               <button onClick={() => setShowTransferRequestModal(manageOccupantModal)} className="p-2.5 bg-blue-600 text-white rounded-xl font-bold cursor-pointer">
                 Change Cost Center
               </button>
-              <button onClick={() => setShowRtdModal(manageOccupantModal)} className="p-2.5 bg-rose-600 text-white rounded-xl font-bold cursor-pointer">
-                Process RTD Exit
-              </button>
+              {!manageOccupantModal.employeeStatus.startsWith('RTD') && (
+                <button onClick={() => setShowRtdModal(manageOccupantModal)} className="p-2.5 bg-rose-600 text-white rounded-xl font-bold cursor-pointer">
+                  Process RTD Exit
+                </button>
+              )}
             </div>
           </div>
         </div>
@@ -2911,17 +2990,28 @@ export default function App() {
         </div>
       )}
 
+      {/* RTD Modal With Reason TextBox */}
       {showRtdModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleRtdSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
             <h3 className="text-base font-bold">Process RTD Exit (#{showRtdModal.employeeId})</h3>
-            <select value={rtdForm.rtdType} onChange={e => setRtdForm({ ...rtdForm, rtdType: e.target.value })} className="w-full border rounded-lg p-2 font-bold">
-              <option value="Resigned">Resigned</option>
-              <option value="Terminated">Terminated</option>
-              <option value="Dismissed">Dismissed</option>
-            </select>
-            <input type="date" required value={rtdForm.rtdDate} onChange={e => setRtdForm({ ...rtdForm, rtdDate: e.target.value })} className="w-full border rounded-lg p-2" />
-            <div className="flex justify-end gap-2">
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">RTD Type</label>
+              <select value={rtdForm.rtdType} onChange={e => setRtdForm({ ...rtdForm, rtdType: e.target.value })} className="w-full border rounded-lg p-2 font-bold">
+                <option value="Resigned">Resigned</option>
+                <option value="Terminated">Terminated</option>
+                <option value="Dismissed">Dismissed</option>
+              </select>
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">RTD Date</label>
+              <input type="date" required value={rtdForm.rtdDate} onChange={e => setRtdForm({ ...rtdForm, rtdDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">Reason / Remarks</label>
+              <input type="text" placeholder="Enter reason for RTD..." required value={rtdForm.reason} onChange={e => setRtdForm({ ...rtdForm, reason: e.target.value })} className="w-full border rounded-lg p-2" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowRtdModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold">Confirm RTD</button>
             </div>

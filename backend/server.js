@@ -8,6 +8,8 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const app = express();
+
+// Security Middleware
 app.use(helmet());
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json({ limit: '10mb' })); 
@@ -23,6 +25,7 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts. Please try again later.' }
 });
 
+// Server-side audit log helper
 const logActivity = async (client, req, category, actionTitle, details = '', campNo = null) => {
   await client.query(
     `INSERT INTO activity_logs (actor_name, actor_role, category, action_title, details, camp_no) 
@@ -119,7 +122,12 @@ app.get('/api/bootstrap', async (req, res) => {
         });
         return { floorNo: fl.floor_no, flats: cFlats };
       });
-      return { id: c.camp_no, campNo: c.camp_no, campArea: c.camp_area, campDigit: c.camp_digit, status: c.status, floors: cFloors };
+      return { 
+        id: c.camp_no, campNo: c.camp_no, campArea: c.camp_area, campDigit: c.camp_digit, status: c.status,
+        incharge1Name: c.incharge_1_name, incharge1Contact: c.incharge_1_contact, 
+        incharge2Name: c.incharge_2_name, incharge2Contact: c.incharge_2_contact, 
+        floors: cFloors 
+      };
     }).filter(Boolean);
 
     res.json({
@@ -141,11 +149,14 @@ app.get('/api/bootstrap', async (req, res) => {
 // ==========================================
 app.post('/api/camps', async (req, res) => {
   if (!req.user.permissions.canAddCamps) return res.status(403).json({ error: 'Forbidden' });
-  const { campNo, campArea, campDigit, campStartDate, floors } = req.body;
+  const { campNo, campArea, campDigit, campStartDate, incharge1Name, incharge1Contact, incharge2Name, incharge2Contact, floors } = req.body;
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('INSERT INTO camps (camp_no, camp_area, camp_digit, camp_start_date) VALUES ($1, $2, $3, $4)', [campNo, campArea, campDigit, campStartDate]);
+    await client.query(
+      'INSERT INTO camps (camp_no, camp_area, camp_digit, camp_start_date, incharge_1_name, incharge_1_contact, incharge_2_name, incharge_2_contact) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)', 
+      [campNo, campArea, campDigit, campStartDate, incharge1Name, incharge1Contact, incharge2Name, incharge2Contact]
+    );
     for (const fl of floors) {
       const floorRes = await client.query('INSERT INTO floors (camp_no, floor_no) VALUES ($1, $2) RETURNING id', [campNo, fl.floorNo]);
       for (const ft of fl.flats) {
@@ -167,8 +178,13 @@ app.put('/api/camps/:campNo', async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    const { campArea, floors } = req.body;
-    await client.query('UPDATE camps SET camp_area = $1 WHERE camp_no = $2', [campArea, req.params.campNo]);
+    const { campArea, incharge1Name, incharge1Contact, incharge2Name, incharge2Contact, floors } = req.body;
+    
+    await client.query(
+      'UPDATE camps SET camp_area = $1, incharge_1_name = $2, incharge_1_contact = $3, incharge_2_name = $4, incharge_2_contact = $5 WHERE camp_no = $6', 
+      [campArea, incharge1Name, incharge1Contact, incharge2Name, incharge2Contact, req.params.campNo]
+    );
+    
     await client.query('DELETE FROM floors WHERE camp_no = $1', [req.params.campNo]); // Cascades
     for (const fl of floors) {
       const floorRes = await client.query('INSERT INTO floors (camp_no, floor_no) VALUES ($1, $2) RETURNING id', [req.params.campNo, fl.floorNo]);
@@ -373,7 +389,7 @@ app.post('/api/employees/:id/return-job', async (req, res) => {
 });
 
 app.post('/api/employees/:id/rtd', async (req, res) => {
-  const { rtdType, rtdDate, remarks } = req.body;
+  const { rtdType, rtdDate, remarks, reason } = req.body; // Phase 5 custom field: reason
   if (!['Resigned', 'Terminated', 'Dismissed'].includes(rtdType)) return res.status(400).json({ error: 'Invalid RTD Type' });
 
   const client = await pool.connect();
@@ -385,12 +401,13 @@ app.post('/api/employees/:id/rtd', async (req, res) => {
     await client.query(`UPDATE leave_logs SET status = 'Closed (RTD)', actual_return_date = $1 WHERE employee_id = $2 AND status = 'Active Leave'`, [rtdDate, req.params.id]);
     await client.query(`UPDATE stay_history SET end_date = $1 WHERE employee_id = $2 AND end_date IS NULL`, [rtdDate, req.params.id]);
     await client.query(`UPDATE employees SET employee_status = $1, rtd_type = $2, rtd_date = $3, camp_no = NULL, room_no = NULL WHERE employee_id = $4`, [`RTD - ${rtdType}`, rtdType, rtdDate, req.params.id]);
+    
     await client.query(
       `INSERT INTO rtd_logs (employee_id, employee_name, rtd_type, rtd_date, vacated_camp_no, vacated_room_no, cost_center, remarks, recorded_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-      [req.params.id, empCheck.rows[0].employee_name, rtdType, rtdDate, empCheck.rows[0].camp_no, empCheck.rows[0].room_no, empCheck.rows[0].cost_center, remarks, req.user.name]
+      [req.params.id, empCheck.rows[0].employee_name, rtdType, rtdDate, empCheck.rows[0].camp_no, empCheck.rows[0].room_no, empCheck.rows[0].cost_center, reason || remarks, req.user.name]
     );
 
-    await logActivity(client, req, 'RTD', `Processed RTD for ${req.params.id}`, remarks, empCheck.rows[0].camp_no);
+    await logActivity(client, req, 'RTD', `Processed RTD for ${req.params.id}`, reason || remarks, empCheck.rows[0].camp_no);
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } 
@@ -404,8 +421,7 @@ app.post('/api/employees/:id/relocate', async (req, res) => {
     await client.query('BEGIN');
     const { targetCampId, targetFlatCode, targetRoomNo, targetRoomGrade, transferDate, reason, docRef } = req.body;
     
-    // Convert targetCampId to string if it isn't, but wait, the client passes targetCampId directly which is camp.id.
-    const campCheck = await client.query('SELECT camp_no FROM camps WHERE id = $1', [targetCampId]);
+    const campCheck = await client.query('SELECT camp_no FROM camps WHERE id = $1 OR camp_no = $1', [targetCampId]);
     const targetCampNo = campCheck.rowCount > 0 ? campCheck.rows[0].camp_no : targetCampId;
 
     const empCheck = await client.query('SELECT * FROM employees WHERE employee_id = $1 FOR UPDATE', [req.params.id]);
@@ -472,7 +488,6 @@ app.patch('/api/transfer-requests/:id/review', async (req, res) => {
     
     if (decision === 'APPROVED') {
       if (trCheck.rows[0].employee_id === 'SYS-CC') {
-        // It was a cost center creation request
         await client.query('INSERT INTO cost_centers (code, name, division) VALUES ($1, $2, $3)', [trCheck.rows[0].to_cost_center, trCheck.rows[0].reason.replace('New Cost Center Creation Request for ', ''), trCheck.rows[0].to_division]);
       } else {
         await client.query('UPDATE employees SET cost_center = $1, division = $2 WHERE employee_id = $3', [trCheck.rows[0].to_cost_center, trCheck.rows[0].to_division, trCheck.rows[0].employee_id]);
@@ -535,6 +550,88 @@ app.post('/api/misconduct-logs', async (req, res) => {
     await client.query('COMMIT');
     res.json({ success: true });
   } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+});
+
+// ==========================================
+// 10. CAMP DECOMMISSION
+// ==========================================
+app.patch('/api/camps/:id/decommission', async (req, res) => {
+  if (!req.user.permissions.canDeleteCamps) return res.status(403).json({ error: 'Forbidden' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const occCheck = await client.query('SELECT count(*) FROM employees WHERE camp_no = $1 AND employee_status IN (\'On Job\', \'On Leave\')', [req.params.id]);
+    if (parseInt(occCheck.rows[0].count) > 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Camp has active occupants' }); }
+    
+    await client.query('UPDATE camps SET status = \'Decommissioned\' WHERE camp_no = $1', [req.params.id]);
+    await logActivity(client, req, 'CAMP_MGMT', `Decommissioned ${req.params.id}`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } 
+  finally { client.release(); }
+});
+
+// ==========================================
+// 11. USER MANAGEMENT (SUPER ADMIN ONLY)
+// ==========================================
+const enforceSuperAdmin = (req, res, next) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden: Admins only' });
+  next();
+};
+
+app.post('/api/users', enforceSuperAdmin, async (req, res) => {
+  const { staffId, name, email, password, role, campScope, permissions } = req.body;
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Password min 8 chars' });
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+    
+    await client.query(
+      `INSERT INTO users (staff_id, name, email, password_hash, role, camp_scope, can_manage_users, can_add_camps, can_delete_camps, can_edit_occupants, can_approve_transfers) 
+       VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+      [staffId, name, email, hash, role, campScope, permissions?.canManageUsers || false, permissions?.canAddCamps || false, permissions?.canDeleteCamps || false, permissions?.canEditOccupants || true, permissions?.canApproveTransfers || false]
+    );
+
+    await logActivity(client, req, 'USER_MGMT', `Created User ${name}`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } 
+  finally { client.release(); }
+});
+
+app.patch('/api/users/:id', enforceSuperAdmin, async (req, res) => {
+  const { role, status, permissions } = req.body;
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(
+      `UPDATE users SET role = $1, status = $2, can_manage_users = $3, can_add_camps = $4, can_delete_camps = $5, can_edit_occupants = $6, can_approve_transfers = $7 WHERE id = $8`,
+      [role, status, permissions?.canManageUsers, permissions?.canAddCamps, permissions?.canDeleteCamps, permissions?.canEditOccupants, permissions?.canApproveTransfers, req.params.id]
+    );
+    await logActivity(client, req, 'USER_MGMT', `Updated User ID ${req.params.id}`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } 
+  finally { client.release(); }
+});
+
+app.post('/api/users/:id/reset-password', enforceSuperAdmin, async (req, res) => {
+  const { password } = req.body;
+  if (!password || password.length < 8) return res.status(400).json({ error: 'Password min 8 chars' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const salt = await bcrypt.genSalt(10);
+    const hash = await bcrypt.hash(password, salt);
+    await client.query('UPDATE users SET password_hash = $1 WHERE id = $2', [hash, req.params.id]);
+    await logActivity(client, req, 'USER_MGMT', `Reset password for User ID ${req.params.id}`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } 
+  finally { client.release(); }
 });
 
 const PORT = process.env.PORT || 5000;

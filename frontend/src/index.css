@@ -9,3 +9,4 @@ html, body, #root {
   min-height: 100vh;
   background-color: #f8fafc;
 }
+@import "tailwindcss";
