@@ -6,7 +6,7 @@ import {
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
   Archive, Tag, Phone, Clock, Layers, Globe, FileUp, Wrench, ShieldAlert, FileCheck
 } from 'lucide-react';
-import * as XLSX from 'xlsx';
+import ExcelJS from 'exceljs'; // <-- Secure replacement for xlsx
 import dhowLogoImg from './assets/dhow-logo.png';
 import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
 import {
@@ -35,6 +35,18 @@ import ApprovalsAndTablesTab from './components/ApprovalsAndTablesTab';
 const DhowLogo = ({ className = "h-8 w-auto" }) => (
   <img src={dhowLogoImg} alt="Dhow Engineering" className={className} />
 );
+
+// M4: Safe loader for corrupt localStorage
+const safeLoad = (key, fallback) => {
+  try {
+    const item = localStorage.getItem(key);
+    return item ? JSON.parse(item) : fallback;
+  } catch (err) {
+    console.warn(`Corrupt storage key "${key}" detected. Resetting to fallback.`);
+    localStorage.removeItem(key);
+    return fallback;
+  }
+};
 
 const DEFAULT_MISCONDUCT_LOGS = [
   {
@@ -89,19 +101,19 @@ export default function App() {
   // ==========================================
   // STATE PERSISTENCE
   // ==========================================
-  const [users, setUsers] = useState(() => JSON.parse(localStorage.getItem('dhow_users_v14')) || INITIAL_USERS);
-  const [currentUser, setCurrentUser] = useState(() => JSON.parse(localStorage.getItem('dhow_session_v14')) || null);
-  const [camps, setCamps] = useState(() => JSON.parse(localStorage.getItem('dhow_camps_v14')) || INITIAL_CAMPS);
-  const [occupants, setOccupants] = useState(() => JSON.parse(localStorage.getItem('dhow_occupants_v14')) || INITIAL_OCCUPANTS);
-  const [costCenters, setCostCenters] = useState(() => JSON.parse(localStorage.getItem('dhow_cc_v14')) || INITIAL_COST_CENTERS);
-  const [divisions, setDivisions] = useState(() => JSON.parse(localStorage.getItem('dhow_div_v14')) || ['IDS', 'MEP', 'CIVIL', 'OIL & GAS', 'MARINE']);
-  const [leaveLogs, setLeaveLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_leave_v14')) || INITIAL_LEAVE_LOGS);
-  const [rtdLogs, setRtdLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_rtd_v14')) || INITIAL_RTD_LOGS);
-  const [transferRequests, setTransferRequests] = useState(() => JSON.parse(localStorage.getItem('dhow_tr_v14')) || INITIAL_TRANSFER_REQUESTS);
-  const [otherCosts, setOtherCosts] = useState(() => JSON.parse(localStorage.getItem('dhow_others_v14')) || INITIAL_BILLING_OTHER_COSTS);
-  const [activityLogs, setActivityLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_act_v14')) || INITIAL_ACTIVITY_LOGS);
-  const [maintenanceLogs, setMaintenanceLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_mnt_v14')) || DEFAULT_MAINTENANCE_LOGS);
-  const [misconductLogs, setMisconductLogs] = useState(() => JSON.parse(localStorage.getItem('dhow_disc_v14')) || DEFAULT_MISCONDUCT_LOGS);
+  const [users, setUsers] = useState(() => safeLoad('dhow_users_v14', INITIAL_USERS));
+  const [currentUser, setCurrentUser] = useState(() => safeLoad('dhow_session_v14', null));
+  const [camps, setCamps] = useState(() => safeLoad('dhow_camps_v14', INITIAL_CAMPS));
+  const [occupants, setOccupants] = useState(() => safeLoad('dhow_occupants_v14', INITIAL_OCCUPANTS));
+  const [costCenters, setCostCenters] = useState(() => safeLoad('dhow_cc_v14', INITIAL_COST_CENTERS));
+  const [divisions, setDivisions] = useState(() => safeLoad('dhow_div_v14', ['IDS', 'MEP', 'CIVIL', 'OIL & GAS', 'MARINE']));
+  const [leaveLogs, setLeaveLogs] = useState(() => safeLoad('dhow_leave_v14', INITIAL_LEAVE_LOGS));
+  const [rtdLogs, setRtdLogs] = useState(() => safeLoad('dhow_rtd_v14', INITIAL_RTD_LOGS));
+  const [transferRequests, setTransferRequests] = useState(() => safeLoad('dhow_tr_v14', INITIAL_TRANSFER_REQUESTS));
+  const [otherCosts, setOtherCosts] = useState(() => safeLoad('dhow_others_v14', INITIAL_BILLING_OTHER_COSTS));
+  const [activityLogs, setActivityLogs] = useState(() => safeLoad('dhow_act_v14', INITIAL_ACTIVITY_LOGS));
+  const [maintenanceLogs, setMaintenanceLogs] = useState(() => safeLoad('dhow_mnt_v14', DEFAULT_MAINTENANCE_LOGS));
+  const [misconductLogs, setMisconductLogs] = useState(() => safeLoad('dhow_disc_v14', DEFAULT_MISCONDUCT_LOGS));
 
   // Navigation
   const [activeTab, setActiveTab] = useState('map');
@@ -136,7 +148,6 @@ export default function App() {
   const [editingCampModal, setEditingCampModal] = useState(null);
   const [showManageCostCentersModal, setShowManageCostCentersModal] = useState(false);
   const [editingCostCenterModal, setEditingCostCenterModal] = useState(null);
-  const [decommissionLockoutModal, setDecommissionLockoutModal] = useState(null);
 
   // Report & Form Preview Modal
   const [reportPreviewModal, setReportPreviewModal] = useState(null);
@@ -234,7 +245,7 @@ export default function App() {
     campNo: 'CAMP-04',
     campArea: 'Ahmadi Sector 4',
     campDigit: '4',
-    startingFloorNo: 1, // Phase 1: Custom starting floor support
+    startingFloorNo: 1,
     campStartDate: todayStr,
     floorsCount: 3,
     roomsPerFlat: 3,
@@ -266,7 +277,7 @@ export default function App() {
     canEditOccupants: true, canExportReports: true, canApproveTransfers: false
   });
 
-  // LocalStorage & Cloud Sync
+  // LocalStorage Sync
   useEffect(() => { localStorage.setItem('dhow_users_v14', JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem('dhow_camps_v14', JSON.stringify(camps)); }, [camps]);
   useEffect(() => { localStorage.setItem('dhow_occupants_v14', JSON.stringify(occupants)); }, [occupants]);
@@ -284,31 +295,9 @@ export default function App() {
     else if (!currentUser) localStorage.removeItem('dhow_session_v14');
   }, [currentUser, rememberMe]);
 
-  // Phase 2: Neon DB Cloud Sync Hook
-  useEffect(() => {
-    async function syncCloudDatabase() {
-      try {
-        const resCamps = await fetch('/api/camps');
-        if (resCamps.ok) {
-          const cloudCamps = await resCamps.json();
-          if (cloudCamps && cloudCamps.length > 0) setCamps(cloudCamps);
-        }
-
-        const resOccs = await fetch('/api/occupants');
-        if (resOccs.ok) {
-          const cloudOccs = await resOccs.json();
-          if (cloudOccs && cloudOccs.length > 0) setOccupants(cloudOccs);
-        }
-      } catch (err) {
-        console.warn('Running on local storage offline fallback mode.');
-      }
-    }
-    syncCloudDatabase();
-  }, []);
-
   const logActivity = (category, actionTitle, details, campNo = 'ALL') => {
     const newLog = {
-      id: `act-${Date.now()}-${Math.floor(Math.random() * 1000)}`,
+      id: `act-${crypto.randomUUID()}`,
       timestamp: new Date().toISOString(),
       actorName: currentUser ? currentUser.name : 'System Admin',
       actorRole: currentUser ? currentUser.role : 'SUPER_ADMIN',
@@ -336,7 +325,7 @@ export default function App() {
       }
       const updatedUser = {
         ...user,
-        lastLogin: new Date().toLocaleString('en-US', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+        lastLogin: new Date().toISOString()
       };
       setUsers(prev => prev.map(u => u.id === user.id ? updatedUser : u));
       setCurrentUser(updatedUser);
@@ -700,7 +689,7 @@ export default function App() {
   };
 
   // =========================================================
-  // EXCEL ROSTER IMPORT ENGINE
+  // EXCEL ROSTER IMPORT ENGINE (H1 & H6 FIX USING EXCELJS)
   // =========================================================
   const handleExcelFileUpload = (e) => {
     const file = e.target.files[0];
@@ -709,24 +698,49 @@ export default function App() {
     setExcelImportFileName(file.name);
     const reader = new FileReader();
 
-    reader.onload = (evt) => {
+    reader.onload = async (evt) => {
       try {
-        const bstr = evt.target.result;
-        const wb = XLSX.read(bstr, { type: 'binary' });
-        const wsName = wb.SheetNames[0];
-        const ws = wb.Sheets[wsName];
-        const rawJson = XLSX.utils.sheet_to_json(ws, { defval: '' });
+        const buffer = evt.target.result;
+        const wb = new ExcelJS.Workbook();
+        await wb.xlsx.load(buffer);
+        const ws = wb.worksheets[0];
 
-        if (!rawJson || rawJson.length === 0) {
+        if (!ws) {
           alert('Spreadsheet is empty or could not be read.');
           return;
         }
 
+        const headers = [];
+        ws.getRow(1).eachCell((cell, colNumber) => {
+          headers[colNumber] = String(cell.value || '').trim();
+        });
+
+        const rawJson = [];
+        ws.eachRow((row, rowNumber) => {
+          if (rowNumber === 1) return;
+          const rowData = {};
+          row.eachCell((cell, colNumber) => {
+            let val = cell.value;
+            if (val instanceof Date) {
+              val = val.toISOString().split('T')[0];
+            } else if (val && val.text) {
+              val = val.text;
+            } else if (val && val.result !== undefined) {
+              val = val.result;
+            }
+            rowData[headers[colNumber]] = String(val || '').trim();
+          });
+          if (Object.keys(rowData).length > 0) {
+            rawJson.push(rowData);
+          }
+        });
+
+        const seenIdsInFile = new Set();
         const parsedRows = rawJson.map((row, idx) => {
           const keys = Object.keys(row);
           const getVal = (candidates) => {
             for (const c of candidates) {
-              const matchedKey = keys.find(k => k.trim().toLowerCase().replace(/[^a-z0-9]/g, '') === c.toLowerCase().replace(/[^a-z0-9]/g, ''));
+              const matchedKey = keys.find(k => k.toLowerCase().replace(/[^a-z0-9]/g, '') === c.toLowerCase().replace(/[^a-z0-9]/g, ''));
               if (matchedKey && row[matchedKey] !== undefined) return String(row[matchedKey]).trim();
             }
             return '';
@@ -747,15 +761,15 @@ export default function App() {
           const division = getVal(['Division', 'Dept', 'Department']) || 'IDS';
           const costCenter = getVal(['Project Cost Center', 'Cost Center', 'CostCenter', 'CC']) || '1IDS038-KIPIC';
           const entryDate = getVal(['Entry Date', 'Check In Date', 'Start Date']) || todayStr;
-          const emContact = getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact';
-          const emPhone = getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ';
 
           const errors = [];
           if (!empId) errors.push('Missing Employee ID');
           if (!empName) errors.push('Missing Name');
 
-          const isDuplicate = occupants.some(o => o.employeeId === empId && !o.employeeStatus.startsWith('RTD'));
-          if (isDuplicate) errors.push('Employee ID already exists');
+          const isDuplicate = occupants.some(o => o.employeeId === empId);
+          if (isDuplicate) errors.push('Employee ID already exists in system');
+          if (seenIdsInFile.has(empId)) errors.push('Duplicate ID inside Excel file');
+          if (empId) seenIdsInFile.add(empId);
 
           return {
             rowIdx: idx + 2,
@@ -774,8 +788,8 @@ export default function App() {
             division,
             costCenter,
             entryDate,
-            emergencyContactName: emContact,
-            emergencyContactPhone: emPhone,
+            emergencyContactName: getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact',
+            emergencyContactPhone: getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ',
             errors,
             status: errors.length === 0 ? 'VALID' : 'ERROR'
           };
@@ -792,7 +806,7 @@ export default function App() {
       }
     };
 
-    reader.readAsBinaryString(file);
+    reader.readAsArrayBuffer(file);
     e.target.value = '';
   };
 
@@ -805,9 +819,42 @@ export default function App() {
 
     const newOccupantsList = [...occupants];
     let updatedCamps = [...camps];
+    let anyRoomFull = false;
 
     validRows.forEach((row) => {
       const hasValidRoom = row.roomNo && row.roomNo !== 'PENDING' && row.campNo !== 'UNASSIGNED';
+      
+      if (hasValidRoom) {
+        const targetCamp = updatedCamps.find(c => c.campNo === row.campNo);
+        const targetFloor = targetCamp?.floors.find(fl => fl.floorNo === Number(row.flatCode.split('-')[1] || 1));
+        const targetFlat = targetFloor?.flats.find(ft => ft.flatCode === row.flatCode);
+        const targetRoom = targetFlat?.rooms.find(rm => rm.roomNo === row.roomNo);
+
+        if (!targetRoom || targetRoom.occupants.length >= targetRoom.capacity) {
+          anyRoomFull = true;
+          return;
+        }
+
+        updatedCamps = updatedCamps.map(c => {
+          if (c.campNo !== row.campNo) return c;
+          return {
+            ...c,
+            floors: c.floors.map(fl => ({
+              ...fl,
+              flats: fl.flats.map(ft => ({
+                ...ft,
+                rooms: ft.rooms.map(rm => {
+                  if (rm.roomNo === row.roomNo) {
+                    return { ...rm, occupants: [...rm.occupants, row.employeeId] };
+                  }
+                  return rm;
+                })
+              }))
+            }))
+          };
+        });
+      }
+
       const newOcc = {
         srNo: newOccupantsList.length + 1,
         campNo: hasValidRoom ? row.campNo : 'UNASSIGNED',
@@ -844,37 +891,19 @@ export default function App() {
       };
 
       newOccupantsList.push(newOcc);
-
-      if (hasValidRoom) {
-        updatedCamps = updatedCamps.map(c => {
-          if (c.campNo !== row.campNo) return c;
-          return {
-            ...c,
-            floors: c.floors.map(fl => ({
-              ...fl,
-              flats: fl.flats.map(ft => ({
-                ...ft,
-                rooms: ft.rooms.map(rm => {
-                  if (rm.roomNo === row.roomNo && rm.occupants.length < rm.capacity && !rm.occupants.includes(row.employeeId)) {
-                    return { ...rm, occupants: [...rm.occupants, row.employeeId] };
-                  }
-                  return rm;
-                })
-              }))
-            }))
-          };
-        });
-      }
     });
+
+    if (anyRoomFull) {
+      alert("Some employees could not be imported because their target room is full or does not exist.");
+    }
 
     setOccupants(newOccupantsList);
     setCamps(updatedCamps);
     logActivity('EXCEL_IMPORT', `Bulk Imported ${validRows.length} Employees`, `Imported from ${excelImportFileName}`);
     setShowExcelImportModal(false);
-    alert(`Success: ${validRows.length} employees imported.`);
+    alert(`Success: Import process completed.`);
   };
 
-  // Cost Center Actions (With Role-Based Approval Workflow)
   const handleCreateCostCenter = (e) => {
     e.preventDefault();
     const cleanCode = newCostCenterForm.code.trim().toUpperCase();
@@ -883,42 +912,16 @@ export default function App() {
       alert(`Cost Center code "${cleanCode}" already exists.`);
       return;
     }
-
-    if (isSuperAdmin) {
-      const newCC = {
-        id: `cc-${Date.now()}`,
-        code: cleanCode,
-        name: newCostCenterForm.name.trim() || 'Project Site',
-        division: newCostCenterForm.division,
-        status: 'Active'
-      };
-      setCostCenters(prev => [...prev, newCC]);
-      logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
-      alert(`Cost center ${cleanCode} created successfully!`);
-    } else {
-      const approvalReq = {
-        id: `tr-${Date.now()}`,
-        type: 'COST_CENTER_CREATION',
-        employeeId: 'SYS-CC',
-        employeeName: `New Cost Center: ${cleanCode} (${newCostCenterForm.name.trim() || 'Project Site'})`,
-        fromCostCenter: 'N/A',
-        fromDivision: 'N/A',
-        toCostCenter: cleanCode,
-        toDivision: newCostCenterForm.division,
-        reason: `New Cost Center Creation Request for ${newCostCenterForm.name.trim() || 'Project Site'}`,
-        requestedBy: currentUser.name,
-        requestedByRole: currentUser.role,
-        requestDate: new Date().toLocaleString(),
-        status: 'PENDING',
-        reviewedBy: '', reviewDate: '', reviewRemarks: ''
-      };
-      setTransferRequests(prev => [approvalReq, ...prev]);
-      logActivity('COST_CENTER_REQUEST', `Requested Cost Center ${cleanCode}`, `Submitted for Super Admin approval by ${currentUser.name}`);
-      alert(`Cost center request submitted to Approvals & Logs for Super Admin sign-off.`);
-    }
-
+    const newCC = {
+      id: `cc-${Date.now()}`,
+      code: cleanCode,
+      name: newCostCenterForm.name.trim() || 'Project Site',
+      division: newCostCenterForm.division,
+      status: 'Active'
+    };
+    setCostCenters(prev => [...prev, newCC]);
+    logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
     setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
-    setShowManageCostCentersModal(false);
   };
 
   const handleToggleCostCenterStatus = (id) => {
@@ -932,9 +935,6 @@ export default function App() {
     }));
   };
 
-  // =========================================================
-  // PRE-REGISTER EMPLOYEE, AUTO-FILL BY ID, & EDIT EMPLOYEE
-  // =========================================================
   const handlePreAddEmployeeSubmit = (e) => {
     e.preventDefault();
     const empId = preAddForm.employeeId.trim();
@@ -1059,6 +1059,15 @@ export default function App() {
     }
 
     const targetCamp = camps.find(c => c.id === checkInForm.campId) || activeCamp;
+    const targetFloor = targetCamp.floors.find(f => f.floorNo === Number(checkInForm.floorNo));
+    const targetFlat = targetFloor?.flats.find(f => f.flatCode === checkInForm.flatCode);
+    const targetRoom = targetFlat?.rooms.find(r => r.roomNo === checkInForm.roomNo);
+
+    if (!targetRoom || targetRoom.occupants.length >= targetRoom.capacity) {
+      alert(`Capacity Error: Room ${checkInForm.roomNo} is already at full capacity (${targetRoom?.capacity || 0} beds). Check-in rejected.`);
+      return;
+    }
+
     const existingRecord = occupants.find(o => o.employeeId === empId);
 
     const assignedOcc = {
@@ -1130,6 +1139,11 @@ export default function App() {
 
   const handleLeaveSubmit = (e) => {
     e.preventDefault();
+    if (new Date(leaveForm.expectedEndDate) < new Date(leaveForm.startDate)) {
+      alert('Expected return date cannot be before leave start date.');
+      return;
+    }
+
     const emp = showLeaveModal;
     setOccupants(prev => prev.map(o => o.employeeId === emp.employeeId ? {
       ...o, employeeStatus: 'On Leave', leaveStartDate: leaveForm.startDate, leaveEndDate: leaveForm.expectedEndDate, leaveReturnDate: ''
@@ -1181,6 +1195,10 @@ export default function App() {
       ...o, employeeStatus: rtdStatus, rtdType: rtdForm.rtdType, rtdDate: rtdForm.rtdDate,
       afrExitRef: rtdForm.afrExitRef, remarks: rtdForm.remarks, exitDate: rtdForm.rtdDate
     } : o));
+
+    setLeaveLogs(prev => prev.map(l => (l.employeeId === emp.employeeId && l.status === 'Active Leave') ? {
+      ...l, status: 'Closed (RTD)', actualReturnDate: rtdForm.rtdDate, remarks: `${l.remarks} • Closed due to RTD (${rtdForm.rtdType})`
+    } : l));
 
     setCamps(prev => prev.map(c => ({
       ...c,
@@ -1239,7 +1257,7 @@ export default function App() {
         reason: transferRequestForm.reason,
         requestedBy: currentUser.name,
         requestedByRole: currentUser.role,
-        requestDate: new Date().toLocaleString(),
+        requestDate: new Date().toISOString(),
         status: 'PENDING',
         reviewedBy: '', reviewDate: '', reviewRemarks: ''
       };
@@ -1254,30 +1272,19 @@ export default function App() {
   const handleReviewTransfer = (reqId, decision) => {
     const req = transferRequests.find(r => r.id === reqId);
     if (!req) return;
+    if (req.status !== 'PENDING') return;
 
     if (decision === 'APPROVED') {
-      if (req.type === 'COST_CENTER_CREATION') {
-        const newCC = {
-          id: `cc-${Date.now()}`,
-          code: req.toCostCenter,
-          name: req.reason.replace('New Cost Center Creation Request for ', '') || 'Project Site',
-          division: req.toDivision,
-          status: 'Active'
-        };
-        setCostCenters(prev => [...prev, newCC]);
-        logActivity('COST_CENTER', `Approved Cost Center ${req.toCostCenter}`, `Approved by ${currentUser.name}`);
-      } else {
-        setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
-          ...o, costCenter: req.toCostCenter, division: req.toDivision
-        } : o));
-        logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
-      }
+      setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
+        ...o, costCenter: req.toCostCenter, division: req.toDivision
+      } : o));
+      logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
     } else {
-      logActivity('COST_CENTER_REJECTION', `Rejected Request #${req.id}`, `Rejected by ${currentUser.name}`);
+      logActivity('COST_CENTER_REJECTION', `Rejected Transfer #${req.employeeId}`, `Rejected move to ${req.toCostCenter}`);
     }
 
     setTransferRequests(prev => prev.map(r => r.id === reqId ? {
-      ...r, status: decision, reviewedBy: currentUser.name, reviewDate: new Date().toLocaleString()
+      ...r, status: decision, reviewedBy: currentUser.name, reviewDate: new Date().toISOString()
     } : r));
   };
 
@@ -1555,6 +1562,7 @@ export default function App() {
   const isSuperAdmin = currentUser.role === 'SUPER_ADMIN';
   const canAddCamps = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions?.canAddCamps;
   const canApproveTransfers = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'AUDITOR';
+  const canEditOccupants = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions?.canEditOccupants;
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
@@ -2090,24 +2098,28 @@ export default function App() {
                                             {occ.roomGrade} • <strong className="text-slate-700">{occ.nationality}</strong> • {occ.division}
                                           </span>
                                           <div className="flex items-center gap-2 shrink-0 ml-2">
-                                            <button
-                                              onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
-                                              className="text-emerald-700 hover:underline font-bold cursor-pointer"
-                                            >
-                                              Edit
-                                            </button>
+                                            {canEditOccupants && (
+                                              <button
+                                                onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
+                                                className="text-emerald-700 hover:underline font-bold cursor-pointer"
+                                              >
+                                                Edit
+                                              </button>
+                                            )}
                                             <button
                                               onClick={() => setViewingEmployeeDossier(occ)}
                                               className="text-cyan-600 hover:text-cyan-800 font-semibold cursor-pointer"
                                             >
                                               Dossier
                                             </button>
-                                            <button
-                                              onClick={() => setManageOccupantModal(occ)}
-                                              className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
-                                            >
-                                              Manage
-                                            </button>
+                                            {canEditOccupants && (
+                                              <button
+                                                onClick={() => setManageOccupantModal(occ)}
+                                                className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
+                                              >
+                                                Manage
+                                              </button>
+                                            )}
                                           </div>
                                         </div>
                                       </div>
@@ -2293,12 +2305,14 @@ export default function App() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            <button
-                              onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
-                              className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] cursor-pointer"
-                            >
-                              Edit
-                            </button>
+                            {canEditOccupants && (
+                              <button
+                                onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
+                                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] cursor-pointer"
+                              >
+                                Edit
+                              </button>
+                            )}
                             <button
                               onClick={() => setReportPreviewModal({
                                 type: 'issuance',
@@ -2318,12 +2332,14 @@ export default function App() {
                             >
                               Dossier
                             </button>
-                            <button
-                              onClick={() => setManageOccupantModal(occ)}
-                              className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer"
-                            >
-                              Manage
-                            </button>
+                            {canEditOccupants && (
+                              <button
+                                onClick={() => setManageOccupantModal(occ)}
+                                className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer"
+                              >
+                                Manage
+                              </button>
+                            )}
                           </div>
                         </td>
                       </tr>
@@ -3217,13 +3233,13 @@ export default function App() {
                   <tr>
                     <td className="border border-black p-2 font-semibold">Non-Manual Accommodation Beds</td>
                     <td className="border border-black p-2 text-center">{selectedInvoiceModal.nonManualBeds} Beds</td>
-                    <td className="border border-black p-2 text-center">{rates.nonManual}.000 KWD</td>
+                    <td className="border border-black p-2 text-center">{Number(rates.nonManual || 0).toFixed(3)} KWD</td>
                     <td className="border border-black p-2 text-right font-mono font-bold">{selectedInvoiceModal.nonManualAmountKWD.toFixed(3)} KWD</td>
                   </tr>
                   <tr>
                     <td className="border border-black p-2 font-semibold">Manual Accommodation Beds</td>
                     <td className="border border-black p-2 text-center">{selectedInvoiceModal.manualBeds} Beds</td>
-                    <td className="border border-black p-2 text-center">{rates.manual}.000 KWD</td>
+                    <td className="border border-black p-2 text-center">{Number(rates.manual || 0).toFixed(3)} KWD</td>
                     <td className="border border-black p-2 text-right font-mono font-bold">{selectedInvoiceModal.manualAmountKWD.toFixed(3)} KWD</td>
                   </tr>
                   {selectedInvoiceModal.otherCostKWD > 0 && (
@@ -3403,8 +3419,321 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* ADD BUILDING MODAL (WITH STARTING FLOOR NUMBER SUPPORT)             */}
+      {/* EMPLOYEE DOSSIER MODAL                                              */}
       {/* =================================================================== */}
+      {viewingEmployeeDossier && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
+                  #{viewingEmployeeDossier.employeeId}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
+                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
+                    </span>
+                  </div>
+                  <p className="text-slate-500 font-medium">
+                    {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {canEditOccupants && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const occ = viewingEmployeeDossier;
+                      setViewingEmployeeDossier(null);
+                      setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Edit Details
+                  </button>
+                )}
+                <button type="button" onClick={() => setViewingEmployeeDossier(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Civil ID</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Passport #</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Mobile</div>
+                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Nationality</div>
+                <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Status</div>
+                <div className="mt-0.5 font-bold text-emerald-700">{viewingEmployeeDossier.employeeStatus}</div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-cyan-600" /> Current Room Allocation
+                </span>
+                <span className="font-bold px-2.5 py-1 rounded-lg bg-white text-cyan-700 border border-cyan-200">
+                  {viewingEmployeeDossier.roomGrade} Grade
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <span className="text-slate-500">Camp:</span>
+                  <div className="font-bold text-slate-900">{viewingEmployeeDossier.campNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Room:</span>
+                  <div className="font-bold text-cyan-700 font-mono">Room {viewingEmployeeDossier.roomNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Entry Date & Ref:</span>
+                  <div className="font-bold text-slate-900 font-mono">{viewingEmployeeDossier.entryDate} ({viewingEmployeeDossier.afrEntryRef || '150-04'})</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-cyan-200/60">
+                <button
+                  type="button"
+                  onClick={() => setReportPreviewModal({
+                    type: 'issuance',
+                    occupant: viewingEmployeeDossier,
+                    arrivalType: viewingEmployeeDossier.arrivalType || 'Local Residency Transfer',
+                    docRef: viewingEmployeeDossier.afrEntryRef || '150-04',
+                    materials: viewingEmployeeDossier.materialsIssued || { mattress: true, pillow: true, bedsheet: true, blanket: true }
+                  })}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Preview Material Issuance (T3)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMisconductForm(prev => ({
+                      ...prev,
+                      employeeId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      title: occ.title,
+                      division: occ.division,
+                      costCenter: occ.costCenter,
+                      campNo: occ.campNo,
+                      roomNo: occ.roomNo,
+                      contactNo: occ.mobileNo || '+965 '
+                    }));
+                    setShowMisconductModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMaintenanceForm(prev => ({
+                      ...prev,
+                      reportedByEmpId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      floorNo: occ.floorNo || 1,
+                      flatCode: occ.flatCode,
+                      roomNo: occ.roomNo
+                    }));
+                    setShowMaintenanceModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
+                </button>
+
+                {canEditOccupants && (
+                  <button
+                    onClick={() => {
+                      const occ = viewingEmployeeDossier;
+                      setViewingEmployeeDossier(null);
+                      handleOpenRelocateModal(occ);
+                    }}
+                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-800 uppercase">Accommodation & Shift History Ledger</h4>
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+                {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
+                  viewingEmployeeDossier.stayHistory.map((hist, idx) => (
+                    <div key={idx} className="border-l-2 border-cyan-600 pl-3">
+                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
+                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-400 italic">No previous camp shifts recorded.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* =================================================================== */}
+      {/* OTHER MODALS (EDIT CAMP, ADD BUILDING, COST CENTERS, USERS)         */}
+      {/* =================================================================== */}
+      {editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900">Edit Camp ({editingCampModal.campNo})</h3>
+              <button onClick={() => setEditingCampModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleSaveCampEdits} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Camp Code</label>
+                  <input type="text" required value={editingCampModal.campNo} onChange={e => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Camp Area</label>
+                  <input type="text" required value={editingCampModal.campArea} onChange={e => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-100 border rounded-xl flex items-center justify-between">
+                <div className="font-bold">Total Floors: {editingCampModal.floors.length}</div>
+                <div className="flex gap-2">
+                  {editingCampModal.floors.length > 1 && (
+                    <button type="button" onClick={handleRemoveTopFloorDraft} className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold cursor-pointer">
+                      - Remove Top Floor
+                    </button>
+                  )}
+                  <button type="button" onClick={handleOpenAddFloorConfig} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold cursor-pointer">
+                    + Add New Floor
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {editingCampModal.floors.map(fl => (
+                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between">
+                    <span className="font-bold">Floor {fl.floorNo} ({fl.flats.length} Flats)</span>
+                    <div className="flex gap-1.5">
+                      {fl.flats.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveFlatFromFloor(fl.floorNo)} className="px-2 py-1 bg-rose-50 text-rose-700 border rounded font-semibold">- Flat</button>
+                      )}
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')} className="px-2 py-1 bg-cyan-50 text-cyan-800 border rounded font-bold">+ NM Flat</button>
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')} className="px-2 py-1 bg-amber-50 text-amber-800 border rounded font-bold">+ M Flat</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onClick={() => setEditingCampModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Save Camp</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showAddFloorConfigModal && editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-60 flex items-center justify-center p-4">
+          <form onSubmit={handleCommitNewFloorToCamp} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+            <h3 className="text-base font-bold">Configure Floor {editingCampModal.floors.length + 1}</h3>
+            <div>
+              <label className="block font-semibold mb-1">Total Flats</label>
+              <input type="number" min="1" max="10" required value={newFloorDraft.flatsCount} onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1">Non-Manual Flats (2 beds/rm)</label>
+              <input type="number" min="0" max={newFloorDraft.flatsCount} required value={newFloorDraft.nonManualFlats} onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowAddFloorConfigModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Add Floor</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {showManageCostCentersModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Project Cost Centers & Divisions</h3>
+              <button onClick={() => setShowManageCostCentersModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+              <div className="font-bold text-blue-900">Operating Divisions ({divisions.length})</div>
+              <div className="flex flex-wrap gap-2">
+                {divisions.map(div => (
+                  <span key={div} className="px-3 py-1 bg-white border rounded-lg font-bold flex items-center gap-1.5">
+                    {div}
+                    <button type="button" onClick={() => handleRemoveDivision(div)} className="text-rose-600 font-bold">×</button>
+                  </span>
+                ))}
+              </div>
+              <form onSubmit={handleAddDivision} className="flex gap-2 pt-1">
+                <input type="text" placeholder="New Division..." value={newDivisionInput} onChange={e => setNewDivisionInput(e.target.value)} className="bg-white border rounded-lg px-3 py-1.5 flex-1" />
+                <button type="submit" className="px-3.5 py-1.5 bg-blue-700 text-white font-bold rounded-lg">+ Add Division</button>
+              </form>
+            </div>
+
+            <form onSubmit={handleCreateCostCenter} className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border rounded-xl">
+              <input type="text" required placeholder="Code (1IDS040)" value={newCostCenterForm.code} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5 font-mono uppercase font-bold" />
+              <input type="text" required placeholder="Project Name" value={newCostCenterForm.name} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5" />
+              <div className="flex gap-2">
+                <select value={newCostCenterForm.division} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })} className="border bg-white rounded-lg px-2 py-1.5 flex-1 font-bold">
+                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <button type="submit" className="px-4 py-1.5 bg-cyan-600 text-white font-bold rounded-lg">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {showExcelImportModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Import Preview: {excelImportFileName} ({excelImportStats.valid} Valid)</h3>
+              <button onClick={() => setShowExcelImportModal(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowExcelImportModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button onClick={handleCommitExcelImport} className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">
+                Confirm Import ({excelImportStats.valid})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
@@ -3448,7 +3777,7 @@ export default function App() {
               });
 
               const newCampObj = {
-                id: `camp-${Date.now()}`,
+                id: `camp-${crypto.randomUUID()}`,
                 campNo: newCampForm.campNo,
                 campArea: newCampForm.campArea,
                 costCenter: '1ACD000',
@@ -3512,9 +3841,6 @@ export default function App() {
         </div>
       )}
 
-      {/* =================================================================== */}
-      {/* OTHER MODALS (MANAGE, LEAVE, RTD, TRANSFERS, USERS)                 */}
-      {/* =================================================================== */}
       {manageOccupantModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
