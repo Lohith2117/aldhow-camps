@@ -225,3 +225,6 @@ CREATE TABLE IF NOT EXISTS invoice_snapshots (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     UNIQUE (billing_period, cost_center)
 );
+ALTER TABLE transfer_requests DROP CONSTRAINT IF EXISTS transfer_requests_employee_id_fkey;
+ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS request_type VARCHAR(30) DEFAULT 'EMPLOYEE_TRANSFER';
+ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS new_cost_center_name VARCHAR(150);
