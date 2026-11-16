@@ -11,6 +11,9 @@ const app = express();
 
 // Security Middleware
 app.use(helmet());
+if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
+  console.error('CRITICAL: FRONTEND_URL is missing in production environment variables.');
+}
 app.use(cors({ origin: process.env.FRONTEND_URL || '*' }));
 app.use(express.json({ limit: '10mb' })); 
 
@@ -242,7 +245,7 @@ app.post('/api/cost-centers', async (req, res) => {
   } catch(err) { 
     await client.query('ROLLBACK'); 
     console.error('Cost center creation error:', err);
-    res.status(500).json({ error: err.message || 'Server error' }); 
+    res.status(500).json({ error: 'Server error' }); 
   } finally { 
     client.release(); 
   }
@@ -660,4 +663,8 @@ app.post('/api/users/:id/reset-password', enforceSuperAdmin, async (req, res) =>
 });
 
 const PORT = process.env.PORT || 5000;
-app.listen(PORT, () => console.log(`Secure Server running on port ${PORT}`));
+module.exports = app;
+if (require.main === module) {
+  const PORT = process.env.PORT || 5000;
+  app.listen(PORT, () => console.log(`Secure Server running on port ${PORT}`));
+}
