@@ -191,7 +191,7 @@ app.put('/api/camps/:campNo', async (req, res) => {
       for (const ft of fl.flats) {
         const flatRes = await client.query('INSERT INTO flats (floor_id, flat_no, flat_code, room_grade) VALUES ($1, $2, $3, $4) RETURNING id', [floorRes.rows[0].id, ft.flatNo, ft.flatCode, ft.roomGrade]);
         for (const rm of ft.rooms) {
-          await client.query('INSERT INTO rooms (flat_id, room_no, capacity) VALUES ($1, $2, $3)', [flatRes.rows[0].id, rm.roomNo, rm.capacity]);
+          await client.query('INSERT INTO rooms (flat_id, room_no, capacity) VALUES ($1, $2, $3)', [floorRes.rows[0].id, rm.roomNo, rm.capacity]);
         }
       }
     }
@@ -202,9 +202,6 @@ app.put('/api/camps/:campNo', async (req, res) => {
   finally { client.release(); }
 });
 
-// ==========================================
-// COST CENTERS MANAGEMENT ROUTES
-// ==========================================
 app.post('/api/cost-centers', async (req, res) => {
   const { code, name, division, status } = req.body;
   if (!code || !division) {
@@ -219,7 +216,7 @@ app.post('/api/cost-centers', async (req, res) => {
     const cleanDivision = division.trim();
     const ccStatus = status || 'Active';
 
-    if (req.user.role === 'SUPER_ADMIN') {
+    if (req.user && req.user.role === 'SUPER_ADMIN') {
       await client.query(
         `INSERT INTO cost_centers (code, name, division, status) 
          VALUES ($1, $2, $3, $4) 
@@ -227,25 +224,46 @@ app.post('/api/cost-centers', async (req, res) => {
          DO UPDATE SET name = EXCLUDED.name, division = EXCLUDED.division, status = EXCLUDED.status`, 
         [cleanCode, cleanName, cleanDivision, ccStatus]
       );
-      await logActivity(client, req, 'COST_CENTER', `Created/Updated Cost Center ${cleanCode}`);
+      try {
+        await logActivity(client, req, 'COST_CENTER', `Created/Updated Cost Center ${cleanCode}`);
+      } catch (logErr) {
+        console.error('Activity log failed:', logErr.message);
+      }
     } else {
       await client.query(
         `INSERT INTO transfer_requests (employee_id, employee_name, from_cost_center, from_division, to_cost_center, to_division, reason, requested_by, requested_by_role) 
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
-        ['SYS-CC', `New Cost Center: ${cleanCode} (${cleanName})`, 'N/A', 'N/A', cleanCode, cleanDivision, `New Cost Center Creation Request`, req.user.name, req.user.role]
+        ['SYS-CC', `New Cost Center: ${cleanCode} (${cleanName})`, 'N/A', 'N/A', cleanCode, cleanDivision, `New Cost Center Creation Request`, req.user?.name || 'Admin', req.user?.role || 'SUPER_ADMIN']
       );
-      await logActivity(client, req, 'COST_CENTER_REQUEST', `Requested Cost Center ${cleanCode}`);
     }
     
     await client.query('COMMIT');
     res.json({ success: true });
   } catch(err) { 
     await client.query('ROLLBACK'); 
+    console.error('Cost center creation error:', err);
     res.status(500).json({ error: err.message || 'Server error' }); 
   } finally { 
     client.release(); 
   }
 });
+
+app.patch('/api/cost-centers/:code/toggle', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const cc = await client.query('SELECT status FROM cost_centers WHERE code = $1', [req.params.code]);
+    if (cc.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    const nextStatus = cc.rows[0].status === 'Active' ? 'Inactive' : 'Active';
+    await client.query('UPDATE cost_centers SET status = $1 WHERE code = $2', [nextStatus, req.params.code]);
+    await logActivity(client, req, 'COST_CENTER', `Changed Status of ${req.params.code} to ${nextStatus}`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } 
+  finally { client.release(); }
+});
+
 // ==========================================
 // 5. EMPLOYEES: CRUD & BULK
 // ==========================================
@@ -396,7 +414,7 @@ app.post('/api/employees/:id/return-job', async (req, res) => {
 });
 
 app.post('/api/employees/:id/rtd', async (req, res) => {
-  const { rtdType, rtdDate, remarks, reason } = req.body; // Phase 5 custom field: reason
+  const { rtdType, rtdDate, remarks, reason } = req.body; 
   if (!['Resigned', 'Terminated', 'Dismissed'].includes(rtdType)) return res.status(400).json({ error: 'Invalid RTD Type' });
 
   const client = await pool.connect();
