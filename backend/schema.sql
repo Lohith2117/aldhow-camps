@@ -1,5 +1,5 @@
 -- ============================================================================
--- DHOW ENGINEERING CAMP MANAGEMENT ERP - NORMALIZED POSTGRESQL DATABASE SCHEMA
+-- DHOW ENGINEERING CAMP MANAGEMENT ERP - CORRECTED POSTGRESQL SCHEMA
 -- Master Cost Center: 1ACD000
 -- ============================================================================
 
@@ -7,11 +7,11 @@ CREATE EXTENSION IF NOT EXISTS "uuid-ossp";
 
 -- 1. SYSTEM USERS & RBAC TABLE
 CREATE TABLE IF NOT EXISTS users (
-    id VARCHAR(50) PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     staff_id VARCHAR(50) UNIQUE NOT NULL,
     name VARCHAR(150) NOT NULL,
     email VARCHAR(150) UNIQUE NOT NULL,
-    password_hash TEXT NOT NULL,
+    password_hash VARCHAR(255) NOT NULL, -- C3 FIX: Store bcrypt hashes, NOT plaintext
     title VARCHAR(100),
     role VARCHAR(30) NOT NULL CHECK (role IN ('SUPER_ADMIN', 'CAMP_EDITOR', 'AUDITOR')),
     camp_scope VARCHAR(50) DEFAULT 'ALL',
@@ -48,7 +48,7 @@ CREATE TABLE IF NOT EXISTS camps (
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 4. FLOORS TABLE (Supports Individual Flat Counts per Floor, e.g., Flr 1 = 2 flats, Flrs 2-10 = 3 flats)
+-- 4. FLOORS TABLE 
 CREATE TABLE IF NOT EXISTS floors (
     id SERIAL PRIMARY KEY,
     camp_id VARCHAR(50) NOT NULL REFERENCES camps(id) ON DELETE CASCADE,
@@ -56,7 +56,7 @@ CREATE TABLE IF NOT EXISTS floors (
     UNIQUE (camp_id, floor_no)
 );
 
--- 5. FLATS TABLE (Grades: 'Non-Manual' or 'Manual')
+-- 5. FLATS TABLE 
 CREATE TABLE IF NOT EXISTS flats (
     id SERIAL PRIMARY KEY,
     floor_id INT NOT NULL REFERENCES floors(id) ON DELETE CASCADE,
@@ -82,6 +82,7 @@ CREATE TABLE IF NOT EXISTS employees (
     nationality VARCHAR(80) NOT NULL,
     title VARCHAR(120) NOT NULL,
     grade_type VARCHAR(30) NOT NULL CHECK (grade_type IN ('Non-Manual', 'Manual')),
+    productive_type VARCHAR(60) DEFAULT 'Direct Employee (DE)', -- M2 FIX: Added column
     division VARCHAR(50) NOT NULL,
     cost_center VARCHAR(50) NOT NULL REFERENCES cost_centers(code),
     passport_no VARCHAR(50) NOT NULL,
@@ -99,8 +100,9 @@ CREATE TABLE IF NOT EXISTS employees (
     entry_date DATE NOT NULL,
     afr_entry_ref VARCHAR(80),
     afr_log_no VARCHAR(80),
+    -- M2 FIX: Added 'Unassigned' to CHECK constraint
     employee_status VARCHAR(40) NOT NULL DEFAULT 'On Job'
-        CHECK (employee_status IN ('On Job', 'On Leave', 'RTD - Resigned', 'RTD - Terminated', 'RTD - Dismissed')),
+        CHECK (employee_status IN ('Unassigned', 'On Job', 'On Leave', 'RTD - Resigned', 'RTD - Terminated', 'RTD - Dismissed')),
     leave_start_date DATE,
     leave_end_date DATE,
     leave_return_date DATE,
@@ -109,10 +111,11 @@ CREATE TABLE IF NOT EXISTS employees (
     afr_exit_ref VARCHAR(80),
     residency_company VARCHAR(200) DEFAULT 'Dhow Engineering General Trading & Contracting Company',
     remarks TEXT,
+    materials_issued JSONB, -- M2 FIX: Added column for JSON checklist
     updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 8. LEAVE LOGS TABLE (Tracks Start Date, Expected End Date & Actual Return Date)
+-- 8. LEAVE LOGS TABLE 
 CREATE TABLE IF NOT EXISTS leave_logs (
     id VARCHAR(50) PRIMARY KEY,
     employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
@@ -124,12 +127,12 @@ CREATE TABLE IF NOT EXISTS leave_logs (
     actual_return_date DATE,
     afr_log_no VARCHAR(80),
     remarks TEXT,
-    status VARCHAR(30) DEFAULT 'Active Leave' CHECK (status IN ('Active Leave', 'Returned')),
+    status VARCHAR(30) DEFAULT 'Active Leave' CHECK (status IN ('Active Leave', 'Returned', 'Closed (RTD)')), -- H4 FIX
     created_by VARCHAR(150),
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- 9. RTD LOGS TABLE (Resigned, Terminated, Dismissed Records)
+-- 9. RTD LOGS TABLE
 CREATE TABLE IF NOT EXISTS rtd_logs (
     id VARCHAR(50) PRIMARY KEY,
     employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
@@ -160,7 +163,7 @@ CREATE TABLE IF NOT EXISTS stay_history (
     reason TEXT
 );
 
--- 11. COST CENTER TRANSFER APPROVAL REQUESTS TABLE (Editor -> Super Admin / Auditor)
+-- 11. COST CENTER TRANSFER APPROVAL REQUESTS TABLE
 CREATE TABLE IF NOT EXISTS transfer_requests (
     id VARCHAR(50) PRIMARY KEY,
     employee_id VARCHAR(50) NOT NULL REFERENCES employees(employee_id) ON DELETE CASCADE,
@@ -193,7 +196,7 @@ CREATE TABLE IF NOT EXISTS billing_other_costs (
 
 -- 13. CHROME-STYLE ACTIVITY TIME LOG TABLE
 CREATE TABLE IF NOT EXISTS activity_logs (
-    id VARCHAR(50) PRIMARY KEY,
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(), -- Fixed ID generation
     timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     actor_name VARCHAR(150) NOT NULL,
     actor_role VARCHAR(50) NOT NULL,
@@ -201,4 +204,24 @@ CREATE TABLE IF NOT EXISTS activity_logs (
     action_title VARCHAR(200) NOT NULL,
     details TEXT NOT NULL,
     camp_no VARCHAR(50)
+);
+
+-- 14. MAINTENANCE LOGS (M2 FIX)
+CREATE TABLE IF NOT EXISTS maintenance_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    date DATE,
+    issue_details TEXT,
+    reported_by_emp_id VARCHAR(50),
+    room_no VARCHAR(50),
+    status VARCHAR(50) DEFAULT 'Pending',
+    cost DECIMAL(10,3) DEFAULT 0.000
+);
+
+-- 15. MISCONDUCT LOGS (M2 FIX)
+CREATE TABLE IF NOT EXISTS misconduct_logs (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    employee_id VARCHAR(50),
+    incident_date DATE,
+    type_of_violation VARCHAR(255),
+    remarks TEXT
 );
