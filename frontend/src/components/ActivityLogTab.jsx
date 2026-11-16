@@ -2,22 +2,30 @@ import React, { useState, useMemo } from 'react';
 import { History, Search, Clock, User } from 'lucide-react';
 import { formatTimestamp } from '../utils/helpers';
 
-export default function ActivityLogTab({ activityLogs, onClearLogs, isSuperAdmin }) {
+export default function ActivityLogTab({ activityLogs = [], onClearLogs, isSuperAdmin }) {
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
   const categories = useMemo(() => {
-    return Array.from(new Set(activityLogs.map(a => a.category))).filter(Boolean);
+    return Array.from(new Set(activityLogs.map(a => a?.category))).filter(Boolean);
   }, [activityLogs]);
 
   const filteredLogs = useMemo(() => {
     return activityLogs.filter(log => {
+      if (!log) return false;
       const q = query.toLowerCase();
+      
+      const actionTitle = (log.actionTitle || '').toLowerCase();
+      const details = (log.details || '').toLowerCase();
+      const actorName = (log.actorName || '').toLowerCase();
+      const campNo = (log.campNo || '').toLowerCase();
+
       const matchesQuery =
-        log.actionTitle.toLowerCase().includes(q) ||
-        log.details.toLowerCase().includes(q) ||
-        log.actorName.toLowerCase().includes(q) ||
-        (log.campNo && log.campNo.toLowerCase().includes(q));
+        actionTitle.includes(q) ||
+        details.includes(q) ||
+        actorName.includes(q) ||
+        campNo.includes(q);
+
       const matchesCat = categoryFilter === 'ALL' || log.category === categoryFilter;
       return matchesQuery && matchesCat;
     });
@@ -68,34 +76,34 @@ export default function ActivityLogTab({ activityLogs, onClearLogs, isSuperAdmin
         </div>
 
         <div className="divide-y divide-slate-100">
-          {filteredLogs.map(log => (
-            <div key={log.id} className="px-5 py-3.5 hover:bg-slate-50/90 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
+          {filteredLogs.map((log, index) => (
+            <div key={log?.id || index} className="px-5 py-3.5 hover:bg-slate-50/90 transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs">
               <div className="flex items-start gap-3.5">
                 <div className="font-mono text-[11px] text-slate-400 w-40 shrink-0 pt-0.5 flex items-center gap-1.5">
                   <Clock className="w-3.5 h-3.5 text-slate-400 shrink-0" />
-                  <span>{formatTimestamp(log.timestamp)}</span>
+                  <span>{formatTimestamp(log?.timestamp)}</span>
                 </div>
 
                 <div>
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-bold text-slate-900">{log.actionTitle}</span>
+                    <span className="font-bold text-slate-900">{log?.actionTitle || 'System Event'}</span>
                     <span className="px-2 py-0.5 rounded text-[10px] font-mono font-bold bg-cyan-50 text-cyan-700 border border-cyan-200">
-                      {log.category}
+                      {log?.category || 'GENERAL'}
                     </span>
-                    {log.campNo && (
+                    {log?.campNo && (
                       <span className="px-2 py-0.5 rounded text-[10px] font-mono bg-slate-100 text-slate-700">
                         {log.campNo}
                       </span>
                     )}
                   </div>
-                  <p className="text-slate-600 mt-0.5">{log.details}</p>
+                  <p className="text-slate-600 mt-0.5">{log?.details || ''}</p>
                 </div>
               </div>
 
               <div className="text-right shrink-0">
                 <span className="inline-flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 text-slate-700 font-semibold text-[11px]">
                   <User className="w-3 h-3 text-slate-500" />
-                  {log.actorName} ({log.actorRole})
+                  {log?.actorName || 'System'} ({log?.actorRole || 'ADMIN'})
                 </span>
               </div>
             </div>
