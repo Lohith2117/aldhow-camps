@@ -1,4 +1,5 @@
 require('dotenv').config();
+require('pg').types.setTypeParser(1082, v => v);
 const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
@@ -91,13 +92,27 @@ const authenticateToken = (req, res, next) => {
 };
 app.use('/api', authenticateToken);
 
+const requireEditor = (req, res, next) => {
+  if (req.user.role === 'AUDITOR' || req.user.permissions?.canEditOccupants === false) {
+    return res.status(403).json({ error: 'Forbidden' });
+  }
+  next();
+};
+
+const assertCampAccess = (req, campNo) => {
+  if (req.user.role !== 'CAMP_EDITOR') return true;
+  if (req.user.campScope === 'ALL') return true;
+  if (!campNo || campNo === 'UNASSIGNED') return true;
+  return req.user.campScope === campNo;
+};
+
 // ==========================================
 // 3. BOOTSTRAP (Frontend Hydration)
 // ==========================================
 app.get('/api/bootstrap', async (req, res) => {
   try {
     const [users, emps, camps, floors, flats, rooms, ccs, leaves, rtds, trs, acts, others, maint, misc] = await Promise.all([
-      pool.query('SELECT id, staff_id, name, email, title, role, camp_scope, status, last_login, can_manage_users, can_add_camps, can_delete_camps, can_edit_occupants, can_approve_transfers FROM users'),
+      pool.query('SELECT * FROM users'),
       pool.query('SELECT * FROM employees'),
       pool.query('SELECT * FROM camps'),
       pool.query('SELECT * FROM floors'),
@@ -113,8 +128,11 @@ app.get('/api/bootstrap', async (req, res) => {
       pool.query('SELECT * FROM misconduct_logs')
     ]);
 
-    const mappedCamps = camps.rows.map(c => {
-      if (req.user.role === 'CAMP_EDITOR' && req.user.campScope !== 'ALL' && req.user.campScope !== c.camp_no) return null;
+    const isEditor = req.user.role === 'CAMP_EDITOR';
+    const scope = req.user.campScope;
+    const filterScope = (row) => (!isEditor || scope === 'ALL' || !row.camp_no || row.camp_no === 'UNASSIGNED' || row.camp_no === scope);
+
+    const mappedCamps = camps.rows.filter(filterScope).map(c => {
       const cFloors = floors.rows.filter(f => f.camp_no === c.camp_no).map(fl => {
         const cFlats = flats.rows.filter(ft => ft.floor_id === fl.id).map(ft => {
           const cRooms = rooms.rows.filter(r => r.flat_id === ft.id).map(rm => ({
@@ -131,20 +149,31 @@ app.get('/api/bootstrap', async (req, res) => {
         incharge2Name: c.incharge_2_name, incharge2Contact: c.incharge_2_contact, 
         floors: cFloors 
       };
-    }).filter(Boolean);
+    });
 
     res.json({
-      users: users.rows,
-      occupants: emps.rows.map(e => ({ 
-        employeeId: e.employee_id, employeeName: e.employee_name, productiveType: e.productive_type, roomGrade: e.grade_type, division: e.division, 
-        costCenter: e.cost_center, passportNo: e.passport_no, civilId: e.civil_id, mobileNo: e.mobile_no, employeeStatus: e.employee_status, 
-        campNo: e.camp_no, roomNo: e.room_no, entryDate: e.entry_date, materialsIssued: e.materials_issued,
-        emergencyContactName: e.emergency_contact_name, emergencyContactPhone: e.emergency_contact_phone
+      users: users.rows.map(u => ({
+        id: u.id, staffId: u.staff_id, name: u.name, email: u.email, title: u.title, role: u.role, campScope: u.camp_scope, status: u.status, lastLogin: u.last_login,
+        permissions: { canManageUsers: u.can_manage_users, canAddCamps: u.can_add_camps, canDeleteCamps: u.can_delete_camps, canEditOccupants: u.can_edit_occupants, canApproveTransfers: u.can_approve_transfers }
       })),
-      camps: mappedCamps, costCenters: ccs.rows, leaveLogs: leaves.rows, rtdLogs: rtds.rows, transferRequests: trs.rows, 
-      activityLogs: acts.rows, otherCosts: others.rows, maintenanceLogs: maint.rows, misconductLogs: misc.rows
+      occupants: emps.rows.filter(filterScope).map(e => ({ 
+        employeeId: e.employee_id, employeeName: e.employee_name, nationality: e.nationality, title: e.title, productiveType: e.productive_type, roomGrade: e.grade_type, division: e.division, 
+        costCenter: e.cost_center, passportNo: e.passport_no, civilId: e.civil_id, mobileNo: e.mobile_no, employeeStatus: e.employee_status, 
+        campNo: e.camp_no, roomNo: e.room_no, flatCode: e.flat_code, entryDate: e.entry_date, materialsIssued: e.materials_issued, afrEntryRef: e.afr_entry_ref, afrLogNo: e.afr_log_no, afrExitRef: e.afr_exit_ref, homeCountryAddress: e.home_country_address, residencyCompany: e.residency_company, srNo: e.sr_no,
+        emergencyContactName: e.emergency_contact_name, emergencyContactPhone: e.emergency_contact_phone,
+        leaveStartDate: e.leave_start_date, leaveEndDate: e.leave_end_date, leaveReturnDate: e.leave_return_date, rtdType: e.rtd_type, rtdDate: e.rtd_date, remarks: e.remarks
+      })),
+      camps: mappedCamps, 
+      costCenters: ccs.rows,
+      leaveLogs: leaves.rows.filter(filterScope).map(l => ({ id: l.id, employeeId: l.employee_id, employeeName: l.employee_name, campNo: l.camp_no, roomNo: l.room_no, leaveStartDate: l.leave_start_date, expectedEndDate: l.expected_end_date, actualReturnDate: l.actual_return_date, status: l.status, remarks: l.remarks, createdBy: l.created_by })),
+      rtdLogs: rtds.rows.filter(filterScope).map(r => ({ id: r.id, employeeId: r.employee_id, employeeName: r.employee_name, rtdType: r.rtd_type, rtdDate: r.rtd_date, vacatedCampNo: r.vacated_camp_no, vacatedRoomNo: r.vacated_room_no, costCenter: r.cost_center, remarks: r.remarks, recordedBy: r.recorded_by })),
+      transferRequests: trs.rows.map(t => ({ id: t.id, employeeId: t.employee_id, employeeName: t.employee_name, fromCostCenter: t.from_cost_center, fromDivision: t.from_division, toCostCenter: t.to_cost_center, toDivision: t.to_division, reason: t.reason, status: t.status, requestedBy: t.requested_by, requestedByRole: t.requested_by_role, reviewedBy: t.reviewed_by, reviewDate: t.review_date })),
+      activityLogs: acts.rows.map(a => ({ id: a.id, actorName: a.actor_name, actorRole: a.actor_role, category: a.category, actionTitle: a.action_title, details: a.details, campNo: a.camp_no, timestamp: a.timestamp })),
+      otherCosts: others.rows.map(o => ({ id: o.id, billingPeriod: o.billing_period, costCenter: o.cost_center, otherCostKwd: o.other_cost_kwd, otherCostDescription: o.other_cost_description, updatedBy: o.updated_by })),
+      maintenanceLogs: maint.rows.filter(filterScope).map(m => ({ id: m.id, date: m.date, issueDetails: m.issue_details, reportedByEmpId: m.reported_by_emp_id, roomNo: m.room_no, status: m.status })),
+      misconductLogs: misc.rows.map(m => ({ id: m.id, employeeId: m.employee_id, incidentDate: m.incident_date, typeOfViolation: m.type_of_violation, remarks: m.remarks }))
     });
-  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+  } catch (err) { console.error(err); res.status(500).json({ error: 'Server error' }); }
 });
 
 // ==========================================
@@ -270,8 +299,7 @@ app.patch('/api/cost-centers/:code/toggle', async (req, res) => {
 // ==========================================
 // 5. EMPLOYEES: CRUD & BULK
 // ==========================================
-app.post('/api/employees', async (req, res) => {
-  if (req.user.role === 'AUDITOR') return res.status(403).json({ error: 'Forbidden' });
+app.post('/api/employees', requireEditor, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -311,8 +339,7 @@ app.post('/api/employees', async (req, res) => {
   finally { client.release(); }
 });
 
-app.put('/api/employees/:id', async (req, res) => {
-  if (req.user.role === 'AUDITOR' || !req.user.permissions.canEditOccupants) return res.status(403).json({ error: 'Forbidden' });
+app.put('/api/employees/:id', requireEditor, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -331,8 +358,7 @@ app.put('/api/employees/:id', async (req, res) => {
   finally { client.release(); }
 });
 
-app.post('/api/employees/bulk', async (req, res) => {
-  if (req.user.role === 'AUDITOR') return res.status(403).json({ error: 'Forbidden' });
+app.post('/api/employees/bulk', requireEditor, async (req, res) => {
   const { occupants } = req.body;
   if (!Array.isArray(occupants) || occupants.length === 0) return res.status(400).json({ error: 'No data' });
 
@@ -374,7 +400,7 @@ app.post('/api/employees/bulk', async (req, res) => {
 // ==========================================
 // 6. EMPLOYEES: LEAVE, RETURN, RTD, RELOCATE
 // ==========================================
-app.post('/api/employees/:id/leave', async (req, res) => {
+app.post('/api/employees/:id/leave', requireEditor, async (req, res) => {
   const { startDate, expectedEndDate, remarks } = req.body;
   if (!startDate || !expectedEndDate || new Date(expectedEndDate) < new Date(startDate)) return res.status(400).json({ error: 'Invalid dates' });
 
@@ -398,7 +424,7 @@ app.post('/api/employees/:id/leave', async (req, res) => {
   finally { client.release(); }
 });
 
-app.post('/api/employees/:id/return-job', async (req, res) => {
+app.post('/api/employees/:id/return-job', requireEditor, async (req, res) => {
   const { actualReturnDate } = req.body;
   const client = await pool.connect();
   try {
@@ -416,7 +442,7 @@ app.post('/api/employees/:id/return-job', async (req, res) => {
   finally { client.release(); }
 });
 
-app.post('/api/employees/:id/rtd', async (req, res) => {
+app.post('/api/employees/:id/rtd', requireEditor, async (req, res) => {
   const { rtdType, rtdDate, remarks, reason } = req.body; 
   if (!['Resigned', 'Terminated', 'Dismissed'].includes(rtdType)) return res.status(400).json({ error: 'Invalid RTD Type' });
 
@@ -442,8 +468,7 @@ app.post('/api/employees/:id/rtd', async (req, res) => {
   finally { client.release(); }
 });
 
-app.post('/api/employees/:id/relocate', async (req, res) => {
-  if (req.user.role === 'AUDITOR') return res.status(403).json({ error: 'Forbidden' });
+app.post('/api/employees/:id/relocate', requireEditor, async (req, res) => {
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -556,7 +581,7 @@ app.put('/api/billing/others', async (req, res) => {
 // ==========================================
 // 9. LOGS (MAINTENANCE & MISCONDUCT)
 // ==========================================
-app.post('/api/maintenance-logs', async (req, res) => {
+app.post('/api/maintenance-logs', requireEditor, async (req, res) => {
   const { date, issueDetails, reportedByEmpId, roomNo } = req.body;
   const client = await pool.connect();
   try {
@@ -568,7 +593,7 @@ app.post('/api/maintenance-logs', async (req, res) => {
   } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
-app.post('/api/misconduct-logs', async (req, res) => {
+app.post('/api/misconduct-logs', requireEditor, async (req, res) => {
   const { employeeId, incidentDate, typeOfViolation, remarks } = req.body;
   const client = await pool.connect();
   try {
