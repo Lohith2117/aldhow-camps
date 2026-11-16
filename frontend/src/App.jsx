@@ -11,7 +11,6 @@ import dhowLogoImg from './assets/dhow-logo.png';
 import { apiFetch } from './utils/api';
 import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
 
-
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
 import ActivityLogTab from './components/ActivityLogTab';
@@ -31,6 +30,8 @@ const safeLoad = (key, fallback) => {
     return fallback;
   }
 };
+
+let syncFailedAlerted = false;
 
 export default function App() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -139,12 +140,10 @@ export default function App() {
   const [leaveForm, setLeaveForm] = useState({ startDate: todayStr, expectedEndDate: todayStr, afrLogNo: 'LOG-VAC', remarks: 'Annual Vacation' });
   const [returnJobForm, setReturnJobForm] = useState({ actualReturnDate: todayStr, remarks: 'Returned on schedule' });
   
-  // Custom Custom Request: Added reason text box support for RTD Form
   const [rtdForm, setRtdForm] = useState({ rtdType: 'Resigned', rtdDate: todayStr, afrExitRef: 'EXIT-RTD', reason: '' });
   const [transferRequestForm, setTransferRequestForm] = useState({ toCostCenter: '1MEP019-KNPC', toDivision: 'MEP', reason: 'Reassigned to new project site' });
   const [newCostCenterForm, setNewCostCenterForm] = useState({ code: '', name: '', division: 'IDS' });
 
-  // Custom Feature Request: Camp Incharges mapped into newCampForm
   const [newCampForm, setNewCampForm] = useState({
     campNo: 'CAMP-04', campArea: 'Ahmadi Sector 4', campDigit: '4', startingFloorNo: 1, campStartDate: todayStr, floorsCount: 3, roomsPerFlat: 3,
     incharge1Name: '', incharge1Contact: '', incharge2Name: '', incharge2Contact: '',
@@ -162,6 +161,7 @@ export default function App() {
     try {
       setIsSyncing(true);
       const data = await apiFetch('bootstrap', 'GET');
+      syncFailedAlerted = false;
       if (data) {
         setUsers(data.users || []);
         setOccupants(data.occupants || []);
@@ -181,6 +181,10 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
+      if (!syncFailedAlerted) {
+        window.alert('Cloud sync failed. The application is running on cached data.');
+        syncFailedAlerted = true;
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -279,9 +283,7 @@ export default function App() {
     });
   }, [occupants, searchTerm, statusFilter, divisionFilter, productiveTypeFilter]);
 
-  // PHASE 4: STRICT INTEGER FILS PRORATED BILLING LOGIC
   const projectInvoicingData = useMemo(() => {
-    // 1. Determine days in selected billing month
     const [monthName, yearStr] = billingPeriod.split(' ');
     const monthIdx = new Date(`${monthName} 1, 2000`).getMonth();
     const year = parseInt(yearStr, 10);
@@ -291,24 +293,21 @@ export default function App() {
 
     const costCenterMap = {};
 
-    // Pre-populate mapping for all active cost centers
     costCenters.forEach(cc => {
       if (cc.status === 'Active') {
         costCenterMap[cc.code] = {
           costCenter: cc.code, projectName: cc.name, division: cc.division,
           totalOccupants: 0, nonManualBeds: 0, manualBeds: 0, nonManualAmountFils: 0, manualAmountFils: 0,
-          otherCostFils: Math.round(Number(otherCosts.find(oc => oc.cost_center === cc.code && oc.billing_period === billingPeriod)?.other_cost_kwd || 0) * 1000),
-          otherCostDesc: otherCosts.find(oc => oc.cost_center === cc.code && oc.billing_period === billingPeriod)?.other_cost_description || '',
+          otherCostFils: Math.round(Number(otherCosts.find(oc => oc.costCenter === cc.code && oc.billingPeriod === billingPeriod)?.otherCostKwd || 0) * 1000),
+          otherCostDesc: otherCosts.find(oc => oc.costCenter === cc.code && oc.billingPeriod === billingPeriod)?.otherCostDescription || '',
           totalAmountFils: 0, occupants: []
         };
       }
     });
 
     occupants.forEach(occ => {
-      // Build a comprehensive timeline of stays for this employee to check against billing period
       const timeline = [...(occ.stayHistory || [])];
       
-      // If employee is actively using a bed (On Job or On Leave), add current stay to timeline
       if (!occ.employeeStatus.startsWith('RTD') && occ.campNo !== 'UNASSIGNED') {
         timeline.push({
           campNo: occ.campNo, roomGrade: occ.roomGrade, costCenter: occ.costCenter,
@@ -320,9 +319,8 @@ export default function App() {
         if (!stay.costCenter || !costCenterMap[stay.costCenter]) return;
 
         const stayStart = new Date(stay.startDate);
-        const stayEnd = stay.endDate ? new Date(stay.endDate) : new Date(); // Bill active stays up to today
+        const stayEnd = stay.endDate ? new Date(stay.endDate) : new Date();
 
-        // Proration overlap bounds constraint
         const overlapStart = stayStart > monthStart ? stayStart : monthStart;
         const overlapEnd = stayEnd < monthEnd ? stayEnd : monthEnd;
         
@@ -330,7 +328,6 @@ export default function App() {
           const daysOccupied = Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
           const rateKwd = stay.roomGrade === 'Non-Manual' ? Number(rates.nonManual || 0) : Number(rates.manual || 0);
           
-          // Strict integer fils math (KWD * 1000) prevents floating point rounding drift
           const proratedFils = Math.round((daysOccupied / daysInMonth) * rateKwd * 1000);
 
           if (stay.roomGrade === 'Non-Manual') {
@@ -355,7 +352,7 @@ export default function App() {
       manualAmountKWD: item.manualAmountFils / 1000,
       otherCostKWD: item.otherCostFils / 1000,
       totalAmountKWD: (item.nonManualAmountFils + item.manualAmountFils + item.otherCostFils) / 1000,
-      nonManualBeds: Math.round(item.nonManualBeds * 10) / 10, // display format
+      nonManualBeds: Math.round(item.nonManualBeds * 10) / 10,
       manualBeds: Math.round(item.manualBeds * 10) / 10
     }));
 
@@ -661,7 +658,7 @@ export default function App() {
     e.preventDefault();
     try {
       setIsSyncing(true);
-      await apiFetch('employees', 'POST', { ...checkInForm, materialsIssued: checkInForm.materials });
+      await apiFetch('employees', 'POST', { ...checkInForm, campNo: checkInForm.campId, materialsIssued: checkInForm.materials });
       setShowCheckInModal(false);
       setReportPreviewModal({ type: 'issuance', occupant: { ...checkInForm, employeeStatus: 'On Job' }, arrivalType: checkInForm.arrivalType, docRef: checkInForm.docRef || '150-04', materials: checkInForm.materials });
       await syncCloudDatabase();
@@ -705,7 +702,7 @@ export default function App() {
     e.preventDefault();
     try {
       setIsSyncing(true);
-      await apiFetch('transfer-requests', 'POST', transferRequestForm);
+      await apiFetch('transfer-requests', 'POST', { ...transferRequestForm, employeeId: showTransferRequestModal.employeeId });
       setShowTransferRequestModal(null);
       setManageOccupantModal(null);
       await syncCloudDatabase();
@@ -879,6 +876,13 @@ export default function App() {
   const canAddCamps = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions?.canAddCamps;
   const canApproveTransfers = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'AUDITOR';
   const canEditOccupants = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions?.canEditOccupants;
+
+  const invoicingOtherCostsObj = otherCosts
+    .filter(oc => oc.billingPeriod === billingPeriod)
+    .reduce((acc, oc) => {
+      acc[oc.costCenter] = { amount: oc.otherCostKwd, description: oc.otherCostDescription };
+      return acc;
+    }, {});
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
@@ -1688,7 +1692,7 @@ export default function App() {
             setBillingPeriod={setBillingPeriod}
             rates={rates}
             setRates={setRates}
-            otherCosts={otherCosts}
+            otherCosts={invoicingOtherCostsObj}
             onUpdateOtherCost={async (cc, amt, desc) => {
               try {
                 setIsSyncing(true);
