@@ -234,6 +234,7 @@ export default function App() {
     campNo: 'CAMP-04',
     campArea: 'Ahmadi Sector 4',
     campDigit: '4',
+    startingFloorNo: 1, // Phase 1: Custom starting floor support
     campStartDate: todayStr,
     floorsCount: 3,
     roomsPerFlat: 3,
@@ -265,7 +266,7 @@ export default function App() {
     canEditOccupants: true, canExportReports: true, canApproveTransfers: false
   });
 
-  // LocalStorage Sync
+  // LocalStorage & Cloud Sync
   useEffect(() => { localStorage.setItem('dhow_users_v14', JSON.stringify(users)); }, [users]);
   useEffect(() => { localStorage.setItem('dhow_camps_v14', JSON.stringify(camps)); }, [camps]);
   useEffect(() => { localStorage.setItem('dhow_occupants_v14', JSON.stringify(occupants)); }, [occupants]);
@@ -282,6 +283,28 @@ export default function App() {
     if (currentUser && rememberMe) localStorage.setItem('dhow_session_v14', JSON.stringify(currentUser));
     else if (!currentUser) localStorage.removeItem('dhow_session_v14');
   }, [currentUser, rememberMe]);
+
+  // Phase 2: Neon DB Cloud Sync Hook
+  useEffect(() => {
+    async function syncCloudDatabase() {
+      try {
+        const resCamps = await fetch('/api/camps');
+        if (resCamps.ok) {
+          const cloudCamps = await resCamps.json();
+          if (cloudCamps && cloudCamps.length > 0) setCamps(cloudCamps);
+        }
+
+        const resOccs = await fetch('/api/occupants');
+        if (resOccs.ok) {
+          const cloudOccs = await resOccs.json();
+          if (cloudOccs && cloudOccs.length > 0) setOccupants(cloudOccs);
+        }
+      } catch (err) {
+        console.warn('Running on local storage offline fallback mode.');
+      }
+    }
+    syncCloudDatabase();
+  }, []);
 
   const logActivity = (category, actionTitle, details, campNo = 'ALL') => {
     const newLog = {
@@ -851,7 +874,7 @@ export default function App() {
     alert(`Success: ${validRows.length} employees imported.`);
   };
 
-  // Cost Center Actions
+  // Cost Center Actions (With Role-Based Approval Workflow)
   const handleCreateCostCenter = (e) => {
     e.preventDefault();
     const cleanCode = newCostCenterForm.code.trim().toUpperCase();
@@ -860,16 +883,42 @@ export default function App() {
       alert(`Cost Center code "${cleanCode}" already exists.`);
       return;
     }
-    const newCC = {
-      id: `cc-${Date.now()}`,
-      code: cleanCode,
-      name: newCostCenterForm.name.trim() || 'Project Site',
-      division: newCostCenterForm.division,
-      status: 'Active'
-    };
-    setCostCenters(prev => [...prev, newCC]);
-    logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
+
+    if (isSuperAdmin) {
+      const newCC = {
+        id: `cc-${Date.now()}`,
+        code: cleanCode,
+        name: newCostCenterForm.name.trim() || 'Project Site',
+        division: newCostCenterForm.division,
+        status: 'Active'
+      };
+      setCostCenters(prev => [...prev, newCC]);
+      logActivity('COST_CENTER', `Created Cost Center ${cleanCode}`, `Added project cost center: ${newCC.name} (${newCC.division})`);
+      alert(`Cost center ${cleanCode} created successfully!`);
+    } else {
+      const approvalReq = {
+        id: `tr-${Date.now()}`,
+        type: 'COST_CENTER_CREATION',
+        employeeId: 'SYS-CC',
+        employeeName: `New Cost Center: ${cleanCode} (${newCostCenterForm.name.trim() || 'Project Site'})`,
+        fromCostCenter: 'N/A',
+        fromDivision: 'N/A',
+        toCostCenter: cleanCode,
+        toDivision: newCostCenterForm.division,
+        reason: `New Cost Center Creation Request for ${newCostCenterForm.name.trim() || 'Project Site'}`,
+        requestedBy: currentUser.name,
+        requestedByRole: currentUser.role,
+        requestDate: new Date().toLocaleString(),
+        status: 'PENDING',
+        reviewedBy: '', reviewDate: '', reviewRemarks: ''
+      };
+      setTransferRequests(prev => [approvalReq, ...prev]);
+      logActivity('COST_CENTER_REQUEST', `Requested Cost Center ${cleanCode}`, `Submitted for Super Admin approval by ${currentUser.name}`);
+      alert(`Cost center request submitted to Approvals & Logs for Super Admin sign-off.`);
+    }
+
     setNewCostCenterForm({ code: '', name: '', division: divisions[0] || 'IDS' });
+    setShowManageCostCentersModal(false);
   };
 
   const handleToggleCostCenterStatus = (id) => {
@@ -941,7 +990,6 @@ export default function App() {
     });
   };
 
-  // Auto-Fill when typing Employee ID inside Bed Assignment Modal
   const handleCheckInEmployeeIdChange = (idVal) => {
     const cleanId = idVal.trim();
     const existing = occupants.find(o => o.employeeId.toLowerCase() === cleanId.toLowerCase());
@@ -967,7 +1015,6 @@ export default function App() {
     }
   };
 
-  // Save Edited Employee Details
   const handleSaveEmployeeEdit = (e) => {
     e.preventDefault();
     if (!editingEmployeeModal) return;
@@ -1002,7 +1049,6 @@ export default function App() {
     setEditingEmployeeModal(null);
   };
 
-  // Occupant Bed Check-In Submit
   const handleCheckInSubmit = (e) => {
     e.preventDefault();
     const empId = checkInForm.employeeId.trim();
@@ -1210,12 +1256,24 @@ export default function App() {
     if (!req) return;
 
     if (decision === 'APPROVED') {
-      setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
-        ...o, costCenter: req.toCostCenter, division: req.toDivision
-      } : o));
-      logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
+      if (req.type === 'COST_CENTER_CREATION') {
+        const newCC = {
+          id: `cc-${Date.now()}`,
+          code: req.toCostCenter,
+          name: req.reason.replace('New Cost Center Creation Request for ', '') || 'Project Site',
+          division: req.toDivision,
+          status: 'Active'
+        };
+        setCostCenters(prev => [...prev, newCC]);
+        logActivity('COST_CENTER', `Approved Cost Center ${req.toCostCenter}`, `Approved by ${currentUser.name}`);
+      } else {
+        setOccupants(prev => prev.map(o => o.employeeId === req.employeeId ? {
+          ...o, costCenter: req.toCostCenter, division: req.toDivision
+        } : o));
+        logActivity('COST_CENTER_APPROVAL', `Approved Transfer #${req.employeeId}`, `Approved move to ${req.toCostCenter}`);
+      }
     } else {
-      logActivity('COST_CENTER_REJECTION', `Rejected Transfer #${req.employeeId}`, `Rejected move to ${req.toCostCenter}`);
+      logActivity('COST_CENTER_REJECTION', `Rejected Request #${req.id}`, `Rejected by ${currentUser.name}`);
     }
 
     setTransferRequests(prev => prev.map(r => r.id === reqId ? {
@@ -1333,7 +1391,6 @@ export default function App() {
     });
   };
 
-  // User Creation with Neon DB Sync
   const handleCreateUser = async (e) => {
     e.preventDefault();
     const payload = {
@@ -2514,7 +2571,7 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* MODAL: EDIT EMPLOYEE DETAILS (Z-[70] OVERLAY FIX)                   */}
+      {/* MODAL: EDIT EMPLOYEE DETAILS                                        */}
       {/* =================================================================== */}
       {editingEmployeeModal && (
         <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-[70] flex items-center justify-center p-4">
@@ -3346,317 +3403,8 @@ export default function App() {
       )}
 
       {/* =================================================================== */}
-      {/* EMPLOYEE DOSSIER MODAL                                              */}
+      {/* ADD BUILDING MODAL (WITH STARTING FLOOR NUMBER SUPPORT)             */}
       {/* =================================================================== */}
-      {viewingEmployeeDossier && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex items-center justify-between border-b pb-3">
-              <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
-                  #{viewingEmployeeDossier.employeeId}
-                </div>
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
-                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
-                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
-                    </span>
-                  </div>
-                  <p className="text-slate-500 font-medium">
-                    {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
-                  </p>
-                </div>
-              </div>
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setViewingEmployeeDossier(null);
-                    setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
-                  }}
-                  className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
-                >
-                  <Edit3 className="w-3.5 h-3.5" /> Edit Details
-                </button>
-                <button type="button" onClick={() => setViewingEmployeeDossier(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
-                  <X className="w-5 h-5" />
-                </button>
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Civil ID</div>
-                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId || 'N/A'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Passport #</div>
-                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo || 'N/A'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Mobile</div>
-                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Nationality</div>
-                <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
-              </div>
-              <div className="p-3 bg-slate-50 border rounded-xl">
-                <div className="text-slate-400 font-medium">Status</div>
-                <div className="mt-0.5 font-bold text-emerald-700">{viewingEmployeeDossier.employeeStatus}</div>
-              </div>
-            </div>
-
-            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
-              <div className="flex items-center justify-between">
-                <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
-                  <MapPin className="w-4 h-4 text-cyan-600" /> Current Room Allocation
-                </span>
-                <span className="font-bold px-2.5 py-1 rounded-lg bg-white text-cyan-700 border border-cyan-200">
-                  {viewingEmployeeDossier.roomGrade} Grade
-                </span>
-              </div>
-
-              <div className="grid grid-cols-3 gap-3">
-                <div>
-                  <span className="text-slate-500">Camp:</span>
-                  <div className="font-bold text-slate-900">{viewingEmployeeDossier.campNo}</div>
-                </div>
-                <div>
-                  <span className="text-slate-500">Room:</span>
-                  <div className="font-bold text-cyan-700 font-mono">Room {viewingEmployeeDossier.roomNo}</div>
-                </div>
-                <div>
-                  <span className="text-slate-500">Entry Date & Ref:</span>
-                  <div className="font-bold text-slate-900 font-mono">{viewingEmployeeDossier.entryDate} ({viewingEmployeeDossier.afrEntryRef || '150-04'})</div>
-                </div>
-              </div>
-
-              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-cyan-200/60">
-                <button
-                  type="button"
-                  onClick={() => setReportPreviewModal({
-                    type: 'issuance',
-                    occupant: viewingEmployeeDossier,
-                    arrivalType: viewingEmployeeDossier.arrivalType || 'Local Residency Transfer',
-                    docRef: viewingEmployeeDossier.afrEntryRef || '150-04',
-                    materials: viewingEmployeeDossier.materialsIssued || { mattress: true, pillow: true, bedsheet: true, blanket: true }
-                  })}
-                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Eye className="w-3.5 h-3.5" /> Preview Material Issuance (T3)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setMisconductForm(prev => ({
-                      ...prev,
-                      employeeId: occ.employeeId,
-                      employeeName: occ.employeeName,
-                      title: occ.title,
-                      division: occ.division,
-                      costCenter: occ.costCenter,
-                      campNo: occ.campNo,
-                      roomNo: occ.roomNo,
-                      contactNo: occ.mobileNo || '+965 '
-                    }));
-                    setShowMisconductModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setMaintenanceForm(prev => ({
-                      ...prev,
-                      reportedByEmpId: occ.employeeId,
-                      employeeName: occ.employeeName,
-                      floorNo: occ.floorNo || 1,
-                      flatCode: occ.flatCode,
-                      roomNo: occ.roomNo
-                    }));
-                    setShowMaintenanceModal(true);
-                  }}
-                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
-                </button>
-
-                <button
-                  onClick={() => {
-                    const occ = viewingEmployeeDossier;
-                    setViewingEmployeeDossier(null);
-                    handleOpenRelocateModal(occ);
-                  }}
-                  className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
-                >
-                  <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <h4 className="text-xs font-bold text-slate-800 uppercase">Accommodation & Shift History Ledger</h4>
-              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
-                {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
-                  viewingEmployeeDossier.stayHistory.map((hist, idx) => (
-                    <div key={idx} className="border-l-2 border-cyan-600 pl-3">
-                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
-                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
-                    </div>
-                  ))
-                ) : (
-                  <div className="text-slate-400 italic">No previous camp shifts recorded.</div>
-                )}
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* =================================================================== */}
-      {/* OTHER MODALS (EDIT CAMP, ADD BUILDING, COST CENTERS, USERS)         */}
-      {/* =================================================================== */}
-      {editingCampModal && (
-        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between border-b pb-3">
-              <h3 className="text-base font-bold text-slate-900">Edit Camp ({editingCampModal.campNo})</h3>
-              <button onClick={() => setEditingCampModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-            <form onSubmit={handleSaveCampEdits} className="space-y-4">
-              <div className="grid grid-cols-2 gap-3">
-                <div>
-                  <label className="block font-semibold mb-1">Camp Code</label>
-                  <input type="text" required value={editingCampModal.campNo} onChange={e => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
-                </div>
-                <div>
-                  <label className="block font-semibold mb-1">Camp Area</label>
-                  <input type="text" required value={editingCampModal.campArea} onChange={e => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
-                </div>
-              </div>
-
-              <div className="p-3.5 bg-slate-100 border rounded-xl flex items-center justify-between">
-                <div className="font-bold">Total Floors: {editingCampModal.floors.length}</div>
-                <div className="flex gap-2">
-                  {editingCampModal.floors.length > 1 && (
-                    <button type="button" onClick={handleRemoveTopFloorDraft} className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold cursor-pointer">
-                      - Remove Top Floor
-                    </button>
-                  )}
-                  <button type="button" onClick={handleOpenAddFloorConfig} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold cursor-pointer">
-                    + Add New Floor
-                  </button>
-                </div>
-              </div>
-
-              <div className="space-y-2">
-                {editingCampModal.floors.map(fl => (
-                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between">
-                    <span className="font-bold">Floor {fl.floorNo} ({fl.flats.length} Flats)</span>
-                    <div className="flex gap-1.5">
-                      {fl.flats.length > 1 && (
-                        <button type="button" onClick={() => handleRemoveFlatFromFloor(fl.floorNo)} className="px-2 py-1 bg-rose-50 text-rose-700 border rounded font-semibold">- Flat</button>
-                      )}
-                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')} className="px-2 py-1 bg-cyan-50 text-cyan-800 border rounded font-bold">+ NM Flat</button>
-                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')} className="px-2 py-1 bg-amber-50 text-amber-800 border rounded font-bold">+ M Flat</button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-
-              <div className="flex justify-end gap-2 pt-2 border-t">
-                <button type="button" onClick={() => setEditingCampModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold">Cancel</button>
-                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Save Camp</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showAddFloorConfigModal && editingCampModal && (
-        <div className="fixed inset-0 bg-slate-900/70 z-60 flex items-center justify-center p-4">
-          <form onSubmit={handleCommitNewFloorToCamp} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
-            <h3 className="text-base font-bold">Configure Floor {editingCampModal.floors.length + 1}</h3>
-            <div>
-              <label className="block font-semibold mb-1">Total Flats</label>
-              <input type="number" min="1" max="10" required value={newFloorDraft.flatsCount} onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
-            </div>
-            <div>
-              <label className="block font-semibold mb-1">Non-Manual Flats (2 beds/rm)</label>
-              <input type="number" min="0" max={newFloorDraft.flatsCount} required value={newFloorDraft.nonManualFlats} onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" />
-            </div>
-            <div className="flex justify-end gap-2 pt-2">
-              <button type="button" onClick={() => setShowAddFloorConfigModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
-              <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Add Floor</button>
-            </div>
-          </form>
-        </div>
-      )}
-
-      {showManageCostCentersModal && (
-        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold">Project Cost Centers & Divisions</h3>
-              <button onClick={() => setShowManageCostCentersModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
-            </div>
-
-            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
-              <div className="font-bold text-blue-900">Operating Divisions ({divisions.length})</div>
-              <div className="flex flex-wrap gap-2">
-                {divisions.map(div => (
-                  <span key={div} className="px-3 py-1 bg-white border rounded-lg font-bold flex items-center gap-1.5">
-                    {div}
-                    <button type="button" onClick={() => handleRemoveDivision(div)} className="text-rose-600 font-bold">×</button>
-                  </span>
-                ))}
-              </div>
-              <form onSubmit={handleAddDivision} className="flex gap-2 pt-1">
-                <input type="text" placeholder="New Division..." value={newDivisionInput} onChange={e => setNewDivisionInput(e.target.value)} className="bg-white border rounded-lg px-3 py-1.5 flex-1" />
-                <button type="submit" className="px-3.5 py-1.5 bg-blue-700 text-white font-bold rounded-lg">+ Add Division</button>
-              </form>
-            </div>
-
-            <form onSubmit={handleCreateCostCenter} className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border rounded-xl">
-              <input type="text" required placeholder="Code (1IDS040)" value={newCostCenterForm.code} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5 font-mono uppercase font-bold" />
-              <input type="text" required placeholder="Project Name" value={newCostCenterForm.name} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5" />
-              <div className="flex gap-2">
-                <select value={newCostCenterForm.division} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })} className="border bg-white rounded-lg px-2 py-1.5 flex-1 font-bold">
-                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
-                </select>
-                <button type="submit" className="px-4 py-1.5 bg-cyan-600 text-white font-bold rounded-lg">Add</button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {showExcelImportModal && (
-        <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold">Import Preview: {excelImportFileName} ({excelImportStats.valid} Valid)</h3>
-              <button onClick={() => setShowExcelImportModal(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowExcelImportModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
-              <button onClick={handleCommitExcelImport} className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">
-                Confirm Import ({excelImportStats.valid})
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
@@ -3668,8 +3416,11 @@ export default function App() {
               e.preventDefault();
               const campDigit = newCampForm.campDigit || String(camps.length + 1);
               const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
-              const generatedFloors = newCampForm.floorConfigs.map(fc => {
-                const floorStr = String(fc.floorNo).padStart(2, '0');
+              const startFl = parseInt(newCampForm.startingFloorNo, 10) || 1;
+
+              const generatedFloors = newCampForm.floorConfigs.map((fc, index) => {
+                const actualFloorNo = startFl + index;
+                const floorStr = String(actualFloorNo).padStart(2, '0');
                 const floorFlats = [];
                 for (let fl = 1; fl <= fc.flatsCount; fl++) {
                   const flatStr = String(fl).padStart(2, '0');
@@ -3693,7 +3444,7 @@ export default function App() {
                     rooms: flatRooms
                   });
                 }
-                return { floorNo: fc.floorNo, flats: floorFlats };
+                return { floorNo: actualFloorNo, flats: floorFlats };
               });
 
               const newCampObj = {
@@ -3708,10 +3459,10 @@ export default function App() {
               };
               setCamps(prev => [...prev, newCampObj]);
               setSelectedCampId(newCampObj.id);
-              setSelectedFloorNo(1);
+              setSelectedFloorNo(startFl);
               setShowAddCampModal(false);
             }} className="space-y-4">
-              <div className="grid grid-cols-3 gap-3">
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                 <div>
                   <label className="block font-semibold mb-1">Camp Code</label>
                   <input type="text" required value={newCampForm.campNo} onChange={e => setNewCampForm({ ...newCampForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
@@ -3721,15 +3472,19 @@ export default function App() {
                   <input type="text" required value={newCampForm.campArea} onChange={e => setNewCampForm({ ...newCampForm, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
                 </div>
                 <div>
+                  <label className="block font-semibold mb-1">Starting Floor #</label>
+                  <input type="number" min="1" max="50" value={newCampForm.startingFloorNo} onChange={e => setNewCampForm({ ...newCampForm, startingFloorNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" title="e.g. 6 for floors 6, 7, 8" />
+                </div>
+                <div>
                   <label className="block font-semibold mb-1">Total Floors</label>
                   <input type="number" min="1" max="20" value={newCampForm.floorsCount} onChange={e => handleFloorsCountChange(e.target.value)} className="w-full border rounded-xl px-3 py-2 font-bold" />
                 </div>
               </div>
 
               <div className="max-h-56 overflow-y-auto border rounded-xl p-2 space-y-2">
-                {newCampForm.floorConfigs.map(fc => (
+                {newCampForm.floorConfigs.map((fc, index) => (
                   <div key={fc.floorNo} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
-                    <span className="font-bold">Floor {fc.floorNo}</span>
+                    <span className="font-bold">Floor {(parseInt(newCampForm.startingFloorNo, 10) || 1) + index}</span>
                     <input type="number" min="1" max="15" value={fc.flatsCount} onChange={e => {
                       const val = parseInt(e.target.value, 10) || 1;
                       setNewCampForm(prev => ({
@@ -3757,6 +3512,9 @@ export default function App() {
         </div>
       )}
 
+      {/* =================================================================== */}
+      {/* OTHER MODALS (MANAGE, LEAVE, RTD, TRANSFERS, USERS)                 */}
+      {/* =================================================================== */}
       {manageOccupantModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
