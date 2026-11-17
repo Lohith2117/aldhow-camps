@@ -180,7 +180,7 @@ export default function App() {
         setMisconductLogs(data.misconductLogs || []);
         
         const divs = Array.from(new Set((data.costCenters || []).map(c => c.division)));
-        if (divs.length > 0) setDivisions(divs);
+        if (divs.length > 0) setDivisions(prev => Array.from(new Set([...prev, ...divs])));
       }
     } catch (err) {
       console.error(err);
