@@ -4,7 +4,7 @@ import {
   Download, CheckCircle2, AlertCircle, UserPlus, KeyRound, Bed,
   Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane,
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, 
-  Tag, Layers, FileUp, Wrench, ShieldAlert, FileCheck
+  Tag, Layers, FileUp, Wrench, ShieldAlert, FileCheck, AlertTriangle, Archive
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import dhowLogoImg from './assets/dhow-logo.png';
@@ -95,6 +95,7 @@ export default function App() {
 
   const [reportPreviewModal, setReportPreviewModal] = useState(null);
   const [showAddFloorConfigModal, setShowAddFloorConfigModal] = useState(false);
+  const [decommissionLockoutModal, setDecommissionLockoutModal] = useState(null);
   const [newFloorDraft, setNewFloorDraft] = useState({ flatsCount: 3, nonManualFlats: 1 });
   const [newDivisionInput, setNewDivisionInput] = useState('');
 
@@ -3018,6 +3019,38 @@ export default function App() {
                 ))}
               </div>
 
+              {/* Decommission Action */}
+              {currentUser.permissions?.canDeleteCamps && (
+                <div className="p-3.5 bg-rose-50/60 border border-rose-200 rounded-xl flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-rose-900">Decommission Camp Facility</div>
+                    <div className="text-[11px] text-rose-700">Safely archives this building once zero occupants remain.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const activeStaff = occupants.filter(o => o.campNo === editingCampModal.campNo && !o.employeeStatus.startsWith('RTD'));
+                      if (activeStaff.length > 0) {
+                        setDecommissionLockoutModal({ camp: editingCampModal, occupants: activeStaff });
+                        return;
+                      }
+                      if (confirm(`Confirm decommissioning of ${editingCampModal.campNo}?`)) {
+                        try {
+                          setIsSyncing(true);
+                          await apiFetch(`camps/${editingCampModal.campNo}/decommission`, 'PATCH');
+                          setEditingCampModal(null);
+                          await syncCloudDatabase();
+                        } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Decommission
+                  </button>
+                </div>
+              )}
+
               <div className="flex justify-end gap-2 pt-2 border-t">
                 <button type="button" onClick={() => setEditingCampModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold">Cancel</button>
                 <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Save Camp</button>
@@ -3474,6 +3507,27 @@ export default function App() {
               <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Update Password</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Decommission Lockout Modal */}
+      {decommissionLockoutModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-rose-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-center gap-3 text-rose-700">
+              <AlertTriangle className="w-8 h-8 text-rose-600 shrink-0" />
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Decommissioning Blocked</h3>
+                <p className="text-rose-600">Facility {decommissionLockoutModal.camp.campNo} still has {decommissionLockoutModal.occupants.length} active occupants.</p>
+              </div>
+            </div>
+            <p className="text-slate-600">Relocate or check out all residents before archiving this facility.</p>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setDecommissionLockoutModal(null)} className="px-5 py-2 bg-slate-900 text-white rounded-xl font-bold cursor-pointer">
+                Understood
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>
