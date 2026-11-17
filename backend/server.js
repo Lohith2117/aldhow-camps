@@ -385,7 +385,7 @@ app.post('/api/employees/:id/relocate', requireEditor, async (req, res) => {
       await client.query('ROLLBACK'); return res.status(403).json({ error: 'Forbidden' });
     }
     
-    const roomCheck = await client.query(`SELECT r.capacity FROM rooms r JOIN flats ft ON r.flat_id = ft.id JOIN floors fl ON ft.floor_id = fl.id WHERE r.room_no = $1 AND ft.flat_code = $2 AND fl.camp_no = $3 FOR UPDATE`, [targetRoomNo, targetFlatCode, targetCampNo]);
+    const roomCheck = await client.query(`SELECT r.capacity, ft.room_grade FROM rooms r JOIN flats ft ON r.flat_id = ft.id JOIN floors fl ON ft.floor_id = fl.id WHERE r.room_no = $1 AND ft.flat_code = $2 AND fl.camp_no = $3 FOR UPDATE`, [targetRoomNo, targetFlatCode, targetCampNo]);
     if (roomCheck.rowCount === 0) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Target room does not belong to specified camp/flat' }); }
     const currentOcc = await client.query('SELECT count(*) FROM employees WHERE room_no = $1 AND employee_status IN (\'On Job\', \'On Leave\')', [targetRoomNo]);
     if (parseInt(currentOcc.rows[0].count) >= roomCheck.rows[0].capacity) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Room is full' }); }
@@ -395,7 +395,7 @@ app.post('/api/employees/:id/relocate', requireEditor, async (req, res) => {
     if (!isFirstAssignment) {
       await client.query(`INSERT INTO stay_history (employee_id, camp_no, room_no, cost_center, start_date, end_date, reason) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [req.params.id, emp.camp_no, emp.room_no, emp.cost_center, emp.entry_date || transferDate, transferDate, `${reason} (Ref: ${docRef})`]);
     }
-    await client.query(`UPDATE employees SET camp_no = $1, flat_code = $2, room_no = $3, grade_type = $4, entry_date = $5, afr_entry_ref = $6, employee_status = $7 WHERE employee_id = $8`, [targetCampNo, targetFlatCode, targetRoomNo, targetRoomGrade, transferDate, docRef, isFirstAssignment ? 'On Job' : emp.employee_status, req.params.id]);
+    await client.query(`UPDATE employees SET camp_no = $1, flat_code = $2, room_no = $3, grade_type = $4, entry_date = $5, afr_entry_ref = $6, employee_status = $7 WHERE employee_id = $8`, [targetCampNo, targetFlatCode, targetRoomNo, roomCheck.rows[0].room_grade || targetRoomGrade || emp.grade_type, transferDate, docRef, isFirstAssignment ? 'On Job' : emp.employee_status, req.params.id]);
     if (isFirstAssignment) await logActivity(client, req, 'CHECK_IN', `Assigned ${req.params.id} to Room ${targetRoomNo}`, `Placed in ${targetCampNo}`, targetCampNo);
     else await logActivity(client, req, 'RELOCATION', `Relocated ${req.params.id}`, `Moved to ${targetCampNo} Room ${targetRoomNo}`, targetCampNo);
     await client.query('COMMIT');
