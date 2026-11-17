@@ -1430,7 +1430,7 @@ export default function App() {
                                             {occ.roomGrade} • <strong className="text-slate-700">{occ.nationality}</strong> • {occ.division}
                                           </span>
                                           <div className="flex items-center gap-2 shrink-0 ml-2">
-                                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                                            {canEditOccupants && (
                                               <button
                                                 onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
                                                 className="text-emerald-700 hover:underline font-bold cursor-pointer"
@@ -1444,7 +1444,7 @@ export default function App() {
                                             >
                                               Dossier
                                             </button>
-                                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                                            {canEditOccupants && (
                                               <button
                                                 onClick={() => setManageOccupantModal(occ)}
                                                 className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
@@ -1640,7 +1640,7 @@ export default function App() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                            {canEditOccupants && (
                               <button
                                 onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
                                 className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] cursor-pointer"
@@ -1667,7 +1667,7 @@ export default function App() {
                             >
                               Dossier
                             </button>
-                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                            {canEditOccupants && (
                               <button
                                 onClick={() => setManageOccupantModal(occ)}
                                 className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer"
