@@ -68,7 +68,7 @@ app.post('/api/auth/login', loginLimiter, async (req, res) => {
         permissions: { canEditOccupants: user.can_edit_occupants, canAddCamps: user.can_add_camps, canDeleteCamps: user.can_delete_camps, canApproveTransfers: user.can_approve_transfers } 
       } 
     });
-  } catch (err) { res.status(500).json({ error: 'Server error' }); }
+  } catch (err) { console.error('LOGIN ERROR:', err.message); res.status(500).json({ error: 'Server error' }); }
 });
 
 const authenticateToken = (req, res, next) => {
