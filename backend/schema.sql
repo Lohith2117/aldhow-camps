@@ -228,3 +228,7 @@ CREATE TABLE IF NOT EXISTS invoice_snapshots (
 ALTER TABLE transfer_requests DROP CONSTRAINT IF EXISTS transfer_requests_employee_id_fkey;
 ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS request_type VARCHAR(30) DEFAULT 'EMPLOYEE_TRANSFER';
 ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS new_cost_center_name VARCHAR(150);
+-- Added to match the backend code (see migrations/001_sync_production_schema.sql)
+ALTER TABLE employees ADD COLUMN IF NOT EXISTS flat_code VARCHAR(50);
+ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS from_division VARCHAR(50);
+ALTER TABLE transfer_requests ADD COLUMN IF NOT EXISTS to_division VARCHAR(50);
