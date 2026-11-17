@@ -2,14 +2,15 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Building2, Users, ShieldCheck, Eye, EyeOff, LogOut, Plus, Search,
   Download, CheckCircle2, AlertCircle, UserPlus, KeyRound, Bed,
-  Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane,
-  Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
-  Archive, Tag, Phone, Clock, Layers, Globe, FileUp, Wrench, ShieldAlert, FileCheck
+  Home, RefreshCw, X, BarChart3, Plane,
+  Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, 
+  Tag, Layers, FileUp, Wrench, ShieldAlert, FileCheck
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import dhowLogoImg from './assets/dhow-logo.png';
 import { apiFetch } from './utils/api';
-import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
+
+import { printFormattedElement } from './utils/reportGenerators';
 
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
@@ -20,7 +21,8 @@ const DhowLogo = ({ className = "h-8 w-auto" }) => (
   <img src={dhowLogoImg} alt="Dhow Engineering" className={className} />
 );
 
-const safeLoad = (key, fallback) => {
+/* unused safeLoad removed */
+const _safeLoad = (key, fallback) => {
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : fallback;
@@ -102,6 +104,7 @@ export default function App() {
   const [excelImportStats, setExcelImportStats] = useState({ total: 0, valid: 0, errors: 0 });
   const excelFileInputRef = useRef(null);
 
+  const [showMisconductModal, setShowMisconductModal] = useState(false);
   const [misconductForm, setMisconductForm] = useState({
     employeeId: '', employeeName: '', title: '', division: '', costCenter: '', campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: todayStr, incidentTime: '14:00', incidentLocation: 'Accommodation Quarters', typeOfViolation: 'Camp Quiet Hours & Residential Safety Violation', description: '', witnessName: '', witnessId: '', witnessRoom: '', witnessPhone: '+965 ', reportedBy: 'Camp Supervisor', remarks: 'Referred to HR Disciplinary Committee'
   });
@@ -1113,7 +1116,6 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={async () => {
-                const { exportCampOccupancySummary } = await import('./utils/reportGenerators');
                 setReportPreviewModal({ type: 'summary' });
               }}
               className="text-slate-700 hover:text-cyan-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
@@ -1124,7 +1126,6 @@ export default function App() {
             </button>
             <button
               onClick={async () => {
-                const { exportDailyOccupancyReport } = await import('./utils/reportGenerators');
                 setReportPreviewModal({ type: 'daily', camp: activeCamp });
               }}
               className="text-slate-700 hover:text-emerald-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
@@ -2790,6 +2791,314 @@ export default function App() {
       {/* =================================================================== */}
       {/* ADD BUILDING MODAL                                                  */}
       {/* =================================================================== */}
+      
+      {/* RESTORED MODALS */}
+            {viewingEmployeeDossier && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
+                  #{viewingEmployeeDossier.employeeId}
+                </div>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
+                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
+                    </span>
+                  </div>
+                  <p className="text-slate-500 font-medium">
+                    {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {canEditOccupants && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const occ = viewingEmployeeDossier;
+                      setViewingEmployeeDossier(null);
+                      setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Edit Details
+                  </button>
+                )}
+                <button type="button" onClick={() => setViewingEmployeeDossier(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Civil ID</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Passport #</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Mobile</div>
+                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Nationality</div>
+                <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Status</div>
+                <div className="mt-0.5 font-bold text-emerald-700">{viewingEmployeeDossier.employeeStatus}</div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-cyan-600" /> Current Room Allocation
+                </span>
+                <span className="font-bold px-2.5 py-1 rounded-lg bg-white text-cyan-700 border border-cyan-200">
+                  {viewingEmployeeDossier.roomGrade} Grade
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <span className="text-slate-500">Camp:</span>
+                  <div className="font-bold text-slate-900">{viewingEmployeeDossier.campNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Room:</span>
+                  <div className="font-bold text-cyan-700 font-mono">Room {viewingEmployeeDossier.roomNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Entry Date & Ref:</span>
+                  <div className="font-bold text-slate-900 font-mono">{viewingEmployeeDossier.entryDate} ({viewingEmployeeDossier.afrEntryRef || '150-04'})</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-cyan-200/60">
+                <button
+                  type="button"
+                  onClick={() => setReportPreviewModal({
+                    type: 'issuance',
+                    occupant: viewingEmployeeDossier,
+                    arrivalType: viewingEmployeeDossier.arrivalType || 'Local Residency Transfer',
+                    docRef: viewingEmployeeDossier.afrEntryRef || '150-04',
+                    materials: viewingEmployeeDossier.materialsIssued || { mattress: true, pillow: true, bedsheet: true, blanket: true }
+                  })}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Preview Material Issuance (T3)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMisconductForm(prev => ({
+                      ...prev,
+                      employeeId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      title: occ.title,
+                      division: occ.division,
+                      costCenter: occ.costCenter,
+                      campNo: occ.campNo,
+                      roomNo: occ.roomNo,
+                      contactNo: occ.mobileNo || '+965 '
+                    }));
+                    setShowMisconductModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMaintenanceForm(prev => ({
+                      ...prev,
+                      reportedByEmpId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      floorNo: occ.floorNo || 1,
+                      flatCode: occ.flatCode,
+                      roomNo: occ.roomNo
+                    }));
+                    setShowMaintenanceModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
+                </button>
+
+                {canEditOccupants && (
+                  <button
+                    onClick={() => {
+                      const occ = viewingEmployeeDossier;
+                      setViewingEmployeeDossier(null);
+                      handleOpenRelocateModal(occ);
+                    }}
+                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-800 uppercase">Accommodation & Shift History Ledger</h4>
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+                {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
+                  viewingEmployeeDossier.stayHistory.map((hist, idx) => (
+                    <div key={idx} className="border-l-2 border-cyan-600 pl-3">
+                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
+                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-400 italic">No previous camp shifts recorded.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+            {editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900">Edit Camp ({editingCampModal.campNo})</h3>
+              <button onClick={() => setEditingCampModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleSaveCampEdits} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Camp Code</label>
+                  <input type="text" required value={editingCampModal.campNo} onChange={e => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Camp Area</label>
+                  <input type="text" required value={editingCampModal.campArea} onChange={e => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-100 border rounded-xl flex items-center justify-between">
+                <div className="font-bold">Total Floors: {editingCampModal.floors.length}</div>
+                <div className="flex gap-2">
+                  {editingCampModal.floors.length > 1 && (
+                    <button type="button" onClick={handleRemoveTopFloorDraft} className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold cursor-pointer">
+                      - Remove Top Floor
+                    </button>
+                  )}
+                  <button type="button" onClick={handleOpenAddFloorConfig} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold cursor-pointer">
+                    + Add New Floor
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {editingCampModal.floors.map(fl => (
+                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between">
+                    <span className="font-bold">Floor {fl.floorNo} ({fl.flats.length} Flats)</span>
+                    <div className="flex gap-1.5">
+                      {fl.flats.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveFlatFromFloor(fl.floorNo)} className="px-2 py-1 bg-rose-50 text-rose-700 border rounded font-semibold">- Flat</button>
+                      )}
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')} className="px-2 py-1 bg-cyan-50 text-cyan-800 border rounded font-bold">+ NM Flat</button>
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')} className="px-2 py-1 bg-amber-50 text-amber-800 border rounded font-bold">+ M Flat</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onClick={() => setEditingCampModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Save Camp</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+            {showAddFloorConfigModal && editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-60 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveCampEdits} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+            <h3 className="text-base font-bold">Configure Floor {editingCampModal.floors.length + 1}</h3>
+            <div>
+              <label className="block font-semibold mb-1">Total Flats</label>
+              <input type="number" min="1" max="10" required value={newFloorDraft.flatsCount} onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1">Non-Manual Flats (2 beds/rm)</label>
+              <input type="number" min="0" max={newFloorDraft.flatsCount} required value={newFloorDraft.nonManualFlats} onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowAddFloorConfigModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Add Floor</button>
+            </div>
+          </form>
+        </div>
+      )}
+            {showManageCostCentersModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Project Cost Centers & Divisions</h3>
+              <button onClick={() => setShowManageCostCentersModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+              <div className="font-bold text-blue-900">Operating Divisions ({divisions.length})</div>
+              <div className="flex flex-wrap gap-2">
+                {divisions.map(div => (
+                  <span key={div} className="px-3 py-1 bg-white border rounded-lg font-bold flex items-center gap-1.5">
+                    {div}
+                    <button type="button" onClick={() => handleRemoveDivision(div)} className="text-rose-600 font-bold">×</button>
+                  </span>
+                ))}
+              </div>
+              <form onSubmit={handleAddDivision} className="flex gap-2 pt-1">
+                <input type="text" placeholder="New Division..." value={newDivisionInput} onChange={e => setNewDivisionInput(e.target.value)} className="bg-white border rounded-lg px-3 py-1.5 flex-1" />
+                <button type="submit" className="px-3.5 py-1.5 bg-blue-700 text-white font-bold rounded-lg">+ Add Division</button>
+              </form>
+            </div>
+
+            <form onSubmit={handleCreateCostCenter} className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border rounded-xl">
+              <input type="text" required placeholder="Code (1IDS040)" value={newCostCenterForm.code} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5 font-mono uppercase font-bold" />
+              <input type="text" required placeholder="Project Name" value={newCostCenterForm.name} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5" />
+              <div className="flex gap-2">
+                <select value={newCostCenterForm.division} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })} className="border bg-white rounded-lg px-2 py-1.5 flex-1 font-bold">
+                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <button type="submit" className="px-4 py-1.5 bg-cyan-600 text-white font-bold rounded-lg">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+            {showExcelImportModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Import Preview: {excelImportFileName} ({excelImportStats.valid} Valid)</h3>
+              <button onClick={() => setShowExcelImportModal(false)}><X className="w-5 h-5" /></button>
+            </div>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setShowExcelImportModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button onClick={handleCommitExcelImport} className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">
+                Confirm Import ({excelImportStats.valid})
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">

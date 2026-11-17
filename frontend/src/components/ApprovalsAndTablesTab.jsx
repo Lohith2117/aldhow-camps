@@ -8,7 +8,7 @@ export default function ApprovalsAndTablesTab({
   leaveLogs,
   rtdLogs,
   costCenters,
-  occupants,
+  /* occupants removed */
   onDownloadSQLSchema
 }) {
   const [subTab, setSubTab] = useState('approvals');

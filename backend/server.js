@@ -11,6 +11,8 @@ const jwt = require('jsonwebtoken');
 const app = express();
 
 app.use(helmet());
+app.set('etag', false);
+app.use('/api', (req, res, next) => { res.set('Cache-Control', 'no-store'); next(); });
 if (process.env.NODE_ENV === 'production' && !process.env.FRONTEND_URL) {
   console.error('CRITICAL: FRONTEND_URL is missing in production environment variables.');
 }
