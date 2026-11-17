@@ -2,7 +2,7 @@ import React, { useState, useMemo, useEffect, useRef } from 'react';
 import {
   Building2, Users, ShieldCheck, Eye, EyeOff, LogOut, Plus, Search,
   Download, CheckCircle2, AlertCircle, UserPlus, KeyRound, Bed,
-  Home, RefreshCw, X, BarChart3, Plane,
+  Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane,
   Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, 
   Tag, Layers, FileUp, Wrench, ShieldAlert, FileCheck
 } from 'lucide-react';
@@ -3082,18 +3082,109 @@ export default function App() {
           </div>
         </div>
       )}
-            {showExcelImportModal && (
-        <div className="fixed inset-0 bg-slate-900/70 z-50 flex items-center justify-center p-4">
-          <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center border-b pb-3">
-              <h3 className="text-base font-bold">Import Preview: {excelImportFileName} ({excelImportStats.valid} Valid)</h3>
-              <button onClick={() => setShowExcelImportModal(false)}><X className="w-5 h-5" /></button>
-            </div>
-            <div className="flex justify-end gap-2">
-              <button onClick={() => setShowExcelImportModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
-              <button onClick={handleCommitExcelImport} className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">
-                Confirm Import ({excelImportStats.valid})
+      {showExcelImportModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-5xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between border-b pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Import Preview: {excelImportFileName}
+                  </h3>
+                  <p className="text-slate-500 font-medium">
+                    Review and validate employee bed allocations before committing to the database.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowExcelImportModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
               </button>
+            </div>
+
+            {/* Import Telemetry Bar */}
+            <div className="grid grid-cols-3 gap-3 shrink-0">
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <span className="text-slate-500 font-medium">Total Rows Parsed:</span>
+                <div className="text-xl font-black text-slate-900 mt-0.5">{excelImportStats.total}</div>
+              </div>
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <span className="text-emerald-800 font-medium">Ready to Commit:</span>
+                <div className="text-xl font-black text-emerald-700 mt-0.5">{excelImportStats.valid}</div>
+              </div>
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+                <span className="text-rose-800 font-medium">Conflict / Errors:</span>
+                <div className="text-xl font-black text-rose-700 mt-0.5">{excelImportStats.errors}</div>
+              </div>
+            </div>
+
+            {/* Table of Parsed Rows */}
+            <div className="border border-slate-200 rounded-xl overflow-x-auto flex-1 max-h-96">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b sticky top-0">
+                  <tr>
+                    <th className="p-2.5">Row</th>
+                    <th className="p-2.5">Status</th>
+                    <th className="p-2.5">ID</th>
+                    <th className="p-2.5">Name</th>
+                    <th className="p-2.5">Nationality</th>
+                    <th className="p-2.5">Camp & Room</th>
+                    <th className="p-2.5">Grade</th>
+                    <th className="p-2.5">Division / Cost Center</th>
+                    <th className="p-2.5">Validation Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {excelParsedRows.map(row => (
+                    <tr key={row.rowIdx} className={row.status === 'ERROR' ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
+                      <td className="p-2.5 font-mono text-slate-500">#{row.rowIdx}</td>
+                      <td className="p-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row.status === 'VALID' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="p-2.5 font-mono font-bold text-cyan-600">#{row.employeeId || 'N/A'}</td>
+                      <td className="p-2.5 font-semibold text-slate-900">{row.employeeName || 'N/A'}</td>
+                      <td className="p-2.5">{row.nationality}</td>
+                      <td className="p-2.5 font-mono">{row.campNo} ({row.roomNo})</td>
+                      <td className="p-2.5 font-bold text-[10px]">{row.roomGrade}</td>
+                      <td className="p-2.5">{row.division} ({row.costCenter})</td>
+                      <td className="p-2.5 font-medium">
+                        {row.errors.length > 0 ? (
+                          <span className="text-rose-600 font-semibold">{row.errors.join('; ')}</span>
+                        ) : (
+                          <span className="text-emerald-600 font-semibold">Ready for import</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Only valid rows without capacity or ID conflicts will be committed to the camp database.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowExcelImportModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={excelImportStats.valid === 0}
+                  onClick={handleCommitExcelImport}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold cursor-pointer"
+                >
+                  Confirm & Batch Import ({excelImportStats.valid} Occupants)
+                </button>
+              </div>
             </div>
           </div>
         </div>
