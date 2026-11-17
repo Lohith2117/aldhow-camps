@@ -374,7 +374,10 @@ export default function App() {
     setNewCampForm(prev => {
       const currentConfigs = [...prev.floorConfigs];
       if (val > currentConfigs.length) {
-        for (let i = currentConfigs.length + 1; i <= val; i++) currentConfigs.push({ floorNo: i, flatsCount: 3, nonManualFlats: 0 });
+        for (let i = currentConfigs.length + 1; i <= val; i++) {
+          const lastNo = currentConfigs.length ? Number(currentConfigs[currentConfigs.length - 1].floorNo) || currentConfigs.length : 0;
+          currentConfigs.push({ floorNo: lastNo + 1, flatsCount: 3, nonManualFlats: 0 });
+        }
       } else if (val < currentConfigs.length) {
         currentConfigs.length = val;
       }
@@ -384,7 +387,13 @@ export default function App() {
 
   const handleOpenAddFloorConfig = () => {
     if (!editingCampModal) return;
-    const nextFloorNo = editingCampModal.floors.length + 1;
+    const existingNos = editingCampModal.floors.map(f => Number(f.floorNo)).sort((a, b) => a - b);
+    const suggested = (existingNos.length ? existingNos[existingNos.length - 1] : 0) + 1;
+    const typed = window.prompt(`Enter the floor number to add.\nFloors already in this camp: ${existingNos.join(', ') || 'none'}`, String(suggested));
+    if (typed === null) return;
+    const nextFloorNo = parseInt(typed, 10);
+    if (!Number.isInteger(nextFloorNo) || nextFloorNo < 1 || nextFloorNo > 99) { alert('Please enter a floor number between 1 and 99.'); return; }
+    if (existingNos.includes(nextFloorNo)) { alert(`Floor ${nextFloorNo} already exists in this camp.`); return; }
     const campDigit = editingCampModal.campDigit || editingCampModal.campNo.replace(/\D/g, '') || '1';
     const flStr = String(nextFloorNo).padStart(2, '0');
     const newFlats = [
@@ -392,7 +401,7 @@ export default function App() {
       { flatNo: 2, flatCode: `${campDigit}-${flStr}-02-M`, roomGrade: 'Manual', rooms: [{ roomNo: `${campDigit}-${flStr}-02-A`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-02-B`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-02-C`, capacity: 3, occupants: [] }] },
       { flatNo: 3, flatCode: `${campDigit}-${flStr}-03-M`, roomGrade: 'Manual', rooms: [{ roomNo: `${campDigit}-${flStr}-03-A`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-03-B`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-03-C`, capacity: 3, occupants: [] }] }
     ];
-    setEditingCampModal(prev => ({ ...prev, floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }] }));
+    setEditingCampModal(prev => ({ ...prev, floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }].sort((a, b) => Number(a.floorNo) - Number(b.floorNo)) }));
   };
 
   const handleRemoveTopFloorDraft = () => {
@@ -3405,12 +3414,19 @@ export default function App() {
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
-              const campDigit = newCampForm.campDigit || String(camps.length + 1);
+              // Flat/room codes use the number in the camp code: CAMP-01 -> 1-01-01-NM, CAMP-12 -> 12-01-01-NM
+              const codeDigits = (newCampForm.campNo.match(/\d+/) || [])[0];
+              const campDigit = codeDigits ? String(parseInt(codeDigits, 10)) : String(camps.length + 1);
               const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
-              const startFl = parseInt(newCampForm.startingFloorNo, 10) || 1;
 
-              const generatedFloors = newCampForm.floorConfigs.map((fc, index) => {
-                const actualFloorNo = startFl + index;
+              const floorNumbers = newCampForm.floorConfigs.map(fc => Number(fc.floorNo));
+              if (floorNumbers.some(n => !Number.isInteger(n) || n < 1 || n > 99)) { alert('Every floor needs a floor number between 1 and 99.'); return; }
+              if (new Set(floorNumbers).size !== floorNumbers.length) { alert('Each floor number can only be used once.'); return; }
+              const sortedConfigs = [...newCampForm.floorConfigs].sort((a, b) => Number(a.floorNo) - Number(b.floorNo));
+              const startFl = Number(sortedConfigs[0].floorNo);
+
+              const generatedFloors = sortedConfigs.map((fc) => {
+                const actualFloorNo = Number(fc.floorNo);
                 const floorStr = String(actualFloorNo).padStart(2, '0');
                 const floorFlats = [];
                 for (let fl = 1; fl <= fc.flatsCount; fl++) {
@@ -3470,7 +3486,14 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Starting Floor #</label>
-                  <input type="number" min="1" max="50" value={newCampForm.startingFloorNo} onChange={e => setNewCampForm({ ...newCampForm, startingFloorNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" title="e.g. 6 for floors 6, 7, 8" />
+                  <input type="number" min="1" max="99" value={newCampForm.startingFloorNo} onChange={e => {
+                    const start = parseInt(e.target.value, 10);
+                    setNewCampForm(prev => ({
+                      ...prev,
+                      startingFloorNo: e.target.value,
+                      floorConfigs: Number.isInteger(start) && start >= 1 ? prev.floorConfigs.map((f, i) => ({ ...f, floorNo: start + i })) : prev.floorConfigs
+                    }));
+                  }} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" title="Fills the floor numbers in order (e.g. 6 gives 6, 7, 8). You can still type any floor number in the list below, e.g. 5, 6, 9, 10." />
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Total Floors</label>
@@ -3503,25 +3526,31 @@ export default function App() {
 
               <div className="max-h-56 overflow-y-auto border rounded-xl p-2 space-y-2">
                 <div className="grid grid-cols-3 gap-2 px-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
-                  <span>Floor</span>
+                  <span>Floor No.</span>
                   <span>Total Flats</span>
                   <span>Non-Manual Flats <span className="normal-case font-normal text-slate-400">(rest are Manual)</span></span>
                 </div>
                 {newCampForm.floorConfigs.map((fc, index) => (
-                  <div key={fc.floorNo} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
-                    <span className="font-bold">Floor {(parseInt(newCampForm.startingFloorNo, 10) || 1) + index}</span>
+                  <div key={index} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
+                    <input type="number" min="1" max="99" value={fc.floorNo} onChange={e => {
+                      const raw = e.target.value;
+                      setNewCampForm(prev => ({
+                        ...prev,
+                        floorConfigs: prev.floorConfigs.map((f, i) => i === index ? { ...f, floorNo: raw === '' ? '' : parseInt(raw, 10) } : f)
+                      }));
+                    }} className="border bg-white rounded px-2 py-1 font-bold text-cyan-700" placeholder="Floor No." title="The real floor number in the building (e.g. 5, 6, 9, 10)" />
                     <input type="number" min="1" max="15" value={fc.flatsCount} onChange={e => {
                       const val = parseInt(e.target.value, 10) || 1;
                       setNewCampForm(prev => ({
                         ...prev,
-                        floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, flatsCount: val } : f)
+                        floorConfigs: prev.floorConfigs.map((f, i) => i === index ? { ...f, flatsCount: val } : f)
                       }));
                     }} className="border bg-white rounded px-2 py-1" placeholder="Total Flats" title="Total flats on this floor" />
                     <input type="number" min="0" max={fc.flatsCount} value={fc.nonManualFlats} onChange={e => {
                       const val = parseInt(e.target.value, 10) || 0;
                       setNewCampForm(prev => ({
                         ...prev,
-                        floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: val } : f)
+                        floorConfigs: prev.floorConfigs.map((f, i) => i === index ? { ...f, nonManualFlats: val } : f)
                       }));
                     }} className="border bg-white rounded px-2 py-1" placeholder="Non-Manual Flats" title="How many of the flats are Non-Manual (the rest are Manual)" />
                   </div>
