@@ -11,7 +11,8 @@ const _getAuthHeaders = () => {
 };
 
 export async function apiFetch(endpoint, method = 'GET', body = null) {
-  const token = localStorage.getItem('token');
+  let token = null;
+  try { token = JSON.parse(sessionStorage.getItem('dhow_session') || 'null')?.token || null; } catch { token = null; }
   const headers = { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) };
   let res;
   try {
