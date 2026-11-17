@@ -2444,7 +2444,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => printFormattedElement('modal-preview-print-area', 'Al-Dhow Official Document')}
+                  onClick={() => printFormattedElement('modal-preview-print-area', 'Al-Dhow Official Document', reportPreviewModal.type === 'daily' || reportPreviewModal.type === 'issuance')}
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-4 h-4" /> Print / Save PDF
@@ -2726,7 +2726,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}-${billingPeriod}`)}
+                  onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}-${billingPeriod}`, false, { fit: 'flow' })}
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" /> Print / Save PDF
