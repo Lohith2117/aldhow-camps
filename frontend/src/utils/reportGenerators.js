@@ -1004,13 +1004,16 @@ export async function exportImportTemplate() {
     { width: 14 }, // Room Grade
     { width: 14 }, // Division
     { width: 20 }, // Project Cost Center
-    { width: 14 }  // Entry Date
+    { width: 14 }, // Entry Date
+    { width: 26 }, // Emergency Contact Name
+    { width: 20 }  // Emergency Contact Phone
   ];
 
   const headers = [
     'Employee ID', 'Employee Name', 'Kuwait Civil ID', 'Passport Number',
     'Nationality', 'Mobile Number', 'Job Title', 'Employee Productive Type',
-    'Camp No', 'Flat Code', 'Room No', 'Room Grade', 'Division', 'Project Cost Center', 'Entry Date'
+    'Camp No', 'Flat Code', 'Room No', 'Room Grade', 'Division', 'Project Cost Center', 'Entry Date',
+    'Emergency Contact Name', 'Emergency Contact Phone'
   ];
 
   ws.addRow(headers);
@@ -1020,12 +1023,13 @@ export async function exportImportTemplate() {
   const sampleRow = [
     '6410', 'Kamineni Lohith', '298121003412', 'PK4491823',
     'India', '+965 99882211', 'Site Engineer', 'Direct Employee (DE)',
-    'CAMP-01', '1-01-01-NM', '1-01-01-B', 'Non-Manual', 'IDS', '1IDS038-KIPIC', '2026-11-15'
+    'CAMP-01', '1-01-01-NM', '1-01-01-B', 'Non-Manual', 'IDS', '1IDS038-KIPIC', '2026-11-15',
+    'Ravi Kumar (Father)', '+91 98765 43210'
   ];
   ws.addRow(sampleRow);
   ws.getRow(2).font = { name: 'Calibri', size: 10 };
 
-  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'].forEach(col => {
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q'].forEach(col => {
     ws.getCell(`${col}1`).border = thinBorder;
     ws.getCell(`${col}2`).border = thinBorder;
   });

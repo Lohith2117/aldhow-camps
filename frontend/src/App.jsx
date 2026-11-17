@@ -571,7 +571,7 @@ export default function App() {
           if (empId) seenIdsInFile.add(empId);
 
           return {
-            rowIdx: idx + 2, employeeId: empId, employeeName: empName, civilId, passportNo, nationality, mobileNo, title, productiveType, campNo, flatCode, roomNo, roomGrade, division, costCenter, entryDate, emergencyContactName: getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact', emergencyContactPhone: getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ', errors, status: errors.length === 0 ? 'VALID' : 'ERROR'
+            rowIdx: idx + 2, employeeId: empId, employeeName: empName, civilId, passportNo, nationality, mobileNo, title, productiveType, campNo, flatCode, roomNo, roomGrade, division, costCenter, entryDate, emergencyContactName: getVal(['Emergency Contact Name', 'Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact', emergencyContactPhone: getVal(['Emergency Contact Phone', 'Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ', errors, status: errors.length === 0 ? 'VALID' : 'ERROR'
           };
         });
 
@@ -1591,6 +1591,7 @@ export default function App() {
                       <th className="p-3">Manual / Non-Manual</th>
                       <th className="p-3">Nationality</th>
                       <th className="p-3">Mobile No</th>
+                      <th className="p-3">Emergency Contact</th>
                       <th className="p-3">Division / CC</th>
                       <th className="p-3">Camp & Room</th>
                       <th className="p-3">Status</th>
@@ -1622,6 +1623,14 @@ export default function App() {
                         </td>
                         <td className="p-3">{occ.nationality}</td>
                         <td className="p-3 font-mono text-cyan-700 font-semibold">{occ.mobileNo || 'N/A'}</td>
+                        <td className="p-3 text-[11px]">
+                          {(occ.emergencyContactName || occ.emergencyContactPhone) ? (
+                            <>
+                              <div className="font-semibold text-slate-800">{occ.emergencyContactName || '-'}</div>
+                              <div className="font-mono text-slate-500">{occ.emergencyContactPhone || '-'}</div>
+                            </>
+                          ) : <span className="text-slate-400">N/A</span>}
+                        </td>
                         <td className="p-3 font-mono text-slate-600">{occ.division} ({occ.costCenter})</td>
                         <td className="p-3 font-mono font-bold">
                           {occ.employeeStatus === 'Unassigned' ? (
@@ -3329,6 +3338,11 @@ export default function App() {
               </div>
 
               <div className="max-h-56 overflow-y-auto border rounded-xl p-2 space-y-2">
+                <div className="grid grid-cols-3 gap-2 px-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <span>Floor</span>
+                  <span>Total Flats</span>
+                  <span>Non-Manual Flats <span className="normal-case font-normal text-slate-400">(rest are Manual)</span></span>
+                </div>
                 {newCampForm.floorConfigs.map((fc, index) => (
                   <div key={fc.floorNo} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
                     <span className="font-bold">Floor {(parseInt(newCampForm.startingFloorNo, 10) || 1) + index}</span>
@@ -3338,14 +3352,14 @@ export default function App() {
                         ...prev,
                         floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, flatsCount: val } : f)
                       }));
-                    }} className="border bg-white rounded px-2 py-1" placeholder="Manual Flats" />
+                    }} className="border bg-white rounded px-2 py-1" placeholder="Total Flats" title="Total flats on this floor" />
                     <input type="number" min="0" max={fc.flatsCount} value={fc.nonManualFlats} onChange={e => {
                       const val = parseInt(e.target.value, 10) || 0;
                       setNewCampForm(prev => ({
                         ...prev,
                         floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: val } : f)
                       }));
-                    }} className="border bg-white rounded px-2 py-1" placeholder="Non-Manual Flats" />
+                    }} className="border bg-white rounded px-2 py-1" placeholder="Non-Manual Flats" title="How many of the flats are Non-Manual (the rest are Manual)" />
                   </div>
                 ))}
               </div>
