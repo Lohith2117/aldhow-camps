@@ -9,6 +9,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 
 const app = express();
+app.set('trust proxy', 1);
 
 app.use(helmet());
 app.set('etag', false);
