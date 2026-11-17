@@ -2,6 +2,7 @@ require('dotenv').config();
 const { Pool } = require('pg');
 const bcrypt = require('bcryptjs');
 const fs = require('fs');
+const path = require('path');
 
 if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD.length < 12) {
   console.error("CRITICAL: Refusing to seed. Missing or weak ADMIN_PASSWORD in environment.");
@@ -17,7 +18,8 @@ async function runSeed() {
   const client = await pool.connect();
   try {
     console.log("Creating database schema...");
-    const schemaSql = fs.readFileSync('./schema.sql', 'utf8');
+    const schemaPath = path.join(__dirname, '..', 'schema.sql');
+    const schemaSql = fs.readFileSync(schemaPath, 'utf8');
     await client.query(schemaSql);
 
     console.log("Seeding Initial SUPER_ADMIN...");
@@ -29,11 +31,12 @@ async function runSeed() {
     `, [process.env.ADMIN_EMAIL || 'admin@aldhow.com', hash]);
 
     console.log("Seed successful.");
-  } catch (err) {
-    console.error("Seed failed:", err);
-  } finally {
     client.release();
     process.exit(0);
+  } catch (err) {
+    console.error("Seed failed:", err);
+    client.release();
+    process.exit(1);
   }
 }
 

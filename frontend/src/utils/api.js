@@ -1,5 +1,6 @@
 // frontend/src/utils/api.js
-const getAuthHeaders = () => {
+/* unused */
+const _getAuthHeaders = () => {
   try {
     const session = JSON.parse(sessionStorage.getItem('dhow_session'));
     if (session && session.token) {
@@ -9,18 +10,19 @@ const getAuthHeaders = () => {
   return { 'Content-Type': 'application/json' };
 };
 
-export const apiFetch = async (endpoint, method = 'GET', body = null) => {
-  const options = { method, headers: getAuthHeaders() };
-  if (body) options.body = JSON.stringify(body);
-  
-  const res = await fetch(`/api/${endpoint}`, options);
-  if (res.status === 401 || res.status === 403) {
-    sessionStorage.removeItem('dhow_session');
-    window.location.reload(); // Force logout on invalid token
+export async function apiFetch(endpoint, method = 'GET', body = null) {
+  let token = null;
+  try { token = JSON.parse(sessionStorage.getItem('dhow_session') || 'null')?.token || null; } catch { token = null; }
+  const headers = { 'Content-Type': 'application/json', ...(token && { Authorization: `Bearer ${token}` }) };
+  let res;
+  try {
+    res = await fetch(`${import.meta.env.VITE_API_URL || ''}/api/${endpoint}`, { method, headers, cache: 'no-store', body: body ? JSON.stringify(body) : null });
+  } catch (networkError) {
+    throw new Error('Cannot reach server');
   }
   if (!res.ok) {
-    const errorData = await res.json();
-    throw new Error(errorData.error || 'API Error');
+    const errorData = await res.json().catch(() => ({}));
+    throw new Error(errorData.error || `Server error (${res.status})`);
   }
   return res.json();
-};
+}

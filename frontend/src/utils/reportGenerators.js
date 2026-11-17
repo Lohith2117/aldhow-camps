@@ -48,123 +48,104 @@ const headerFill = {
 // ============================================================================
 // PRINT ISOLATION ENGINE (Prints ONLY the Excel-styled Sheet or Preview Modal)
 // ============================================================================
-export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Report', isLandscape = false) {
+export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Report', isLandscape = false, options = {}) {
   const el = document.getElementById(elementId);
   if (!el) {
     window.print();
     return;
   }
 
-  const printWin = window.open('', '_blank', 'width=1024,height=800');
-  if (!printWin) {
-    window.print();
-    return;
-  }
+  // fit: 'page' = shrink so the whole document sits on ONE A4 sheet (forms, reports)
+  //      'flow' = keep full size and let long documents run onto more A4 pages (invoices)
+  const fit = options.fit === 'flow' ? 'flow' : 'page';
+  const MARGIN_MM = 8;
+  const MM_TO_PX = 96 / 25.4;
+  const pageW = (isLandscape ? 297 : 210) - MARGIN_MM * 2;
+  const pageH = (isLandscape ? 210 : 297) - MARGIN_MM * 2;
+  const printableW = Math.floor(pageW * MM_TO_PX);
+  const printableH = Math.floor(pageH * MM_TO_PX) - 6; // small safety gap so nothing spills onto a blank page
 
-  printWin.document.write(`
-    <!DOCTYPE html>
+  // Reuse the app's own stylesheets so the print matches the on-screen preview exactly.
+  const styleTags = Array.from(document.querySelectorAll('link[rel="stylesheet"], style'))
+    .map(n => n.outerHTML)
+    .join('\n');
+
+  // Hidden iframe instead of a popup window: no popup blockers, and the app page is never printed by mistake.
+  const frame = document.createElement('iframe');
+  frame.setAttribute('aria-hidden', 'true');
+  frame.style.cssText = `position:fixed;left:-10000px;top:0;width:${printableW}px;height:${printableH}px;border:0;visibility:hidden;`;
+  document.body.appendChild(frame);
+  const cleanup = () => { setTimeout(() => { if (frame.parentNode) frame.parentNode.removeChild(frame); }, 500); };
+
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(`<!DOCTYPE html>
     <html>
       <head>
+        <meta charset="utf-8" />
         <title>${docTitle}</title>
+        ${styleTags}
         <style>
-          @page {
-            size: A4 ${isLandscape ? 'landscape' : 'portrait'};
-            margin: 6mm;
-          }
-          * {
-            box-sizing: border-box;
-            font-family: Calibri, 'Segoe UI', Arial, sans-serif;
-            -webkit-print-color-adjust: exact !important;
-            print-color-adjust: exact !important;
-          }
-          body {
-            margin: 0;
-            padding: 0;
-            background: #ffffff;
-            color: #000000;
-            width: 100%;
-          }
+          @page { size: A4 ${isLandscape ? 'landscape' : 'portrait'}; margin: ${MARGIN_MM}mm; }
+          html, body { margin: 0; padding: 0; background: #ffffff; color: #000000; }
+          * { -webkit-print-color-adjust: exact !important; print-color-adjust: exact !important; box-sizing: border-box; }
           #${elementId} {
-            width: 100% !important;
+            width: ${printableW}px !important;
             max-width: none !important;
+            margin: 0 !important;
             border: none !important;
             box-shadow: none !important;
             padding: 0 !important;
-            margin: 0 !important;
-          }
-          img {
-            max-height: 32px !important;
-            max-width: 100px !important;
-            width: auto !important;
-            height: auto !important;
-            object-fit: contain !important;
-          }
-          .report-title {
-            font-size: 13px !important;
-            font-weight: 900 !important;
-            letter-spacing: 0.5px;
-            text-transform: uppercase;
-          }
-          .report-meta {
-            font-size: 10.5px !important;
-            font-weight: 700 !important;
-            border: 2px solid #000000;
-            border-bottom: none;
-            padding: 8px 10px;
+            overflow: visible !important;
             background: #ffffff;
           }
-          .report-note {
-            font-size: 8.5px !important;
-            font-style: italic !important;
-            margin-top: 4px;
-          }
-          .no-print {
-            display: none !important;
-          }
-          table {
-            width: 100% !important;
-            border-collapse: collapse;
-          }
-          th, td {
-            border: 1px solid #000000;
-            padding: 4px 5px;
-            font-size: 10px;
-            height: 22px;
-            vertical-align: middle;
-          }
-          th {
-            background-color: #f1f5f9 !important;
-            font-weight: 700;
-            text-align: center;
-          }
-          input, textarea {
-            border: none !important;
-            background: transparent !important;
-            font-family: inherit;
-            font-size: 10.5px !important;
-            font-weight: 700;
-            color: inherit;
-            width: 100%;
-            padding: 0;
-            margin: 0;
-          }
+          table { border-collapse: collapse; }
+          tr, td, th { page-break-inside: avoid; break-inside: avoid; }
+          thead { display: table-header-group; }
+          img { max-width: 100%; object-fit: contain; }
+          .no-print { display: none !important; }
+          input, textarea { border: none !important; background: transparent !important; font-family: inherit; }
         </style>
       </head>
-      <body>
-        ${el.outerHTML}
-        <script>
-          window.onload = function() {
-            setTimeout(function() {
-              window.focus();
-              window.print();
-              window.close();
-            }, 250);
-          };
-        </script>
-      </body>
-    </html>
-  `);
-  printWin.document.close();
+      <body>${el.outerHTML}</body>
+    </html>`);
+  doc.close();
+
+  const run = () => {
+    try {
+      const target = doc.getElementById(elementId);
+      if (target) {
+        let zoom = 1;
+        // 1) too wide for the sheet -> shrink to the width
+        if (target.scrollWidth > printableW) zoom = printableW / target.scrollWidth;
+        // 2) forms and reports -> also shrink until everything is on a single page
+        if (fit === 'page') {
+          const h = target.scrollHeight * zoom;
+          if (h > printableH) zoom *= printableH / h;
+        }
+        zoom = Math.max(zoom, 0.45);
+        if (zoom < 1) target.style.zoom = String(zoom);
+      }
+      const win = frame.contentWindow;
+      win.focus();
+      win.addEventListener('afterprint', cleanup);
+      win.print();
+      setTimeout(cleanup, 60000);
+    } catch (err) {
+      console.error('Print failed:', err);
+      cleanup();
+    }
+  };
+
+  // Wait until the stylesheets and images in the frame are ready before measuring.
+  const waitForAssets = () => {
+    const links = Array.from(doc.querySelectorAll('link[rel="stylesheet"]'));
+    const pendingCss = links.some(l => !l.sheet);
+    const pendingImgs = Array.from(doc.images).some(i => !i.complete);
+    if (pendingCss || pendingImgs) { setTimeout(waitForAssets, 60); return; }
+    setTimeout(run, 120);
+  };
+  waitForAssets();
 }
 // ============================================================================
 // 1. CAMP OCCUPANCY SUMMARY STATUS (Matches Template 1 Layout)
@@ -1004,13 +985,16 @@ export async function exportImportTemplate() {
     { width: 14 }, // Room Grade
     { width: 14 }, // Division
     { width: 20 }, // Project Cost Center
-    { width: 14 }  // Entry Date
+    { width: 14 }, // Entry Date
+    { width: 26 }, // Emergency Contact Name
+    { width: 20 }  // Emergency Contact Phone
   ];
 
   const headers = [
     'Employee ID', 'Employee Name', 'Kuwait Civil ID', 'Passport Number',
     'Nationality', 'Mobile Number', 'Job Title', 'Employee Productive Type',
-    'Camp No', 'Flat Code', 'Room No', 'Room Grade', 'Division', 'Project Cost Center', 'Entry Date'
+    'Camp No', 'Flat Code', 'Room No', 'Room Grade', 'Division', 'Project Cost Center', 'Entry Date',
+    'Emergency Contact Name', 'Emergency Contact Phone'
   ];
 
   ws.addRow(headers);
@@ -1020,12 +1004,13 @@ export async function exportImportTemplate() {
   const sampleRow = [
     '6410', 'Kamineni Lohith', '298121003412', 'PK4491823',
     'India', '+965 99882211', 'Site Engineer', 'Direct Employee (DE)',
-    'CAMP-01', '1-01-01-NM', '1-01-01-B', 'Non-Manual', 'IDS', '1IDS038-KIPIC', '2026-11-15'
+    'CAMP-01', '1-01-01-NM', '1-01-01-B', 'Non-Manual', 'IDS', '1IDS038-KIPIC', '2026-11-15',
+    'Ravi Kumar (Father)', '+91 98765 43210'
   ];
   ws.addRow(sampleRow);
   ws.getRow(2).font = { name: 'Calibri', size: 10 };
 
-  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O'].forEach(col => {
+  ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q'].forEach(col => {
     ws.getCell(`${col}1`).border = thinBorder;
     ws.getCell(`${col}2`).border = thinBorder;
   });

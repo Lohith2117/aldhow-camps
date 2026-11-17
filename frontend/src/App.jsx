@@ -3,14 +3,15 @@ import {
   Building2, Users, ShieldCheck, Eye, EyeOff, LogOut, Plus, Search,
   Download, CheckCircle2, AlertCircle, UserPlus, KeyRound, Bed,
   Home, RefreshCw, X, FileSpreadsheet, BarChart3, Plane,
-  Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, AlertTriangle,
-  Archive, Tag, Phone, Clock, Layers, Globe, FileUp, Wrench, ShieldAlert, FileCheck
+  Receipt, Printer, Edit3, ArrowRightLeft, History, MapPin, 
+  Tag, Layers, FileUp, Wrench, ShieldAlert, FileCheck, AlertTriangle, Archive
 } from 'lucide-react';
 import ExcelJS from 'exceljs';
 import dhowLogoImg from './assets/dhow-logo.png';
 import { apiFetch } from './utils/api';
-import { calculateTenure, getRoleDefaultPermissions } from './utils/helpers';
 
+import { printFormattedElement } from './utils/reportGenerators';
+import { EmployeePhoto, PhotoPicker, persistEmployeePhoto } from './components/EmployeePhoto';
 
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
@@ -21,7 +22,8 @@ const DhowLogo = ({ className = "h-8 w-auto" }) => (
   <img src={dhowLogoImg} alt="Dhow Engineering" className={className} />
 );
 
-const safeLoad = (key, fallback) => {
+/* unused safeLoad removed */
+const _safeLoad = (key, fallback) => {
   try {
     const item = localStorage.getItem(key);
     return item ? JSON.parse(item) : fallback;
@@ -31,6 +33,8 @@ const safeLoad = (key, fallback) => {
     return fallback;
   }
 };
+
+let syncFailedAlerted = false;
 
 export default function App() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -92,6 +96,7 @@ export default function App() {
 
   const [reportPreviewModal, setReportPreviewModal] = useState(null);
   const [showAddFloorConfigModal, setShowAddFloorConfigModal] = useState(false);
+  const [decommissionLockoutModal, setDecommissionLockoutModal] = useState(null);
   const [newFloorDraft, setNewFloorDraft] = useState({ flatsCount: 3, nonManualFlats: 1 });
   const [newDivisionInput, setNewDivisionInput] = useState('');
 
@@ -101,6 +106,7 @@ export default function App() {
   const [excelImportStats, setExcelImportStats] = useState({ total: 0, valid: 0, errors: 0 });
   const excelFileInputRef = useRef(null);
 
+  const [showMisconductModal, setShowMisconductModal] = useState(false);
   const [misconductForm, setMisconductForm] = useState({
     employeeId: '', employeeName: '', title: '', division: '', costCenter: '', campNo: 'CAMP-01', roomNo: '', contactNo: '+965 ', incidentDate: todayStr, incidentTime: '14:00', incidentLocation: 'Accommodation Quarters', typeOfViolation: 'Camp Quiet Hours & Residential Safety Violation', description: '', witnessName: '', witnessId: '', witnessRoom: '', witnessPhone: '+965 ', reportedBy: 'Camp Supervisor', remarks: 'Referred to HR Disciplinary Committee'
   });
@@ -139,12 +145,10 @@ export default function App() {
   const [leaveForm, setLeaveForm] = useState({ startDate: todayStr, expectedEndDate: todayStr, afrLogNo: 'LOG-VAC', remarks: 'Annual Vacation' });
   const [returnJobForm, setReturnJobForm] = useState({ actualReturnDate: todayStr, remarks: 'Returned on schedule' });
   
-  // Custom Custom Request: Added reason text box support for RTD Form
   const [rtdForm, setRtdForm] = useState({ rtdType: 'Resigned', rtdDate: todayStr, afrExitRef: 'EXIT-RTD', reason: '' });
   const [transferRequestForm, setTransferRequestForm] = useState({ toCostCenter: '1MEP019-KNPC', toDivision: 'MEP', reason: 'Reassigned to new project site' });
   const [newCostCenterForm, setNewCostCenterForm] = useState({ code: '', name: '', division: 'IDS' });
 
-  // Custom Feature Request: Camp Incharges mapped into newCampForm
   const [newCampForm, setNewCampForm] = useState({
     campNo: 'CAMP-04', campArea: 'Ahmadi Sector 4', campDigit: '4', startingFloorNo: 1, campStartDate: todayStr, floorsCount: 3, roomsPerFlat: 3,
     incharge1Name: '', incharge1Contact: '', incharge2Name: '', incharge2Contact: '',
@@ -162,6 +166,7 @@ export default function App() {
     try {
       setIsSyncing(true);
       const data = await apiFetch('bootstrap', 'GET');
+      syncFailedAlerted = false;
       if (data) {
         setUsers(data.users || []);
         setOccupants(data.occupants || []);
@@ -177,10 +182,14 @@ export default function App() {
         setMisconductLogs(data.misconductLogs || []);
         
         const divs = Array.from(new Set((data.costCenters || []).map(c => c.division)));
-        if (divs.length > 0) setDivisions(divs);
+        if (divs.length > 0) setDivisions(prev => Array.from(new Set([...prev, ...divs])));
       }
     } catch (err) {
       console.error(err);
+      if (!syncFailedAlerted) {
+        window.alert('Cloud sync failed. The application is running on cached data.');
+        syncFailedAlerted = true;
+      }
     } finally {
       setIsSyncing(false);
     }
@@ -279,9 +288,7 @@ export default function App() {
     });
   }, [occupants, searchTerm, statusFilter, divisionFilter, productiveTypeFilter]);
 
-  // PHASE 4: STRICT INTEGER FILS PRORATED BILLING LOGIC
   const projectInvoicingData = useMemo(() => {
-    // 1. Determine days in selected billing month
     const [monthName, yearStr] = billingPeriod.split(' ');
     const monthIdx = new Date(`${monthName} 1, 2000`).getMonth();
     const year = parseInt(yearStr, 10);
@@ -291,24 +298,21 @@ export default function App() {
 
     const costCenterMap = {};
 
-    // Pre-populate mapping for all active cost centers
     costCenters.forEach(cc => {
       if (cc.status === 'Active') {
         costCenterMap[cc.code] = {
           costCenter: cc.code, projectName: cc.name, division: cc.division,
           totalOccupants: 0, nonManualBeds: 0, manualBeds: 0, nonManualAmountFils: 0, manualAmountFils: 0,
-          otherCostFils: Math.round(Number(otherCosts.find(oc => oc.cost_center === cc.code && oc.billing_period === billingPeriod)?.other_cost_kwd || 0) * 1000),
-          otherCostDesc: otherCosts.find(oc => oc.cost_center === cc.code && oc.billing_period === billingPeriod)?.other_cost_description || '',
+          otherCostFils: Math.round(Number(otherCosts.find(oc => oc.costCenter === cc.code && oc.billingPeriod === billingPeriod)?.otherCostKwd || 0) * 1000),
+          otherCostDesc: otherCosts.find(oc => oc.costCenter === cc.code && oc.billingPeriod === billingPeriod)?.otherCostDescription || '',
           totalAmountFils: 0, occupants: []
         };
       }
     });
 
     occupants.forEach(occ => {
-      // Build a comprehensive timeline of stays for this employee to check against billing period
       const timeline = [...(occ.stayHistory || [])];
       
-      // If employee is actively using a bed (On Job or On Leave), add current stay to timeline
       if (!occ.employeeStatus.startsWith('RTD') && occ.campNo !== 'UNASSIGNED') {
         timeline.push({
           campNo: occ.campNo, roomGrade: occ.roomGrade, costCenter: occ.costCenter,
@@ -320,9 +324,8 @@ export default function App() {
         if (!stay.costCenter || !costCenterMap[stay.costCenter]) return;
 
         const stayStart = new Date(stay.startDate);
-        const stayEnd = stay.endDate ? new Date(stay.endDate) : new Date(); // Bill active stays up to today
+        const stayEnd = stay.endDate ? new Date(stay.endDate) : new Date();
 
-        // Proration overlap bounds constraint
         const overlapStart = stayStart > monthStart ? stayStart : monthStart;
         const overlapEnd = stayEnd < monthEnd ? stayEnd : monthEnd;
         
@@ -330,7 +333,6 @@ export default function App() {
           const daysOccupied = Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
           const rateKwd = stay.roomGrade === 'Non-Manual' ? Number(rates.nonManual || 0) : Number(rates.manual || 0);
           
-          // Strict integer fils math (KWD * 1000) prevents floating point rounding drift
           const proratedFils = Math.round((daysOccupied / daysInMonth) * rateKwd * 1000);
 
           if (stay.roomGrade === 'Non-Manual') {
@@ -355,7 +357,7 @@ export default function App() {
       manualAmountKWD: item.manualAmountFils / 1000,
       otherCostKWD: item.otherCostFils / 1000,
       totalAmountKWD: (item.nonManualAmountFils + item.manualAmountFils + item.otherCostFils) / 1000,
-      nonManualBeds: Math.round(item.nonManualBeds * 10) / 10, // display format
+      nonManualBeds: Math.round(item.nonManualBeds * 10) / 10,
       manualBeds: Math.round(item.manualBeds * 10) / 10
     }));
 
@@ -372,7 +374,10 @@ export default function App() {
     setNewCampForm(prev => {
       const currentConfigs = [...prev.floorConfigs];
       if (val > currentConfigs.length) {
-        for (let i = currentConfigs.length + 1; i <= val; i++) currentConfigs.push({ floorNo: i, flatsCount: 3, nonManualFlats: 0 });
+        for (let i = currentConfigs.length + 1; i <= val; i++) {
+          const lastNo = currentConfigs.length ? Number(currentConfigs[currentConfigs.length - 1].floorNo) || currentConfigs.length : 0;
+          currentConfigs.push({ floorNo: lastNo + 1, flatsCount: 3, nonManualFlats: 0 });
+        }
       } else if (val < currentConfigs.length) {
         currentConfigs.length = val;
       }
@@ -382,7 +387,13 @@ export default function App() {
 
   const handleOpenAddFloorConfig = () => {
     if (!editingCampModal) return;
-    const nextFloorNo = editingCampModal.floors.length + 1;
+    const existingNos = editingCampModal.floors.map(f => Number(f.floorNo)).sort((a, b) => a - b);
+    const suggested = (existingNos.length ? existingNos[existingNos.length - 1] : 0) + 1;
+    const typed = window.prompt(`Enter the floor number to add.\nFloors already in this camp: ${existingNos.join(', ') || 'none'}`, String(suggested));
+    if (typed === null) return;
+    const nextFloorNo = parseInt(typed, 10);
+    if (!Number.isInteger(nextFloorNo) || nextFloorNo < 1 || nextFloorNo > 99) { alert('Please enter a floor number between 1 and 99.'); return; }
+    if (existingNos.includes(nextFloorNo)) { alert(`Floor ${nextFloorNo} already exists in this camp.`); return; }
     const campDigit = editingCampModal.campDigit || editingCampModal.campNo.replace(/\D/g, '') || '1';
     const flStr = String(nextFloorNo).padStart(2, '0');
     const newFlats = [
@@ -390,7 +401,7 @@ export default function App() {
       { flatNo: 2, flatCode: `${campDigit}-${flStr}-02-M`, roomGrade: 'Manual', rooms: [{ roomNo: `${campDigit}-${flStr}-02-A`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-02-B`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-02-C`, capacity: 3, occupants: [] }] },
       { flatNo: 3, flatCode: `${campDigit}-${flStr}-03-M`, roomGrade: 'Manual', rooms: [{ roomNo: `${campDigit}-${flStr}-03-A`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-03-B`, capacity: 3, occupants: [] }, { roomNo: `${campDigit}-${flStr}-03-C`, capacity: 3, occupants: [] }] }
     ];
-    setEditingCampModal(prev => ({ ...prev, floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }] }));
+    setEditingCampModal(prev => ({ ...prev, floors: [...prev.floors, { floorNo: nextFloorNo, flats: newFlats }].sort((a, b) => Number(a.floorNo) - Number(b.floorNo)) }));
   };
 
   const handleRemoveTopFloorDraft = () => {
@@ -570,7 +581,7 @@ export default function App() {
           if (empId) seenIdsInFile.add(empId);
 
           return {
-            rowIdx: idx + 2, employeeId: empId, employeeName: empName, civilId, passportNo, nationality, mobileNo, title, productiveType, campNo, flatCode, roomNo, roomGrade, division, costCenter, entryDate, emergencyContactName: getVal(['Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact', emergencyContactPhone: getVal(['Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ', errors, status: errors.length === 0 ? 'VALID' : 'ERROR'
+            rowIdx: idx + 2, employeeId: empId, employeeName: empName, civilId, passportNo, nationality, mobileNo, title, productiveType, campNo, flatCode, roomNo, roomGrade, division, costCenter, entryDate, emergencyContactName: getVal(['Emergency Contact Name', 'Emergency Contact', 'Emergency Name', 'Kin']) || 'Family Contact', emergencyContactPhone: getVal(['Emergency Contact Phone', 'Emergency Phone', 'Emergency Mobile', 'Kin Phone']) || '+965 ', errors, status: errors.length === 0 ? 'VALID' : 'ERROR'
           };
         });
 
@@ -626,7 +637,12 @@ export default function App() {
     if (occupants.some(o => o.employeeId === empId)) { alert(`Employee ID #${empId} already exists in the system.`); return; }
     try {
       setIsSyncing(true);
-      await apiFetch('employees', 'POST', { ...preAddForm, campNo: 'UNASSIGNED', roomNo: 'PENDING' });
+      const { photo: newPhoto, ...preAddFields } = preAddForm;
+      await apiFetch('employees', 'POST', { ...preAddFields, campNo: 'UNASSIGNED', roomNo: 'PENDING' });
+      if (newPhoto) {
+        try { await persistEmployeePhoto(empId, newPhoto); }
+        catch (photoErr) { alert('Employee saved, but the photo could not be uploaded: ' + photoErr.message); }
+      }
       setShowPreAddEmployeeModal(false);
       setPreAddForm({ employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer', productiveType: 'Direct Employee (DE)', roomGrade: 'Manual', division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ', entryDate: todayStr });
       await syncCloudDatabase();
@@ -648,7 +664,12 @@ export default function App() {
     if (!editingEmployeeModal) return;
     try {
       setIsSyncing(true);
-      await apiFetch(`employees/${editingEmployeeModal.originalId}`, 'PUT', editingEmployeeModal);
+      const { photo: editedPhoto, ...editFields } = editingEmployeeModal;
+      await apiFetch(`employees/${editingEmployeeModal.originalId}`, 'PUT', editFields);
+      if (editedPhoto !== undefined) {
+        try { await persistEmployeePhoto(editingEmployeeModal.originalId, editedPhoto); }
+        catch (photoErr) { alert('Details saved, but the photo could not be updated: ' + photoErr.message); }
+      }
       if (viewingEmployeeDossier && viewingEmployeeDossier.employeeId === editingEmployeeModal.originalId) {
         setViewingEmployeeDossier({ ...editingEmployeeModal, employeeId: editingEmployeeModal.employeeId.trim() });
       }
@@ -661,7 +682,7 @@ export default function App() {
     e.preventDefault();
     try {
       setIsSyncing(true);
-      await apiFetch('employees', 'POST', { ...checkInForm, materialsIssued: checkInForm.materials });
+      await apiFetch('employees', 'POST', { ...checkInForm, campNo: checkInForm.campId, materialsIssued: checkInForm.materials });
       setShowCheckInModal(false);
       setReportPreviewModal({ type: 'issuance', occupant: { ...checkInForm, employeeStatus: 'On Job' }, arrivalType: checkInForm.arrivalType, docRef: checkInForm.docRef || '150-04', materials: checkInForm.materials });
       await syncCloudDatabase();
@@ -705,7 +726,7 @@ export default function App() {
     e.preventDefault();
     try {
       setIsSyncing(true);
-      await apiFetch('transfer-requests', 'POST', transferRequestForm);
+      await apiFetch('transfer-requests', 'POST', { ...transferRequestForm, employeeId: showTransferRequestModal.employeeId });
       setShowTransferRequestModal(null);
       setManageOccupantModal(null);
       await syncCloudDatabase();
@@ -771,7 +792,13 @@ export default function App() {
       await apiFetch('misconduct-logs', 'POST', misconductForm);
       setShowMisconductModal(false);
       await syncCloudDatabase();
-      alert(`Misconduct recorded successfully.`);
+      try {
+        const { exportAccommodationMisconductReport } = await import('./utils/reportGenerators');
+        await exportAccommodationMisconductReport({ ...misconductForm, docRef: `DISC-${misconductForm.employeeId}-${Date.now().toString().slice(-4)}` });
+        alert('Misconduct recorded and the Accommodation Misconduct Report (.xlsx) was generated.');
+      } catch (exportErr) {
+        alert('Misconduct recorded, but the Excel slip could not be generated: ' + exportErr.message);
+      }
     } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
@@ -879,6 +906,13 @@ export default function App() {
   const canAddCamps = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions?.canAddCamps;
   const canApproveTransfers = currentUser.role === 'SUPER_ADMIN' || currentUser.role === 'AUDITOR';
   const canEditOccupants = currentUser.role === 'SUPER_ADMIN' || currentUser.permissions?.canEditOccupants;
+
+  const invoicingOtherCostsObj = otherCosts
+    .filter(oc => oc.billingPeriod === billingPeriod)
+    .reduce((acc, oc) => {
+      acc[oc.costCenter] = { amount: oc.otherCostKwd, description: oc.otherCostDescription };
+      return acc;
+    }, {});
 
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 flex flex-col font-sans antialiased">
@@ -1109,7 +1143,6 @@ export default function App() {
           <div className="flex items-center gap-2">
             <button
               onClick={async () => {
-                const { exportCampOccupancySummary } = await import('./utils/reportGenerators');
                 setReportPreviewModal({ type: 'summary' });
               }}
               className="text-slate-700 hover:text-cyan-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
@@ -1120,7 +1153,6 @@ export default function App() {
             </button>
             <button
               onClick={async () => {
-                const { exportDailyOccupancyReport } = await import('./utils/reportGenerators');
                 setReportPreviewModal({ type: 'daily', camp: activeCamp });
               }}
               className="text-slate-700 hover:text-emerald-700 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg bg-slate-100 border border-slate-200 cursor-pointer text-xs"
@@ -1425,7 +1457,7 @@ export default function App() {
                                             {occ.roomGrade} • <strong className="text-slate-700">{occ.nationality}</strong> • {occ.division}
                                           </span>
                                           <div className="flex items-center gap-2 shrink-0 ml-2">
-                                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                                            {canEditOccupants && (
                                               <button
                                                 onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
                                                 className="text-emerald-700 hover:underline font-bold cursor-pointer"
@@ -1439,7 +1471,7 @@ export default function App() {
                                             >
                                               Dossier
                                             </button>
-                                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                                            {canEditOccupants && (
                                               <button
                                                 onClick={() => setManageOccupantModal(occ)}
                                                 className="text-slate-500 hover:text-slate-800 font-semibold cursor-pointer"
@@ -1585,6 +1617,7 @@ export default function App() {
                       <th className="p-3">Manual / Non-Manual</th>
                       <th className="p-3">Nationality</th>
                       <th className="p-3">Mobile No</th>
+                      <th className="p-3">Emergency Contact</th>
                       <th className="p-3">Division / CC</th>
                       <th className="p-3">Camp & Room</th>
                       <th className="p-3">Status</th>
@@ -1616,6 +1649,14 @@ export default function App() {
                         </td>
                         <td className="p-3">{occ.nationality}</td>
                         <td className="p-3 font-mono text-cyan-700 font-semibold">{occ.mobileNo || 'N/A'}</td>
+                        <td className="p-3 text-[11px]">
+                          {(occ.emergencyContactName || occ.emergencyContactPhone) ? (
+                            <>
+                              <div className="font-semibold text-slate-800">{occ.emergencyContactName || '-'}</div>
+                              <div className="font-mono text-slate-500">{occ.emergencyContactPhone || '-'}</div>
+                            </>
+                          ) : <span className="text-slate-400">N/A</span>}
+                        </td>
                         <td className="p-3 font-mono text-slate-600">{occ.division} ({occ.costCenter})</td>
                         <td className="p-3 font-mono font-bold">
                           {occ.employeeStatus === 'Unassigned' ? (
@@ -1635,7 +1676,7 @@ export default function App() {
                         </td>
                         <td className="p-3 text-right">
                           <div className="flex items-center justify-end gap-1.5">
-                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                            {canEditOccupants && (
                               <button
                                 onClick={() => setEditingEmployeeModal({ ...occ, originalId: occ.employeeId })}
                                 className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-800 font-bold text-[11px] cursor-pointer"
@@ -1662,7 +1703,7 @@ export default function App() {
                             >
                               Dossier
                             </button>
-                            {!occ.employeeStatus.startsWith('RTD') && canEditOccupants && (
+                            {canEditOccupants && (
                               <button
                                 onClick={() => setManageOccupantModal(occ)}
                                 className="px-2 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-[11px] cursor-pointer"
@@ -1688,7 +1729,7 @@ export default function App() {
             setBillingPeriod={setBillingPeriod}
             rates={rates}
             setRates={setRates}
-            otherCosts={otherCosts}
+            otherCosts={invoicingOtherCostsObj}
             onUpdateOtherCost={async (cc, amt, desc) => {
               try {
                 setIsSyncing(true);
@@ -1930,6 +1971,8 @@ export default function App() {
                 </div>
               </div>
 
+              <PhotoPicker value={preAddForm.photo === undefined ? null : preAddForm.photo} onChange={v => setPreAddForm({ ...preAddForm, photo: v })} />
+
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={() => setShowPreAddEmployeeModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
                 <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">Save Employee to Directory</button>
@@ -2034,6 +2077,8 @@ export default function App() {
                   <input type="text" value={editingEmployeeModal.emergencyContactPhone || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
                 </div>
               </div>
+
+              <PhotoPicker employeeId={editingEmployeeModal.originalId} value={editingEmployeeModal.photo} onChange={v => setEditingEmployeeModal({ ...editingEmployeeModal, photo: v })} />
 
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={() => setEditingEmployeeModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
@@ -2248,8 +2293,149 @@ export default function App() {
       {/* =================================================================== */}
       {/* UNIVERSAL DOCUMENT PREVIEW MODAL                                    */}
       {/* =================================================================== */}
+      {/* RESTORED: Misconduct & Maintenance modals */}
+      {showMisconductModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleSaveMisconduct} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                Accommodation Misconduct Report (Template 5 & 6)
+              </h3>
+              <button type="button" onClick={() => setShowMisconductModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Offender Employee ID</label>
+                <input type="text" required value={misconductForm.employeeId} onChange={e => setMisconductForm({ ...misconductForm, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Offender Name</label>
+                <input type="text" required value={misconductForm.employeeName} onChange={e => setMisconductForm({ ...misconductForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Accommodation</label>
+                <input type="text" required value={misconductForm.campNo} onChange={e => setMisconductForm({ ...misconductForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Room No</label>
+                <input type="text" required value={misconductForm.roomNo} onChange={e => setMisconductForm({ ...misconductForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Incident Time</label>
+                <input type="text" required value={misconductForm.incidentTime} onChange={e => setMisconductForm({ ...misconductForm, incidentTime: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Location of Offence</label>
+              <input type="text" required value={misconductForm.incidentLocation} onChange={e => setMisconductForm({ ...misconductForm, incidentLocation: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Type of Violation</label>
+              <input type="text" required value={misconductForm.typeOfViolation} onChange={e => setMisconductForm({ ...misconductForm, typeOfViolation: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-rose-700" />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Brief Description of Offence</label>
+              <textarea rows={3} required value={misconductForm.description} onChange={e => setMisconductForm({ ...misconductForm, description: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Detail the violation, witnesses, and facts..." />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border rounded-xl">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Witness Name</label>
+                <input type="text" value={misconductForm.witnessName} onChange={e => setMisconductForm({ ...misconductForm, witnessName: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Witness ID</label>
+                <input type="text" value={misconductForm.witnessId} onChange={e => setMisconductForm({ ...misconductForm, witnessId: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5 font-mono" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={() => setShowMisconductModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold cursor-pointer">Record & Export Slip (.xlsx)</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MAINTENANCE MODAL */}
+      {showMaintenanceModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleSaveMaintenance} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-600" />
+                Accommodation Maintenance Complaint (Template 7)
+              </h3>
+              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Date</label>
+                <input type="date" required value={maintenanceForm.date} onChange={e => setMaintenanceForm({ ...maintenanceForm, date: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Month</label>
+                <input type="text" required value={maintenanceForm.month} onChange={e => setMaintenanceForm({ ...maintenanceForm, month: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Room No</label>
+                <input type="text" required value={maintenanceForm.roomNo} onChange={e => setMaintenanceForm({ ...maintenanceForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Maintenance Issue Details</label>
+              <textarea rows={2.5} required value={maintenanceForm.issueDetails} onChange={e => setMaintenanceForm({ ...maintenanceForm, issueDetails: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Describe the leak, electrical issue, A/C failure..." />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Reported by Emp ID</label>
+                <input type="text" required value={maintenanceForm.reportedByEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, reportedByEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Employee Name</label>
+                <input type="text" required value={maintenanceForm.employeeName} onChange={e => setMaintenanceForm({ ...maintenanceForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Status</label>
+                <select value={maintenanceForm.status} onChange={e => setMaintenanceForm({ ...maintenanceForm, status: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold">
+                  <option value="Pending">Pending</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Material Cost (KWD)</label>
+                <input type="text" value={maintenanceForm.replacedMaterialCost} onChange={e => setMaintenanceForm({ ...maintenanceForm, replacedMaterialCost: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Charge to Emp ID#</label>
+                <input type="text" value={maintenanceForm.chargeToEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, chargeToEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer">Save to Maintenance Log</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {reportPreviewModal && (
-        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto flex flex-col">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
@@ -2267,7 +2453,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => printFormattedElement('modal-preview-print-area', 'Al-Dhow Official Document')}
+                  onClick={() => printFormattedElement('modal-preview-print-area', 'Al-Dhow Official Document', reportPreviewModal.type === 'daily' || reportPreviewModal.type === 'issuance')}
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-4 h-4" /> Print / Save PDF
@@ -2549,7 +2735,7 @@ export default function App() {
               <div className="flex items-center gap-2">
                 <button
                   type="button"
-                  onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}-${billingPeriod}`)}
+                  onClick={() => printFormattedElement('invoice-print-area', `INV-${selectedInvoiceModal.costCenter}-${billingPeriod}`, false, { fit: 'flow' })}
                   className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
                 >
                   <Printer className="w-3.5 h-3.5" /> Print / Save PDF
@@ -2786,6 +2972,439 @@ export default function App() {
       {/* =================================================================== */}
       {/* ADD BUILDING MODAL                                                  */}
       {/* =================================================================== */}
+      
+      {/* RESTORED MODALS */}
+            {viewingEmployeeDossier && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex items-center justify-between border-b pb-3">
+              <div className="flex items-center gap-2.5">
+                <EmployeePhoto employeeId={viewingEmployeeDossier.employeeId} className="w-14 h-14 rounded-xl border shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
+                    #{viewingEmployeeDossier.employeeId}
+                  </div>
+                </EmployeePhoto>
+                <div>
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
+                    <span className="px-2 py-0.5 rounded bg-blue-100 text-blue-800 text-[10px] font-bold border border-blue-200">
+                      {viewingEmployeeDossier.productiveType || 'Direct Employee (DE)'}
+                    </span>
+                  </div>
+                  <p className="text-slate-500 font-medium">
+                    {viewingEmployeeDossier.title} • {viewingEmployeeDossier.division} ({viewingEmployeeDossier.costCenter})
+                  </p>
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                {canEditOccupants && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const occ = viewingEmployeeDossier;
+                      setViewingEmployeeDossier(null);
+                      setEditingEmployeeModal({ ...occ, originalId: occ.employeeId });
+                    }}
+                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                  >
+                    <Edit3 className="w-3.5 h-3.5" /> Edit Details
+                  </button>
+                )}
+                <button type="button" onClick={() => setViewingEmployeeDossier(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer">
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Civil ID</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.civilId || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Passport #</div>
+                <div className="font-mono font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.passportNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Mobile</div>
+                <div className="font-mono font-bold text-cyan-700 mt-0.5">{viewingEmployeeDossier.mobileNo || 'N/A'}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Nationality</div>
+                <div className="font-bold text-slate-900 mt-0.5">{viewingEmployeeDossier.nationality}</div>
+              </div>
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <div className="text-slate-400 font-medium">Status</div>
+                <div className="mt-0.5 font-bold text-emerald-700">{viewingEmployeeDossier.employeeStatus}</div>
+              </div>
+            </div>
+
+            <div className="p-4 bg-gradient-to-r from-cyan-50 to-blue-50 border border-cyan-200 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between">
+                <span className="font-black uppercase tracking-wider text-cyan-900 flex items-center gap-1.5">
+                  <MapPin className="w-4 h-4 text-cyan-600" /> Current Room Allocation
+                </span>
+                <span className="font-bold px-2.5 py-1 rounded-lg bg-white text-cyan-700 border border-cyan-200">
+                  {viewingEmployeeDossier.roomGrade} Grade
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-3">
+                <div>
+                  <span className="text-slate-500">Camp:</span>
+                  <div className="font-bold text-slate-900">{viewingEmployeeDossier.campNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Room:</span>
+                  <div className="font-bold text-cyan-700 font-mono">Room {viewingEmployeeDossier.roomNo}</div>
+                </div>
+                <div>
+                  <span className="text-slate-500">Entry Date & Ref:</span>
+                  <div className="font-bold text-slate-900 font-mono">{viewingEmployeeDossier.entryDate} ({viewingEmployeeDossier.afrEntryRef || '150-04'})</div>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap items-center justify-end gap-2 pt-2 border-t border-cyan-200/60">
+                <button
+                  type="button"
+                  onClick={() => setReportPreviewModal({
+                    type: 'issuance',
+                    occupant: viewingEmployeeDossier,
+                    arrivalType: viewingEmployeeDossier.arrivalType || 'Local Residency Transfer',
+                    docRef: viewingEmployeeDossier.afrEntryRef || '150-04',
+                    materials: viewingEmployeeDossier.materialsIssued || { mattress: true, pillow: true, bedsheet: true, blanket: true }
+                  })}
+                  className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Eye className="w-3.5 h-3.5" /> Preview Material Issuance (T3)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMisconductForm(prev => ({
+                      ...prev,
+                      employeeId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      title: occ.title,
+                      division: occ.division,
+                      costCenter: occ.costCenter,
+                      campNo: occ.campNo,
+                      roomNo: occ.roomNo,
+                      contactNo: occ.mobileNo || '+965 '
+                    }));
+                    setShowMisconductModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <ShieldAlert className="w-3.5 h-3.5" /> File Misconduct (T5)
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => {
+                    const occ = viewingEmployeeDossier;
+                    setMaintenanceForm(prev => ({
+                      ...prev,
+                      reportedByEmpId: occ.employeeId,
+                      employeeName: occ.employeeName,
+                      floorNo: occ.floorNo || 1,
+                      flatCode: occ.flatCode,
+                      roomNo: occ.roomNo
+                    }));
+                    setShowMaintenanceModal(true);
+                  }}
+                  className="px-3 py-1.5 bg-amber-600 hover:bg-amber-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                >
+                  <Wrench className="w-3.5 h-3.5" /> Log Maintenance (T7)
+                </button>
+
+                {canEditOccupants && (
+                  <button
+                    onClick={() => {
+                      const occ = viewingEmployeeDossier;
+                      setViewingEmployeeDossier(null);
+                      handleOpenRelocateModal(occ);
+                    }}
+                    className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <ArrowRightLeft className="w-3.5 h-3.5" /> Relocate Bed
+                  </button>
+                )}
+              </div>
+            </div>
+
+            <div className="space-y-2">
+              <h4 className="text-xs font-bold text-slate-800 uppercase">Accommodation & Shift History Ledger</h4>
+              <div className="border border-slate-200 rounded-xl p-4 bg-slate-50 space-y-3">
+                {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
+                  viewingEmployeeDossier.stayHistory.map((hist, idx) => (
+                    <div key={idx} className="border-l-2 border-cyan-600 pl-3">
+                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
+                      <div className="text-[11px] text-slate-600">{hist.reason}</div>
+                    </div>
+                  ))
+                ) : (
+                  <div className="text-slate-400 italic">No previous camp shifts recorded.</div>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+            {editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900">Edit Camp ({editingCampModal.campNo})</h3>
+              <button onClick={() => setEditingCampModal(null)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+            <form onSubmit={handleSaveCampEdits} className="space-y-4">
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block font-semibold mb-1">Camp Code</label>
+                  <input type="text" required value={editingCampModal.campNo} onChange={e => setEditingCampModal({ ...editingCampModal, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Camp Area</label>
+                  <input type="text" required value={editingCampModal.campArea} onChange={e => setEditingCampModal({ ...editingCampModal, campArea: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+                </div>
+              </div>
+
+              <div className="p-3.5 bg-slate-100 border rounded-xl flex items-center justify-between">
+                <div className="font-bold">Total Floors: {editingCampModal.floors.length}</div>
+                <div className="flex gap-2">
+                  {editingCampModal.floors.length > 1 && (
+                    <button type="button" onClick={handleRemoveTopFloorDraft} className="px-3 py-1.5 bg-rose-50 text-rose-700 border border-rose-200 rounded-lg font-bold cursor-pointer">
+                      - Remove Top Floor
+                    </button>
+                  )}
+                  <button type="button" onClick={handleOpenAddFloorConfig} className="px-3 py-1.5 bg-emerald-600 text-white rounded-lg font-bold cursor-pointer">
+                    + Add New Floor
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                {editingCampModal.floors.map(fl => (
+                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between">
+                    <span className="font-bold">Floor {fl.floorNo} ({fl.flats.length} Flats)</span>
+                    <div className="flex gap-1.5">
+                      {fl.flats.length > 1 && (
+                        <button type="button" onClick={() => handleRemoveFlatFromFloor(fl.floorNo)} className="px-2 py-1 bg-rose-50 text-rose-700 border rounded font-semibold">- Flat</button>
+                      )}
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')} className="px-2 py-1 bg-cyan-50 text-cyan-800 border rounded font-bold">+ NM Flat</button>
+                      <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')} className="px-2 py-1 bg-amber-50 text-amber-800 border rounded font-bold">+ M Flat</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+
+              {/* Decommission Action */}
+              {currentUser.permissions?.canDeleteCamps && (
+                <div className="p-3.5 bg-rose-50/60 border border-rose-200 rounded-xl flex items-center justify-between">
+                  <div>
+                    <div className="font-bold text-rose-900">Decommission Camp Facility</div>
+                    <div className="text-[11px] text-rose-700">Safely archives this building once zero occupants remain.</div>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={async () => {
+                      const activeStaff = occupants.filter(o => o.campNo === editingCampModal.campNo && !o.employeeStatus.startsWith('RTD'));
+                      if (activeStaff.length > 0) {
+                        setDecommissionLockoutModal({ camp: editingCampModal, occupants: activeStaff });
+                        return;
+                      }
+                      if (confirm(`Confirm decommissioning of ${editingCampModal.campNo}?`)) {
+                        try {
+                          setIsSyncing(true);
+                          await apiFetch(`camps/${editingCampModal.campNo}/decommission`, 'PATCH');
+                          setEditingCampModal(null);
+                          await syncCloudDatabase();
+                        } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
+                      }
+                    }}
+                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-500 text-white rounded-lg text-xs font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Archive className="w-3.5 h-3.5" />
+                    Decommission
+                  </button>
+                </div>
+              )}
+
+              <div className="flex justify-end gap-2 pt-2 border-t">
+                <button type="button" onClick={() => setEditingCampModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold">Cancel</button>
+                <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Save Camp</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+            {showAddFloorConfigModal && editingCampModal && (
+        <div className="fixed inset-0 bg-slate-900/70 z-60 flex items-center justify-center p-4">
+          <form onSubmit={handleSaveCampEdits} className="bg-white border rounded-2xl max-w-md w-full p-6 space-y-4 shadow-2xl text-xs">
+            <h3 className="text-base font-bold">Configure Floor {editingCampModal.floors.length + 1}</h3>
+            <div>
+              <label className="block font-semibold mb-1">Total Flats</label>
+              <input type="number" min="1" max="10" required value={newFloorDraft.flatsCount} onChange={e => setNewFloorDraft({ ...newFloorDraft, flatsCount: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+            </div>
+            <div>
+              <label className="block font-semibold mb-1">Non-Manual Flats (2 beds/rm)</label>
+              <input type="number" min="0" max={newFloorDraft.flatsCount} required value={newFloorDraft.nonManualFlats} onChange={e => setNewFloorDraft({ ...newFloorDraft, nonManualFlats: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" />
+            </div>
+            <div className="flex justify-end gap-2 pt-2">
+              <button type="button" onClick={() => setShowAddFloorConfigModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-emerald-600 text-white rounded-xl font-bold">Add Floor</button>
+            </div>
+          </form>
+        </div>
+      )}
+            {showManageCostCentersModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-3xl w-full p-6 space-y-4 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
+            <div className="flex justify-between items-center border-b pb-3">
+              <h3 className="text-base font-bold">Project Cost Centers & Divisions</h3>
+              <button onClick={() => setShowManageCostCentersModal(false)}><X className="w-5 h-5 text-slate-400" /></button>
+            </div>
+
+            <div className="p-4 bg-blue-50 border border-blue-200 rounded-xl space-y-2">
+              <div className="font-bold text-blue-900">Operating Divisions ({divisions.length})</div>
+              <div className="flex flex-wrap gap-2">
+                {divisions.map(div => (
+                  <span key={div} className="px-3 py-1 bg-white border rounded-lg font-bold flex items-center gap-1.5">
+                    {div}
+                    <button type="button" onClick={() => handleRemoveDivision(div)} className="text-rose-600 font-bold">×</button>
+                  </span>
+                ))}
+              </div>
+              <form onSubmit={handleAddDivision} className="flex gap-2 pt-1">
+                <input type="text" placeholder="New Division..." value={newDivisionInput} onChange={e => setNewDivisionInput(e.target.value)} className="bg-white border rounded-lg px-3 py-1.5 flex-1" />
+                <button type="submit" className="px-3.5 py-1.5 bg-blue-700 text-white font-bold rounded-lg">+ Add Division</button>
+              </form>
+            </div>
+
+            <form onSubmit={handleCreateCostCenter} className="grid grid-cols-3 gap-2 p-3 bg-slate-50 border rounded-xl">
+              <input type="text" required placeholder="Code (1IDS040)" value={newCostCenterForm.code} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, code: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5 font-mono uppercase font-bold" />
+              <input type="text" required placeholder="Project Name" value={newCostCenterForm.name} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, name: e.target.value })} className="border bg-white rounded-lg px-2.5 py-1.5" />
+              <div className="flex gap-2">
+                <select value={newCostCenterForm.division} onChange={e => setNewCostCenterForm({ ...newCostCenterForm, division: e.target.value })} className="border bg-white rounded-lg px-2 py-1.5 flex-1 font-bold">
+                  {divisions.map(d => <option key={d} value={d}>{d}</option>)}
+                </select>
+                <button type="submit" className="px-4 py-1.5 bg-cyan-600 text-white font-bold rounded-lg">Add</button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+      {showExcelImportModal && (
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+          <div className="bg-white border rounded-2xl max-w-5xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto flex flex-col">
+            <div className="flex items-center justify-between border-b pb-3 shrink-0">
+              <div className="flex items-center gap-2.5">
+                <FileSpreadsheet className="w-6 h-6 text-emerald-600" />
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    Import Preview: {excelImportFileName}
+                  </h3>
+                  <p className="text-slate-500 font-medium">
+                    Review and validate employee bed allocations before committing to the database.
+                  </p>
+                </div>
+              </div>
+              <button onClick={() => setShowExcelImportModal(false)} className="text-slate-400 hover:text-slate-700">
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+
+            {/* Import Telemetry Bar */}
+            <div className="grid grid-cols-3 gap-3 shrink-0">
+              <div className="p-3 bg-slate-50 border rounded-xl">
+                <span className="text-slate-500 font-medium">Total Rows Parsed:</span>
+                <div className="text-xl font-black text-slate-900 mt-0.5">{excelImportStats.total}</div>
+              </div>
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl">
+                <span className="text-emerald-800 font-medium">Ready to Commit:</span>
+                <div className="text-xl font-black text-emerald-700 mt-0.5">{excelImportStats.valid}</div>
+              </div>
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl">
+                <span className="text-rose-800 font-medium">Conflict / Errors:</span>
+                <div className="text-xl font-black text-rose-700 mt-0.5">{excelImportStats.errors}</div>
+              </div>
+            </div>
+
+            {/* Table of Parsed Rows */}
+            <div className="border border-slate-200 rounded-xl overflow-x-auto flex-1 max-h-96">
+              <table className="w-full text-left whitespace-nowrap">
+                <thead className="bg-slate-100 text-slate-600 font-mono text-[10px] uppercase border-b sticky top-0">
+                  <tr>
+                    <th className="p-2.5">Row</th>
+                    <th className="p-2.5">Status</th>
+                    <th className="p-2.5">ID</th>
+                    <th className="p-2.5">Name</th>
+                    <th className="p-2.5">Nationality</th>
+                    <th className="p-2.5">Camp & Room</th>
+                    <th className="p-2.5">Grade</th>
+                    <th className="p-2.5">Division / Cost Center</th>
+                    <th className="p-2.5">Validation Notes</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {excelParsedRows.map(row => (
+                    <tr key={row.rowIdx} className={row.status === 'ERROR' ? 'bg-rose-50/50' : 'hover:bg-slate-50'}>
+                      <td className="p-2.5 font-mono text-slate-500">#{row.rowIdx}</td>
+                      <td className="p-2.5">
+                        <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                          row.status === 'VALID' ? 'bg-emerald-100 text-emerald-800' : 'bg-rose-100 text-rose-800'
+                        }`}>
+                          {row.status}
+                        </span>
+                      </td>
+                      <td className="p-2.5 font-mono font-bold text-cyan-600">#{row.employeeId || 'N/A'}</td>
+                      <td className="p-2.5 font-semibold text-slate-900">{row.employeeName || 'N/A'}</td>
+                      <td className="p-2.5">{row.nationality}</td>
+                      <td className="p-2.5 font-mono">{row.campNo} ({row.roomNo})</td>
+                      <td className="p-2.5 font-bold text-[10px]">{row.roomGrade}</td>
+                      <td className="p-2.5">{row.division} ({row.costCenter})</td>
+                      <td className="p-2.5 font-medium">
+                        {row.errors.length > 0 ? (
+                          <span className="text-rose-600 font-semibold">{row.errors.join('; ')}</span>
+                        ) : (
+                          <span className="text-emerald-600 font-semibold">Ready for import</span>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            <div className="flex items-center justify-between pt-2 border-t shrink-0">
+              <span className="text-[11px] text-slate-500">
+                Only valid rows without capacity or ID conflicts will be committed to the camp database.
+              </span>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setShowExcelImportModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl font-semibold cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={excelImportStats.valid === 0}
+                  onClick={handleCommitExcelImport}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-500 disabled:opacity-50 text-white rounded-xl font-bold cursor-pointer"
+                >
+                  Confirm & Batch Import ({excelImportStats.valid} Occupants)
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+      
       {showAddCampModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
@@ -2795,12 +3414,19 @@ export default function App() {
             </div>
             <form onSubmit={async (e) => {
               e.preventDefault();
-              const campDigit = newCampForm.campDigit || String(camps.length + 1);
+              // Flat/room codes use the number in the camp code: CAMP-01 -> 1-01-01-NM, CAMP-12 -> 12-01-01-NM
+              const codeDigits = (newCampForm.campNo.match(/\d+/) || [])[0];
+              const campDigit = codeDigits ? String(parseInt(codeDigits, 10)) : String(camps.length + 1);
               const roomsPerFl = parseInt(newCampForm.roomsPerFlat, 10) || 3;
-              const startFl = parseInt(newCampForm.startingFloorNo, 10) || 1;
 
-              const generatedFloors = newCampForm.floorConfigs.map((fc, index) => {
-                const actualFloorNo = startFl + index;
+              const floorNumbers = newCampForm.floorConfigs.map(fc => Number(fc.floorNo));
+              if (floorNumbers.some(n => !Number.isInteger(n) || n < 1 || n > 99)) { alert('Every floor needs a floor number between 1 and 99.'); return; }
+              if (new Set(floorNumbers).size !== floorNumbers.length) { alert('Each floor number can only be used once.'); return; }
+              const sortedConfigs = [...newCampForm.floorConfigs].sort((a, b) => Number(a.floorNo) - Number(b.floorNo));
+              const startFl = Number(sortedConfigs[0].floorNo);
+
+              const generatedFloors = sortedConfigs.map((fc) => {
+                const actualFloorNo = Number(fc.floorNo);
                 const floorStr = String(actualFloorNo).padStart(2, '0');
                 const floorFlats = [];
                 for (let fl = 1; fl <= fc.flatsCount; fl++) {
@@ -2860,7 +3486,14 @@ export default function App() {
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Starting Floor #</label>
-                  <input type="number" min="1" max="50" value={newCampForm.startingFloorNo} onChange={e => setNewCampForm({ ...newCampForm, startingFloorNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" title="e.g. 6 for floors 6, 7, 8" />
+                  <input type="number" min="1" max="99" value={newCampForm.startingFloorNo} onChange={e => {
+                    const start = parseInt(e.target.value, 10);
+                    setNewCampForm(prev => ({
+                      ...prev,
+                      startingFloorNo: e.target.value,
+                      floorConfigs: Number.isInteger(start) && start >= 1 ? prev.floorConfigs.map((f, i) => ({ ...f, floorNo: start + i })) : prev.floorConfigs
+                    }));
+                  }} className="w-full border rounded-xl px-3 py-2 font-bold text-cyan-700" title="Fills the floor numbers in order (e.g. 6 gives 6, 7, 8). You can still type any floor number in the list below, e.g. 5, 6, 9, 10." />
                 </div>
                 <div>
                   <label className="block font-semibold mb-1">Total Floors</label>
@@ -2892,23 +3525,34 @@ export default function App() {
               </div>
 
               <div className="max-h-56 overflow-y-auto border rounded-xl p-2 space-y-2">
+                <div className="grid grid-cols-3 gap-2 px-2 text-[10px] font-bold uppercase tracking-wide text-slate-500">
+                  <span>Floor No.</span>
+                  <span>Total Flats</span>
+                  <span>Non-Manual Flats <span className="normal-case font-normal text-slate-400">(rest are Manual)</span></span>
+                </div>
                 {newCampForm.floorConfigs.map((fc, index) => (
-                  <div key={fc.floorNo} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
-                    <span className="font-bold">Floor {(parseInt(newCampForm.startingFloorNo, 10) || 1) + index}</span>
+                  <div key={index} className="grid grid-cols-3 gap-2 items-center bg-slate-50 p-2 rounded">
+                    <input type="number" min="1" max="99" value={fc.floorNo} onChange={e => {
+                      const raw = e.target.value;
+                      setNewCampForm(prev => ({
+                        ...prev,
+                        floorConfigs: prev.floorConfigs.map((f, i) => i === index ? { ...f, floorNo: raw === '' ? '' : parseInt(raw, 10) } : f)
+                      }));
+                    }} className="border bg-white rounded px-2 py-1 font-bold text-cyan-700" placeholder="Floor No." title="The real floor number in the building (e.g. 5, 6, 9, 10)" />
                     <input type="number" min="1" max="15" value={fc.flatsCount} onChange={e => {
                       const val = parseInt(e.target.value, 10) || 1;
                       setNewCampForm(prev => ({
                         ...prev,
-                        floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, flatsCount: val } : f)
+                        floorConfigs: prev.floorConfigs.map((f, i) => i === index ? { ...f, flatsCount: val } : f)
                       }));
-                    }} className="border bg-white rounded px-2 py-1" placeholder="Manual Flats" />
+                    }} className="border bg-white rounded px-2 py-1" placeholder="Total Flats" title="Total flats on this floor" />
                     <input type="number" min="0" max={fc.flatsCount} value={fc.nonManualFlats} onChange={e => {
                       const val = parseInt(e.target.value, 10) || 0;
                       setNewCampForm(prev => ({
                         ...prev,
-                        floorConfigs: prev.floorConfigs.map(f => f.floorNo === fc.floorNo ? { ...f, nonManualFlats: val } : f)
+                        floorConfigs: prev.floorConfigs.map((f, i) => i === index ? { ...f, nonManualFlats: val } : f)
                       }));
-                    }} className="border bg-white rounded px-2 py-1" placeholder="Non-Manual Flats" />
+                    }} className="border bg-white rounded px-2 py-1" placeholder="Non-Manual Flats" title="How many of the flats are Non-Manual (the rest are Manual)" />
                   </div>
                 ))}
               </div>
@@ -3070,6 +3714,27 @@ export default function App() {
               <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold">Update Password</button>
             </div>
           </form>
+        </div>
+      )}
+
+      {/* Decommission Lockout Modal */}
+      {decommissionLockoutModal && (
+        <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
+          <div className="bg-white border border-rose-200 rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs">
+            <div className="flex items-center gap-3 text-rose-700">
+              <AlertTriangle className="w-8 h-8 text-rose-600 shrink-0" />
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Decommissioning Blocked</h3>
+                <p className="text-rose-600">Facility {decommissionLockoutModal.camp.campNo} still has {decommissionLockoutModal.occupants.length} active occupants.</p>
+              </div>
+            </div>
+            <p className="text-slate-600">Relocate or check out all residents before archiving this facility.</p>
+            <div className="flex justify-end pt-2">
+              <button onClick={() => setDecommissionLockoutModal(null)} className="px-5 py-2 bg-slate-900 text-white rounded-xl font-bold cursor-pointer">
+                Understood
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

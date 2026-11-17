@@ -2,7 +2,7 @@ import React, { useState, useMemo } from 'react';
 import { History, Search, Clock, User } from 'lucide-react';
 import { formatTimestamp } from '../utils/helpers';
 
-export default function ActivityLogTab({ activityLogs = [], onClearLogs, isSuperAdmin }) {
+export default function ActivityLogTab({ activityLogs = [] }) {
   const [query, setQuery] = useState('');
   const [categoryFilter, setCategoryFilter] = useState('ALL');
 
