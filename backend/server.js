@@ -459,11 +459,12 @@ app.put('/api/billing/others', async (req, res) => {
 });
 
 app.post('/api/maintenance-logs', requireEditor, async (req, res) => {
-  const { date, issueDetails, reportedByEmpId, roomNo } = req.body;
+  const { date, issueDetails, reportedByEmpId, roomNo, status, replacedMaterialCost } = req.body;
+  const costValue = Math.max(0, parseFloat(replacedMaterialCost) || 0);
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
-    await client.query('INSERT INTO maintenance_logs (date, issue_details, reported_by_emp_id, room_no) VALUES ($1, $2, $3, $4)', [date, issueDetails, reportedByEmpId, roomNo]);
+    await client.query('INSERT INTO maintenance_logs (date, issue_details, reported_by_emp_id, room_no, status, cost) VALUES ($1, $2, $3, $4, $5, $6)', [date, issueDetails, reportedByEmpId, roomNo, status === 'Completed' ? 'Completed' : 'Pending', costValue]);
     await logActivity(client, req, 'MAINTENANCE', `Logged Work Order for Room ${roomNo}`, issueDetails);
     await client.query('COMMIT');
     res.json({ success: true });
@@ -480,6 +481,49 @@ app.post('/api/misconduct-logs', requireEditor, async (req, res) => {
     await client.query('COMMIT');
     res.json({ success: true });
   } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+});
+
+// ---- Employee photos (small JPEGs, kept in their own table and loaded on demand) ----
+let photoTableReady = null;
+const ensurePhotoTable = () => {
+  if (!photoTableReady) {
+    photoTableReady = pool.query(`CREATE TABLE IF NOT EXISTS employee_photos (
+      employee_id VARCHAR(50) PRIMARY KEY REFERENCES employees(employee_id) ON DELETE CASCADE,
+      photo TEXT NOT NULL,
+      updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`).catch(err => { photoTableReady = null; throw err; });
+  }
+  return photoTableReady;
+};
+
+app.get('/api/employees/:id/photo', async (req, res) => {
+  try {
+    await ensurePhotoTable();
+    const r = await pool.query('SELECT photo FROM employee_photos WHERE employee_id = $1', [req.params.id]);
+    res.json({ photo: r.rowCount ? r.rows[0].photo : null });
+  } catch (err) { console.error('PHOTO GET ERROR:', err.message); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.put('/api/employees/:id/photo', requireEditor, async (req, res) => {
+  const { photo } = req.body || {};
+  if (typeof photo !== 'string' || !/^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(photo)) return res.status(400).json({ error: 'Photo must be a JPEG image' });
+  if (photo.length > 200000) return res.status(400).json({ error: 'Photo is too large (max about 150 KB)' });
+  try {
+    await ensurePhotoTable();
+    const emp = await pool.query('SELECT 1 FROM employees WHERE employee_id = $1', [req.params.id]);
+    if (emp.rowCount === 0) return res.status(404).json({ error: 'Employee not found' });
+    await pool.query(`INSERT INTO employee_photos (employee_id, photo) VALUES ($1, $2)
+      ON CONFLICT (employee_id) DO UPDATE SET photo = EXCLUDED.photo, updated_at = CURRENT_TIMESTAMP`, [req.params.id, photo]);
+    res.json({ success: true });
+  } catch (err) { console.error('PHOTO PUT ERROR:', err.message); res.status(500).json({ error: 'Server error' }); }
+});
+
+app.delete('/api/employees/:id/photo', requireEditor, async (req, res) => {
+  try {
+    await ensurePhotoTable();
+    await pool.query('DELETE FROM employee_photos WHERE employee_id = $1', [req.params.id]);
+    res.json({ success: true });
+  } catch (err) { console.error('PHOTO DELETE ERROR:', err.message); res.status(500).json({ error: 'Server error' }); }
 });
 
 app.patch('/api/camps/:id/decommission', async (req, res) => {

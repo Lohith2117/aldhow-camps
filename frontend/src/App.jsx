@@ -11,6 +11,7 @@ import dhowLogoImg from './assets/dhow-logo.png';
 import { apiFetch } from './utils/api';
 
 import { printFormattedElement } from './utils/reportGenerators';
+import { EmployeePhoto, PhotoPicker, persistEmployeePhoto } from './components/EmployeePhoto';
 
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
@@ -627,7 +628,12 @@ export default function App() {
     if (occupants.some(o => o.employeeId === empId)) { alert(`Employee ID #${empId} already exists in the system.`); return; }
     try {
       setIsSyncing(true);
-      await apiFetch('employees', 'POST', { ...preAddForm, campNo: 'UNASSIGNED', roomNo: 'PENDING' });
+      const { photo: newPhoto, ...preAddFields } = preAddForm;
+      await apiFetch('employees', 'POST', { ...preAddFields, campNo: 'UNASSIGNED', roomNo: 'PENDING' });
+      if (newPhoto) {
+        try { await persistEmployeePhoto(empId, newPhoto); }
+        catch (photoErr) { alert('Employee saved, but the photo could not be uploaded: ' + photoErr.message); }
+      }
       setShowPreAddEmployeeModal(false);
       setPreAddForm({ employeeId: '', employeeName: '', nationality: 'India', title: 'Site Engineer', productiveType: 'Direct Employee (DE)', roomGrade: 'Manual', division: 'IDS', costCenter: '1IDS038-KIPIC', passportNo: '', civilId: '', mobileNo: '+965 ', emergencyContactName: '', emergencyContactPhone: '+965 ', entryDate: todayStr });
       await syncCloudDatabase();
@@ -649,7 +655,12 @@ export default function App() {
     if (!editingEmployeeModal) return;
     try {
       setIsSyncing(true);
-      await apiFetch(`employees/${editingEmployeeModal.originalId}`, 'PUT', editingEmployeeModal);
+      const { photo: editedPhoto, ...editFields } = editingEmployeeModal;
+      await apiFetch(`employees/${editingEmployeeModal.originalId}`, 'PUT', editFields);
+      if (editedPhoto !== undefined) {
+        try { await persistEmployeePhoto(editingEmployeeModal.originalId, editedPhoto); }
+        catch (photoErr) { alert('Details saved, but the photo could not be updated: ' + photoErr.message); }
+      }
       if (viewingEmployeeDossier && viewingEmployeeDossier.employeeId === editingEmployeeModal.originalId) {
         setViewingEmployeeDossier({ ...editingEmployeeModal, employeeId: editingEmployeeModal.employeeId.trim() });
       }
@@ -772,7 +783,13 @@ export default function App() {
       await apiFetch('misconduct-logs', 'POST', misconductForm);
       setShowMisconductModal(false);
       await syncCloudDatabase();
-      alert(`Misconduct recorded successfully.`);
+      try {
+        const { exportAccommodationMisconductReport } = await import('./utils/reportGenerators');
+        await exportAccommodationMisconductReport({ ...misconductForm, docRef: `DISC-${misconductForm.employeeId}-${Date.now().toString().slice(-4)}` });
+        alert('Misconduct recorded and the Accommodation Misconduct Report (.xlsx) was generated.');
+      } catch (exportErr) {
+        alert('Misconduct recorded, but the Excel slip could not be generated: ' + exportErr.message);
+      }
     } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
@@ -1945,6 +1962,8 @@ export default function App() {
                 </div>
               </div>
 
+              <PhotoPicker value={preAddForm.photo === undefined ? null : preAddForm.photo} onChange={v => setPreAddForm({ ...preAddForm, photo: v })} />
+
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={() => setShowPreAddEmployeeModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
                 <button type="submit" className="px-5 py-2 bg-cyan-600 text-white rounded-xl font-bold cursor-pointer">Save Employee to Directory</button>
@@ -2049,6 +2068,8 @@ export default function App() {
                   <input type="text" value={editingEmployeeModal.emergencyContactPhone || ''} onChange={e => setEditingEmployeeModal({ ...editingEmployeeModal, emergencyContactPhone: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
                 </div>
               </div>
+
+              <PhotoPicker employeeId={editingEmployeeModal.originalId} value={editingEmployeeModal.photo} onChange={v => setEditingEmployeeModal({ ...editingEmployeeModal, photo: v })} />
 
               <div className="flex justify-end gap-2 pt-3 border-t">
                 <button type="button" onClick={() => setEditingEmployeeModal(null)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
@@ -2263,8 +2284,149 @@ export default function App() {
       {/* =================================================================== */}
       {/* UNIVERSAL DOCUMENT PREVIEW MODAL                                    */}
       {/* =================================================================== */}
+      {/* RESTORED: Misconduct & Maintenance modals */}
+      {showMisconductModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleSaveMisconduct} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <ShieldAlert className="w-5 h-5 text-rose-600" />
+                Accommodation Misconduct Report (Template 5 & 6)
+              </h3>
+              <button type="button" onClick={() => setShowMisconductModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Offender Employee ID</label>
+                <input type="text" required value={misconductForm.employeeId} onChange={e => setMisconductForm({ ...misconductForm, employeeId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Offender Name</label>
+                <input type="text" required value={misconductForm.employeeName} onChange={e => setMisconductForm({ ...misconductForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Accommodation</label>
+                <input type="text" required value={misconductForm.campNo} onChange={e => setMisconductForm({ ...misconductForm, campNo: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Room No</label>
+                <input type="text" required value={misconductForm.roomNo} onChange={e => setMisconductForm({ ...misconductForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Incident Time</label>
+                <input type="text" required value={misconductForm.incidentTime} onChange={e => setMisconductForm({ ...misconductForm, incidentTime: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Location of Offence</label>
+              <input type="text" required value={misconductForm.incidentLocation} onChange={e => setMisconductForm({ ...misconductForm, incidentLocation: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Type of Violation</label>
+              <input type="text" required value={misconductForm.typeOfViolation} onChange={e => setMisconductForm({ ...misconductForm, typeOfViolation: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold text-rose-700" />
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Brief Description of Offence</label>
+              <textarea rows={3} required value={misconductForm.description} onChange={e => setMisconductForm({ ...misconductForm, description: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Detail the violation, witnesses, and facts..." />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 p-3 bg-slate-50 border rounded-xl">
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Witness Name</label>
+                <input type="text" value={misconductForm.witnessName} onChange={e => setMisconductForm({ ...misconductForm, witnessName: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1 text-slate-700">Witness ID</label>
+                <input type="text" value={misconductForm.witnessId} onChange={e => setMisconductForm({ ...misconductForm, witnessId: e.target.value })} className="w-full border bg-white rounded-lg px-2.5 py-1.5 font-mono" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={() => setShowMisconductModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-rose-600 hover:bg-rose-500 text-white rounded-xl font-bold cursor-pointer">Record & Export Slip (.xlsx)</button>
+            </div>
+          </form>
+        </div>
+      )}
+
+      {/* MAINTENANCE MODAL */}
+      {showMaintenanceModal && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
+          <form onSubmit={handleSaveMaintenance} className="bg-white border rounded-2xl max-w-lg w-full p-6 space-y-4 shadow-2xl text-xs max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b pb-3">
+              <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                <Wrench className="w-5 h-5 text-amber-600" />
+                Accommodation Maintenance Complaint (Template 7)
+              </h3>
+              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="text-slate-400 hover:text-slate-700"><X className="w-5 h-5" /></button>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Date</label>
+                <input type="date" required value={maintenanceForm.date} onChange={e => setMaintenanceForm({ ...maintenanceForm, date: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Month</label>
+                <input type="text" required value={maintenanceForm.month} onChange={e => setMaintenanceForm({ ...maintenanceForm, month: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Room No</label>
+                <input type="text" required value={maintenanceForm.roomNo} onChange={e => setMaintenanceForm({ ...maintenanceForm, roomNo: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono font-bold" />
+              </div>
+            </div>
+
+            <div>
+              <label className="block font-semibold mb-1">Maintenance Issue Details</label>
+              <textarea rows={2.5} required value={maintenanceForm.issueDetails} onChange={e => setMaintenanceForm({ ...maintenanceForm, issueDetails: e.target.value })} className="w-full border rounded-xl p-2.5" placeholder="Describe the leak, electrical issue, A/C failure..." />
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Reported by Emp ID</label>
+                <input type="text" required value={maintenanceForm.reportedByEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, reportedByEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Employee Name</label>
+                <input type="text" required value={maintenanceForm.employeeName} onChange={e => setMaintenanceForm({ ...maintenanceForm, employeeName: e.target.value })} className="w-full border rounded-xl px-3 py-2" />
+              </div>
+            </div>
+
+            <div className="grid grid-cols-3 gap-3">
+              <div>
+                <label className="block font-semibold mb-1">Status</label>
+                <select value={maintenanceForm.status} onChange={e => setMaintenanceForm({ ...maintenanceForm, status: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold">
+                  <option value="Pending">Pending</option>
+                  <option value="Completed">Completed</option>
+                </select>
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Material Cost (KWD)</label>
+                <input type="text" value={maintenanceForm.replacedMaterialCost} onChange={e => setMaintenanceForm({ ...maintenanceForm, replacedMaterialCost: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+              <div>
+                <label className="block font-semibold mb-1">Charge to Emp ID#</label>
+                <input type="text" value={maintenanceForm.chargeToEmpId} onChange={e => setMaintenanceForm({ ...maintenanceForm, chargeToEmpId: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2 border-t">
+              <button type="button" onClick={() => setShowMaintenanceModal(false)} className="px-4 py-2 bg-slate-100 rounded-xl font-semibold cursor-pointer">Cancel</button>
+              <button type="submit" className="px-5 py-2 bg-amber-600 hover:bg-amber-500 text-white rounded-xl font-bold cursor-pointer">Save to Maintenance Log</button>
+            </div>
+          </form>
+        </div>
+      )}
+
       {reportPreviewModal && (
-        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs z-50 flex items-center justify-center p-4">
+        <div className="fixed inset-0 bg-slate-900/75 backdrop-blur-xs z-[60] flex items-center justify-center p-4">
           <div className="bg-white border rounded-2xl max-w-4xl w-full p-6 space-y-4 shadow-2xl text-xs max-h-[92vh] overflow-y-auto flex flex-col">
             <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-3 shrink-0">
               <div className="flex items-center gap-2.5">
@@ -2808,9 +2970,11 @@ export default function App() {
           <div className="bg-white border rounded-2xl max-w-2xl w-full p-6 space-y-5 shadow-2xl max-h-[90vh] overflow-y-auto text-xs">
             <div className="flex items-center justify-between border-b pb-3">
               <div className="flex items-center gap-2.5">
-                <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
-                  #{viewingEmployeeDossier.employeeId}
-                </div>
+                <EmployeePhoto employeeId={viewingEmployeeDossier.employeeId} className="w-14 h-14 rounded-xl border shadow-sm">
+                  <div className="w-10 h-10 rounded-xl bg-cyan-600 text-white flex items-center justify-center font-mono font-bold text-base shadow-sm">
+                    #{viewingEmployeeDossier.employeeId}
+                  </div>
+                </EmployeePhoto>
                 <div>
                   <div className="flex items-center gap-2">
                     <h3 className="text-base font-bold text-slate-900">{viewingEmployeeDossier.employeeName}</h3>
