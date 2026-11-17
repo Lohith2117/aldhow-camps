@@ -167,7 +167,7 @@ app.post('/api/camps', async (req, res) => {
     await logActivity(client, req, 'CAMP_MGMT', `Created Camp ${campNo}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); if (err.code === '23505') return res.status(409).json({ error: 'Duplicate camp, flat, or room code' }); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); if (err.code === '23505') return res.status(409).json({ error: 'Duplicate camp, flat, or room code' }); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.put('/api/camps/:campNo', async (req, res) => {
@@ -192,7 +192,7 @@ app.put('/api/camps/:campNo', async (req, res) => {
     await logActivity(client, req, 'CAMP_CONFIG', `Updated Camp ${req.params.campNo}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/cost-centers', async (req, res) => {
@@ -210,7 +210,7 @@ app.post('/api/cost-centers', async (req, res) => {
     }
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch(err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.patch('/api/cost-centers/:code/toggle', async (req, res) => {
@@ -225,7 +225,7 @@ app.patch('/api/cost-centers/:code/toggle', async (req, res) => {
     await logActivity(client, req, 'COST_CENTER', `Changed Status of ${req.params.code} to ${nextStatus}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch(err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/employees', requireEditor, async (req, res) => {
@@ -254,7 +254,7 @@ app.post('/api/employees', requireEditor, async (req, res) => {
     else await logActivity(client, req, 'OCCUPANT_REG', `Pre-Registered ${employeeId}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.put('/api/employees/:id', requireEditor, async (req, res) => {
@@ -266,7 +266,7 @@ app.put('/api/employees/:id', requireEditor, async (req, res) => {
     await logActivity(client, req, 'OCCUPANT_EDIT', `Edited Details for #${req.params.id}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch(err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/employees/bulk', requireEditor, async (req, res) => {
@@ -310,7 +310,7 @@ app.post('/api/employees/bulk', requireEditor, async (req, res) => {
     await logActivity(client, req, 'EXCEL_IMPORT', `Bulk Imported ${newOccupants.length} Employees`);
     await client.query('COMMIT');
     res.json({ success: true, inserted: newOccupants.length, skipped: existingIds.size });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/employees/:id/leave', requireEditor, async (req, res) => {
@@ -327,7 +327,7 @@ app.post('/api/employees/:id/leave', requireEditor, async (req, res) => {
     await logActivity(client, req, 'LEAVE', `Marked ${req.params.id} on leave`, remarks, empCheck.rows[0].camp_no);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/employees/:id/return-job', requireEditor, async (req, res) => {
@@ -346,7 +346,7 @@ app.post('/api/employees/:id/return-job', requireEditor, async (req, res) => {
     await logActivity(client, req, 'LEAVE_RETURN', `Returned ${req.params.id} to Job`, '', empCheck.rows[0].camp_no);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/employees/:id/rtd', requireEditor, async (req, res) => {
@@ -364,7 +364,7 @@ app.post('/api/employees/:id/rtd', requireEditor, async (req, res) => {
     await logActivity(client, req, 'RTD', `Processed RTD for ${req.params.id}`, reason || remarks, empCheck.rows[0].camp_no);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/employees/:id/relocate', requireEditor, async (req, res) => {
@@ -390,12 +390,17 @@ app.post('/api/employees/:id/relocate', requireEditor, async (req, res) => {
     const currentOcc = await client.query('SELECT count(*) FROM employees WHERE room_no = $1 AND employee_status IN (\'On Job\', \'On Leave\')', [targetRoomNo]);
     if (parseInt(currentOcc.rows[0].count) >= roomCheck.rows[0].capacity) { await client.query('ROLLBACK'); return res.status(400).json({ error: 'Room is full' }); }
 
-    await client.query(`INSERT INTO stay_history (employee_id, camp_no, room_no, cost_center, start_date, end_date, reason) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [req.params.id, emp.camp_no, emp.room_no, emp.cost_center, emp.entry_date, transferDate, `${reason} (Ref: ${docRef})`]);
-    await client.query(`UPDATE employees SET camp_no = $1, flat_code = $2, room_no = $3, grade_type = $4, entry_date = $5, afr_entry_ref = $6 WHERE employee_id = $7`, [targetCampNo, targetFlatCode, targetRoomNo, targetRoomGrade, transferDate, docRef, req.params.id]);
-    await logActivity(client, req, 'RELOCATION', `Relocated ${req.params.id}`, `Moved to ${targetCampNo} Room ${targetRoomNo}`, targetCampNo);
+    // A pre-registered employee has no bed yet, so this move is their first check-in, not a relocation.
+    const isFirstAssignment = emp.employee_status === 'Unassigned' || !emp.camp_no || emp.camp_no === 'UNASSIGNED';
+    if (!isFirstAssignment) {
+      await client.query(`INSERT INTO stay_history (employee_id, camp_no, room_no, cost_center, start_date, end_date, reason) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [req.params.id, emp.camp_no, emp.room_no, emp.cost_center, emp.entry_date || transferDate, transferDate, `${reason} (Ref: ${docRef})`]);
+    }
+    await client.query(`UPDATE employees SET camp_no = $1, flat_code = $2, room_no = $3, grade_type = $4, entry_date = $5, afr_entry_ref = $6, employee_status = $7 WHERE employee_id = $8`, [targetCampNo, targetFlatCode, targetRoomNo, targetRoomGrade, transferDate, docRef, isFirstAssignment ? 'On Job' : emp.employee_status, req.params.id]);
+    if (isFirstAssignment) await logActivity(client, req, 'CHECK_IN', `Assigned ${req.params.id} to Room ${targetRoomNo}`, `Placed in ${targetCampNo}`, targetCampNo);
+    else await logActivity(client, req, 'RELOCATION', `Relocated ${req.params.id}`, `Moved to ${targetCampNo} Room ${targetRoomNo}`, targetCampNo);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/transfer-requests', async (req, res) => {
@@ -417,7 +422,7 @@ app.post('/api/transfer-requests', async (req, res) => {
     }
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.patch('/api/transfer-requests/:id/review', async (req, res) => {
@@ -441,7 +446,7 @@ app.patch('/api/transfer-requests/:id/review', async (req, res) => {
     await logActivity(client, req, 'TRANSFER_APPROVAL', `${decision} request ${req.params.id}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.put('/api/billing/others', async (req, res) => {
@@ -455,7 +460,7 @@ app.put('/api/billing/others', async (req, res) => {
     await logActivity(client, req, 'BILLING', `Updated Other Costs for ${costCenter}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/maintenance-logs', requireEditor, async (req, res) => {
@@ -468,7 +473,7 @@ app.post('/api/maintenance-logs', requireEditor, async (req, res) => {
     await logActivity(client, req, 'MAINTENANCE', `Logged Work Order for Room ${roomNo}`, issueDetails);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch(err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 app.post('/api/misconduct-logs', requireEditor, async (req, res) => {
@@ -480,7 +485,7 @@ app.post('/api/misconduct-logs', requireEditor, async (req, res) => {
     await logActivity(client, req, 'DISCIPLINARY', `Filed Misconduct for #${employeeId}`, typeOfViolation);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch(err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch(err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 // ---- Employee photos (small JPEGs, kept in their own table and loaded on demand) ----
@@ -537,7 +542,7 @@ app.patch('/api/camps/:id/decommission', async (req, res) => {
     await logActivity(client, req, 'CAMP_MGMT', `Decommissioned ${req.params.id}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
 });
 
 const enforceSuperAdmin = (req, res, next) => {
@@ -556,7 +561,7 @@ app.post('/api/users', enforceSuperAdmin, async (req, res) => {
     await logActivity(client, req, 'USER_MGMT', `Created User ${name}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } finally { client.release(); }
 });
 
 app.patch('/api/users/:id', enforceSuperAdmin, async (req, res) => {
@@ -568,7 +573,7 @@ app.patch('/api/users/:id', enforceSuperAdmin, async (req, res) => {
     await logActivity(client, req, 'USER_MGMT', `Updated User ID ${req.params.id}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } finally { client.release(); }
 });
 
 app.post('/api/users/:id/reset-password', enforceSuperAdmin, async (req, res) => {
@@ -582,7 +587,7 @@ app.post('/api/users/:id/reset-password', enforceSuperAdmin, async (req, res) =>
     await logActivity(client, req, 'USER_MGMT', `Reset password for User ID ${req.params.id}`);
     await client.query('COMMIT');
     res.json({ success: true });
-  } catch (err) { await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } finally { client.release(); }
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Database error' }); } finally { client.release(); }
 });
 
 module.exports = app;
