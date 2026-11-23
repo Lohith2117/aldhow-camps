@@ -34,7 +34,7 @@ const _safeLoad = (key, fallback) => {
   }
 };
 
-let syncFailedAlerted = false;
+let syncFailCount = 0;
 
 export default function App() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -60,6 +60,7 @@ export default function App() {
   const [misconductLogs, setMisconductLogs] = useState([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState('');
 
   // Navigation
   const [activeTab, setActiveTab] = useState('map');
@@ -166,7 +167,8 @@ export default function App() {
     try {
       setIsSyncing(true);
       const data = await apiFetch('bootstrap', 'GET');
-      syncFailedAlerted = false;
+      syncFailCount = 0;
+      setSyncError('');
       if (data) {
         setUsers(data.users || []);
         setOccupants(data.occupants || []);
@@ -186,10 +188,8 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      if (!syncFailedAlerted) {
-        window.alert('Cloud sync failed. The application is running on cached data.');
-        syncFailedAlerted = true;
-      }
+      syncFailCount += 1;
+      if (syncFailCount >= 2) setSyncError(err?.message || 'Cannot reach server');
     } finally {
       setIsSyncing(false);
     }
@@ -1128,6 +1128,11 @@ export default function App() {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
               {currentUser.role}
             </span>
+            {syncError && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 ml-2" title={syncError}>
+                Sync paused ({syncError}) - retrying
+              </span>
+            )}
             {isSyncing && (
               <span className="flex items-center gap-1 text-cyan-600 font-bold ml-2">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Syncing...

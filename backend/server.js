@@ -22,7 +22,10 @@ app.use(express.json({ limit: '10mb' }));
 
 const pool = new Pool({
   connectionString: process.env.DATABASE_URL,
-  ssl: { rejectUnauthorized: false }
+  ssl: { rejectUnauthorized: false },
+  max: 5,
+  connectionTimeoutMillis: 15000,
+  idleTimeoutMillis: 10000
 });
 
 const loginLimiter = rateLimit({
