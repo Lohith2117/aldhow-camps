@@ -22,6 +22,11 @@ export async function apiFetch(endpoint, method = 'GET', body = null) {
   }
   if (!res.ok) {
     const errorData = await res.json().catch(() => ({}));
+    // An expired or invalid login token can never work again: end the session so the app returns to sign-in.
+    if ((res.status === 401 || res.status === 403) && /token/i.test(errorData.error || '')) {
+      try { sessionStorage.removeItem('dhow_session'); } catch { /* ignore */ }
+      window.dispatchEvent(new Event('dhow-session-expired'));
+    }
     throw new Error(errorData.error || `Server error (${res.status})`);
   }
   return res.json();

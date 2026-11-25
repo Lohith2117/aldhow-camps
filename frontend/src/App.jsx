@@ -236,6 +236,16 @@ export default function App() {
     }
   };
 
+  useEffect(() => {
+    const onExpired = () => {
+      setCurrentUser(null);
+      setActiveTab('map');
+      setLoginError('Your session has expired. Please sign in again.');
+    };
+    window.addEventListener('dhow-session-expired', onExpired);
+    return () => window.removeEventListener('dhow-session-expired', onExpired);
+  }, []);
+
   const handleLogout = () => {
     setCurrentUser(null);
     sessionStorage.removeItem('dhow_session');
