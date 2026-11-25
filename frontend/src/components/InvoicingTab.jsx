@@ -11,6 +11,8 @@ export default function InvoicingTab({
   projectInvoicingData,
   setShowManageCostCentersModal,
   setSelectedInvoiceModal,
+  extraInvoiceLines = [],
+  onOpenExtraInvoices,
   handleExportInvoicingCSV
 }) {
   return (
@@ -124,6 +126,7 @@ export default function InvoicingTab({
                 <th className="py-3.5 px-4 bg-purple-50/70 text-purple-900">Others Description / Note</th>
                 <th className="py-3.5 px-4 text-right">Total Recharge</th>
                 <th className="py-3.5 px-4 text-right">Invoice</th>
+                <th className="py-3.5 px-4 text-right">Transport / Consumables</th>
               </tr>
             </thead>
             <tbody className="divide-y divide-slate-200">
@@ -178,6 +181,15 @@ export default function InvoicingTab({
                       >
                         <Receipt className="w-3.5 h-3.5 text-cyan-400" />
                         <span>View Invoice</span>
+                      </button>
+                    </td>
+                    <td className="py-3.5 px-4 text-right">
+                      <button
+                        onClick={() => onOpenExtraInvoices && onOpenExtraInvoices(item)}
+                        className="px-3 py-1.5 bg-purple-600 hover:bg-purple-500 text-white rounded-lg text-xs font-bold inline-flex items-center gap-1.5 cursor-pointer shadow-xs"
+                      >
+                        <Receipt className="w-3.5 h-3.5" />
+                        <span>Extra Invoices ({extraInvoiceLines.filter(l => l.costCenter === item.costCenter && l.billingPeriod === billingPeriod).length})</span>
                       </button>
                     </td>
                   </tr>

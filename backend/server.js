@@ -34,6 +34,16 @@ const loginLimiter = rateLimit({
   message: { error: 'Too many login attempts. Please try again later.' }
 });
 
+// Remember the cost centre an employee is leaving, so the history of changes is kept.
+const recordCostCenterChange = async (client, req, emp, toCostCenter, reason) => {
+  if (!emp || emp.cost_center === toCostCenter) return;
+  await client.query(
+    `INSERT INTO cost_center_history (employee_id, cost_center, division, start_date, end_date, changed_by, reason)
+     VALUES ($1::varchar, $2, $3, COALESCE((SELECT MAX(end_date) FROM cost_center_history WHERE employee_id = $1::varchar), $4::date), CURRENT_DATE, $5, $6)`,
+    [emp.employee_id, emp.cost_center, emp.division, emp.entry_date, req.user?.name || null, reason || null]
+  );
+};
+
 const logActivity = async (client, req, category, actionTitle, details = '', campNo = null) => {
   await client.query(
     `INSERT INTO activity_logs (actor_name, actor_role, category, action_title, details, camp_no) 
@@ -99,12 +109,13 @@ const assertCampAccess = (req, campNo) => {
 
 app.get('/api/bootstrap', async (req, res) => {
   try {
-    const [users, emps, camps, floors, flats, rooms, ccs, leaves, rtds, trs, acts, others, maint, misc] = await Promise.all([
+    const [users, emps, camps, floors, flats, rooms, ccs, leaves, rtds, trs, acts, others, maint, misc, stays, ccHist, extraLines] = await Promise.all([
       pool.query('SELECT * FROM users'), pool.query('SELECT * FROM employees'), pool.query('SELECT * FROM camps'),
       pool.query('SELECT * FROM floors'), pool.query('SELECT * FROM flats'), pool.query('SELECT * FROM rooms'),
       pool.query('SELECT * FROM cost_centers'), pool.query('SELECT * FROM leave_logs'), pool.query('SELECT * FROM rtd_logs'),
       pool.query('SELECT * FROM transfer_requests'), pool.query('SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 500'),
-      pool.query('SELECT * FROM billing_other_costs'), pool.query('SELECT * FROM maintenance_logs'), pool.query('SELECT * FROM misconduct_logs')
+      pool.query('SELECT * FROM billing_other_costs'), pool.query('SELECT * FROM maintenance_logs'), pool.query('SELECT * FROM misconduct_logs'),
+      pool.query('SELECT * FROM stay_history ORDER BY start_date, id'), pool.query('SELECT * FROM cost_center_history ORDER BY end_date, id'), pool.query('SELECT * FROM extra_invoice_lines ORDER BY id')
     ]);
 
     const isEditor = req.user.role === 'CAMP_EDITOR';
@@ -134,6 +145,8 @@ app.get('/api/bootstrap', async (req, res) => {
         permissions: { canManageUsers: u.can_manage_users, canAddCamps: u.can_add_camps, canDeleteCamps: u.can_delete_camps, canEditOccupants: u.can_edit_occupants, canApproveTransfers: u.can_approve_transfers }
       })),
       occupants: emps.rows.filter(filterScope).map(e => ({ 
+        stayHistory: stays.rows.filter(h => h.employee_id === e.employee_id).map(h => ({ campNo: h.camp_no, roomNo: h.room_no, costCenter: h.cost_center, roomGrade: h.room_grade || e.grade_type, startDate: h.start_date, endDate: h.end_date, reason: h.reason })),
+        costCenterHistory: ccHist.rows.filter(h => h.employee_id === e.employee_id).map(h => ({ costCenter: h.cost_center, division: h.division, startDate: h.start_date, endDate: h.end_date, changedBy: h.changed_by, reason: h.reason })),
         employeeId: e.employee_id, employeeName: e.employee_name, nationality: e.nationality, title: e.title, productiveType: e.productive_type, roomGrade: e.grade_type, division: e.division, 
         costCenter: e.cost_center, passportNo: e.passport_no, civilId: e.civil_id, mobileNo: e.mobile_no, employeeStatus: e.employee_status, 
         campNo: e.camp_no, roomNo: e.room_no, flatCode: e.flat_code, entryDate: e.entry_date, materialsIssued: e.materials_issued, afrEntryRef: e.afr_entry_ref, afrLogNo: e.afr_log_no, afrExitRef: e.afr_exit_ref, homeCountryAddress: e.home_country_address, residencyCompany: e.residency_company, srNo: e.sr_no, emergencyContactName: e.emergency_contact_name, emergencyContactPhone: e.emergency_contact_phone,
@@ -144,6 +157,7 @@ app.get('/api/bootstrap', async (req, res) => {
       rtdLogs: rtds.rows.filter(filterScope).map(r => ({ id: r.id, employeeId: r.employee_id, employeeName: r.employee_name, rtdType: r.rtd_type, rtdDate: r.rtd_date, vacatedCampNo: r.vacated_camp_no, vacatedRoomNo: r.vacated_room_no, costCenter: r.cost_center, remarks: r.remarks, recordedBy: r.recorded_by })),
       transferRequests: trs.rows.map(t => ({ id: t.id, employeeId: t.employee_id, employeeName: t.employee_name, fromCostCenter: t.from_cost_center, fromDivision: t.from_division, toCostCenter: t.to_cost_center, toDivision: t.to_division, reason: t.reason, status: t.status, requestedBy: t.requested_by, requestedByRole: t.requested_by_role, reviewedBy: t.reviewed_by, reviewDate: t.review_date })),
       activityLogs: acts.rows.map(a => ({ id: a.id, actorName: a.actor_name, actorRole: a.actor_role, category: a.category, actionTitle: a.action_title, details: a.details, campNo: a.camp_no, timestamp: a.timestamp })),
+      extraInvoiceLines: extraLines.rows.map(x => ({ id: x.id, billingPeriod: x.billing_period, costCenter: x.cost_center, category: x.category, description: x.description, quantity: Number(x.quantity), unitRateKwd: Number(x.unit_rate_kwd), createdBy: x.created_by })),
       otherCosts: others.rows.map(o => ({ id: o.id, billingPeriod: o.billing_period, costCenter: o.cost_center, otherCostKwd: o.other_cost_kwd, otherCostDescription: o.other_cost_description, updatedBy: o.updated_by })),
       maintenanceLogs: maint.rows.filter(filterScope).map(m => ({ id: m.id, date: m.date, issueDetails: m.issue_details, reportedByEmpId: m.reported_by_emp_id, roomNo: m.room_no, status: m.status })),
       misconductLogs: misc.rows.map(m => ({ id: m.id, employeeId: m.employee_id, incidentDate: m.incident_date, typeOfViolation: m.type_of_violation, remarks: m.remarks }))
@@ -354,7 +368,8 @@ app.post('/api/employees/:id/return-job', requireEditor, async (req, res) => {
 
 app.post('/api/employees/:id/rtd', requireEditor, async (req, res) => {
   const { rtdType, rtdDate, remarks, reason } = req.body; 
-  if (!['Resigned', 'Terminated', 'Dismissed'].includes(rtdType)) return res.status(400).json({ error: 'Invalid RTD Type' });
+  if (!['Resigned', 'Terminated', 'Dismissed', 'Others'].includes(rtdType)) return res.status(400).json({ error: 'Invalid RTD Type' });
+  if (!rtdDate) return res.status(400).json({ error: 'Exit date required' });
   const client = await pool.connect();
   try {
     await client.query('BEGIN');
@@ -362,6 +377,11 @@ app.post('/api/employees/:id/rtd', requireEditor, async (req, res) => {
     if (empCheck.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
     await client.query(`UPDATE leave_logs SET status = 'Closed (RTD)', actual_return_date = $1 WHERE employee_id = $2 AND status = 'Active Leave'`, [rtdDate, req.params.id]);
     await client.query(`UPDATE stay_history SET end_date = $1 WHERE employee_id = $2 AND end_date IS NULL`, [rtdDate, req.params.id]);
+    // close the stay he is leaving so it stays in his history and is still billed up to the exit date
+    const leaving = empCheck.rows[0];
+    if (leaving.camp_no && leaving.camp_no !== 'UNASSIGNED' && leaving.room_no) {
+      await client.query(`INSERT INTO stay_history (employee_id, camp_no, room_no, cost_center, start_date, end_date, reason, room_grade) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [req.params.id, leaving.camp_no, leaving.room_no, leaving.cost_center, leaving.entry_date || rtdDate, rtdDate, rtdType === 'Others' ? 'Left camp (Others)' : `RTD - ${rtdType}`, leaving.grade_type]);
+    }
     await client.query(`UPDATE employees SET employee_status = $1, rtd_type = $2, rtd_date = $3, camp_no = NULL, room_no = NULL WHERE employee_id = $4`, [`RTD - ${rtdType}`, rtdType, rtdDate, req.params.id]);
     await client.query(`INSERT INTO rtd_logs (employee_id, employee_name, rtd_type, rtd_date, vacated_camp_no, vacated_room_no, cost_center, remarks, recorded_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`, [req.params.id, empCheck.rows[0].employee_name, rtdType, rtdDate, empCheck.rows[0].camp_no, empCheck.rows[0].room_no, empCheck.rows[0].cost_center, reason || remarks, req.user.name]);
     await logActivity(client, req, 'RTD', `Processed RTD for ${req.params.id}`, reason || remarks, empCheck.rows[0].camp_no);
@@ -396,7 +416,7 @@ app.post('/api/employees/:id/relocate', requireEditor, async (req, res) => {
     // A pre-registered employee has no bed yet, so this move is their first check-in, not a relocation.
     const isFirstAssignment = emp.employee_status === 'Unassigned' || !emp.camp_no || emp.camp_no === 'UNASSIGNED';
     if (!isFirstAssignment) {
-      await client.query(`INSERT INTO stay_history (employee_id, camp_no, room_no, cost_center, start_date, end_date, reason) VALUES ($1, $2, $3, $4, $5, $6, $7)`, [req.params.id, emp.camp_no, emp.room_no, emp.cost_center, emp.entry_date || transferDate, transferDate, `${reason} (Ref: ${docRef})`]);
+      await client.query(`INSERT INTO stay_history (employee_id, camp_no, room_no, cost_center, start_date, end_date, reason, room_grade) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`, [req.params.id, emp.camp_no, emp.room_no, emp.cost_center, emp.entry_date || transferDate, transferDate, `${reason} (Ref: ${docRef})`, emp.grade_type]);
     }
     await client.query(`UPDATE employees SET camp_no = $1, flat_code = $2, room_no = $3, grade_type = $4, entry_date = $5, afr_entry_ref = $6, employee_status = $7 WHERE employee_id = $8`, [targetCampNo, targetFlatCode, targetRoomNo, roomCheck.rows[0].room_grade || targetRoomGrade || emp.grade_type, transferDate, docRef, isFirstAssignment ? 'On Job' : emp.employee_status, req.params.id]);
     if (isFirstAssignment) await logActivity(client, req, 'CHECK_IN', `Assigned ${req.params.id} to Room ${targetRoomNo}`, `Placed in ${targetCampNo}`, targetCampNo);
@@ -415,6 +435,7 @@ app.post('/api/transfer-requests', async (req, res) => {
     if (empCheck.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
 
     if (req.user.role === 'SUPER_ADMIN') {
+      await recordCostCenterChange(client, req, empCheck.rows[0], toCostCenter, reason);
       await client.query('UPDATE employees SET cost_center = $1, division = $2 WHERE employee_id = $3', [toCostCenter, toDivision, employeeId]);
       await logActivity(client, req, 'TRANSFER', `Direct Transfer #${employeeId}`, `Moved to ${toCostCenter}`);
     } else if (req.user.role === 'AUDITOR') {
@@ -443,6 +464,8 @@ app.patch('/api/transfer-requests/:id/review', async (req, res) => {
       if (trCheck.rows[0].request_type === 'NEW_COST_CENTER' || trCheck.rows[0].employee_id === 'SYS-CC') {
         await client.query('INSERT INTO cost_centers (code, name, division) VALUES ($1, $2, $3) ON CONFLICT (code) DO NOTHING', [trCheck.rows[0].to_cost_center, trCheck.rows[0].new_cost_center_name || trCheck.rows[0].to_cost_center, trCheck.rows[0].to_division]);
       } else {
+        const trEmp = await client.query('SELECT * FROM employees WHERE employee_id = $1 FOR UPDATE', [trCheck.rows[0].employee_id]);
+        await recordCostCenterChange(client, req, trEmp.rows[0], trCheck.rows[0].to_cost_center, trCheck.rows[0].reason);
         await client.query('UPDATE employees SET cost_center = $1, division = $2 WHERE employee_id = $3', [trCheck.rows[0].to_cost_center, trCheck.rows[0].to_division, trCheck.rows[0].employee_id]);
       }
     }
@@ -461,6 +484,35 @@ app.put('/api/billing/others', async (req, res) => {
     await client.query('BEGIN');
     await client.query(`INSERT INTO billing_other_costs (billing_period, cost_center, other_cost_kwd, other_cost_description, updated_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (billing_period, cost_center) DO UPDATE SET other_cost_kwd = EXCLUDED.other_cost_kwd, other_cost_description = EXCLUDED.other_cost_description, updated_by = EXCLUDED.updated_by`, [billingPeriod, costCenter, amount, description, req.user.name]);
     await logActivity(client, req, 'BILLING', `Updated Other Costs for ${costCenter}`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+});
+
+app.post('/api/billing/extra-lines', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+  const { billingPeriod, costCenter, category, description, quantity, unitRateKwd } = req.body;
+  const qty = Number(quantity), rate = Number(unitRateKwd);
+  if (!billingPeriod || !costCenter || !category || !String(description || '').trim()) return res.status(400).json({ error: 'Period, cost center, category and description are required' });
+  if (!Number.isFinite(qty) || qty <= 0 || !Number.isFinite(rate) || rate < 0) return res.status(400).json({ error: 'Quantity must be above 0 and rate cannot be negative' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query('INSERT INTO extra_invoice_lines (billing_period, cost_center, category, description, quantity, unit_rate_kwd, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7)', [billingPeriod, costCenter, category, String(description).trim(), qty, rate, req.user.name]);
+    await logActivity(client, req, 'BILLING', `Added ${category} charge for ${costCenter}`, `${billingPeriod}: ${description} (${qty} x ${rate})`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+});
+
+app.delete('/api/billing/extra-lines/:id', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const del = await client.query('DELETE FROM extra_invoice_lines WHERE id = $1 RETURNING cost_center, category, billing_period', [req.params.id]);
+    if (del.rowCount === 0) { await client.query('ROLLBACK'); return res.status(404).json({ error: 'Not found' }); }
+    await logActivity(client, req, 'BILLING', `Removed ${del.rows[0].category} charge for ${del.rows[0].cost_center}`, del.rows[0].billing_period);
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }

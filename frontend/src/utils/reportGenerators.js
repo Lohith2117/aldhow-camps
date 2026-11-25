@@ -103,7 +103,7 @@ export function printFormattedElement(elementId, docTitle = 'Al-Dhow Official Re
           tr, td, th { page-break-inside: avoid; break-inside: avoid; }
           thead { display: table-header-group; }
           img { max-width: 100%; object-fit: contain; }
-          .no-print { display: none !important; }
+          .no-print, [data-no-print="true"] { display: none !important; }
           input, textarea { border: none !important; background: transparent !important; font-family: inherit; }
         </style>
       </head>
@@ -1016,4 +1016,41 @@ export async function exportImportTemplate() {
   });
 
   await downloadWorkbook(wb, 'Dhow_Occupants_Import_Template.xlsx');
+}
+
+// ============================================================================
+// CAMP VACATED LOG (everyone who left the camp, with the month filter applied by the caller)
+// ============================================================================
+export async function exportVacatedLog(rows, periodLabel = 'All months') {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Vacated Log', {
+    pageSetup: { paperSize: 9, orientation: 'landscape', fitToPage: true, fitToWidth: 1, fitToHeight: 0 }
+  });
+  const headers = ['Sl', 'Emp ID', 'Name', 'Designation', 'Grade', 'Cost Center', 'Division', 'Camp', 'Room', 'Entry Date', 'Exit Date', 'Days Stayed', 'Exit Type', 'Reason / Remarks', 'Recorded By'];
+  ws.columns = [6, 11, 24, 20, 12, 18, 10, 11, 13, 12, 12, 11, 20, 30, 16].map(width => ({ width }));
+  await addLogoToWorkbook(wb, ws, { col: 0.2, row: 0.1 }, { width: 90, height: 38 });
+  ws.mergeCells('C1:O1');
+  ws.getCell('C1').value = `CAMP VACATED LOG - ${periodLabel}`;
+  ws.getCell('C1').font = { name: 'Calibri', size: 14, bold: true };
+  ws.getCell('C1').alignment = { horizontal: 'center', vertical: 'middle' };
+  ws.getRow(1).height = 34;
+  headers.forEach((h, i) => {
+    const cell = ws.getCell(2, i + 1);
+    cell.value = h;
+    cell.font = { name: 'Calibri', size: 10, bold: true };
+    cell.fill = headerFill;
+    cell.border = thinBorder;
+    cell.alignment = { horizontal: 'center', vertical: 'middle', wrapText: true };
+  });
+  rows.forEach((v, i) => {
+    const values = [i + 1, v.employeeId, v.employeeName, v.title, v.grade, v.costCenter, v.division, v.campNo, v.roomNo, v.entryDate, v.exitDate, v.daysStayed, v.exitType, v.remarks, v.recordedBy];
+    values.forEach((val, c) => {
+      const cell = ws.getCell(3 + i, c + 1);
+      cell.value = val;
+      cell.border = thinBorder;
+      cell.font = { name: 'Calibri', size: 10 };
+    });
+  });
+  const todayStr = new Date().toISOString().split('T')[0];
+  await downloadWorkbook(wb, `Camp Vacated Log - ${periodLabel} - ${todayStr}.xlsx`);
 }
