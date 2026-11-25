@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import {
-  Download, Printer, Building2, UserCheck, ShieldAlert, Wrench, Calendar
+  Download, Printer, Building2, UserCheck, ShieldAlert, Wrench, Calendar, LogOut
 } from 'lucide-react';
 import dhowLogoImg from '../assets/dhow-logo.png';
 import {
@@ -8,8 +8,10 @@ import {
   exportCampOccupancySummary,
   exportDailyOccupancyReport,
   exportMisconductLog,
-  exportMaintenanceLog
+  exportMaintenanceLog,
+  exportVacatedLog
 } from '../utils/reportGenerators';
+import { toDay } from '../utils/billing';
 
 export default function ReportsTab({
   camps,
@@ -26,6 +28,23 @@ export default function ReportsTab({
   const [conductedAt, setConductedAt] = useState('All Active Camp Facilities');
   const [approverName, setApproverName] = useState('Mohamed Bayoumi');
   const [reportRemarks, setReportRemarks] = useState('Regular accommodation operations compliant and inspected.');
+
+  // Camp vacated log: everyone who left the camp (RTD or left on his own), month by month
+  const [vacatedMonth, setVacatedMonth] = useState('ALL');
+  const [vacatedCamp, setVacatedCamp] = useState('ALL');
+  const vacatedAll = rtdLogs.map(r => {
+    const emp = occupants.find(o => o.employeeId === r.employeeId) || {};
+    const exitDay = toDay(r.rtdDate), entryDay = toDay(emp.entryDate);
+    return {
+      employeeId: r.employeeId, employeeName: r.employeeName, title: emp.title || '', grade: emp.roomGrade || '', costCenter: r.costCenter || emp.costCenter || '', division: emp.division || '',
+      campNo: r.vacatedCampNo || '', roomNo: r.vacatedRoomNo || '', entryDate: emp.entryDate ? String(emp.entryDate).slice(0, 10) : '', exitDate: r.rtdDate ? String(r.rtdDate).slice(0, 10) : '',
+      daysStayed: exitDay !== null && entryDay !== null && r.vacatedCampNo ? Math.max(0, exitDay - entryDay) : '',
+      exitType: r.rtdType === 'Others' ? 'Left camp (Others)' : `RTD - ${r.rtdType}`, remarks: r.remarks || '', recordedBy: r.recordedBy || ''
+    };
+  }).sort((a, b) => String(b.exitDate).localeCompare(String(a.exitDate)));
+  const vacatedMonths = Array.from(new Set(vacatedAll.map(v => v.exitDate.slice(0, 7)).filter(Boolean))).sort().reverse();
+  const vacatedRows = vacatedAll.filter(v => (vacatedMonth === 'ALL' || v.exitDate.startsWith(vacatedMonth)) && (vacatedCamp === 'ALL' || v.campNo === vacatedCamp));
+  const vacatedLabel = vacatedMonth === 'ALL' ? 'All months' : new Date(vacatedMonth + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' });
 
   const targetReportCamp = camps.find(c => c.id === reportCampId) || activeCamp || camps[0];
 
@@ -91,9 +110,32 @@ export default function ReportsTab({
             <Wrench className="w-4 h-4 text-amber-400" />
             <span>Maintenance Log</span>
           </button>
+
+          <button
+            onClick={() => setSelectedTemplateTab('t8')}
+            className={`px-3.5 py-2 rounded-xl text-xs font-bold whitespace-nowrap flex items-center gap-2 cursor-pointer transition-all ${
+              selectedTemplateTab === 't8' ? 'bg-slate-900 text-white shadow-sm' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+            }`}
+          >
+            <LogOut className="w-4 h-4 text-orange-400" />
+            <span>Camp Vacated Log</span>
+          </button>
         </div>
 
         <div className="flex items-center gap-2">
+          {selectedTemplateTab === 't8' && (
+            <>
+              <select value={vacatedMonth} onChange={e => setVacatedMonth(e.target.value)} className="bg-slate-50 border border-slate-300 text-slate-900 font-bold text-xs rounded-xl px-3 py-2">
+                <option value="ALL">All months</option>
+                {vacatedMonths.map(m => <option key={m} value={m}>{new Date(m + '-01T00:00:00Z').toLocaleDateString('en-GB', { month: 'long', year: 'numeric', timeZone: 'UTC' })}</option>)}
+              </select>
+              <select value={vacatedCamp} onChange={e => setVacatedCamp(e.target.value)} className="bg-slate-50 border border-slate-300 text-slate-900 font-bold text-xs rounded-xl px-3 py-2">
+                <option value="ALL">All camps</option>
+                {camps.map(c => <option key={c.id} value={c.campNo}>{c.campNo}</option>)}
+              </select>
+            </>
+          )}
+
           {(selectedTemplateTab === 'daily' || selectedTemplateTab === 'weekly') && (
             <select
               value={reportCampId}
@@ -106,7 +148,7 @@ export default function ReportsTab({
 
           <button
             type="button"
-            onClick={() => printFormattedElement('excel-print-area', 'Al-Dhow Official Report', selectedTemplateTab === 'daily')}
+            onClick={() => printFormattedElement('excel-print-area', 'Al-Dhow Official Report', selectedTemplateTab === 'daily' || selectedTemplateTab === 't8')}
             className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 cursor-pointer shadow-xs"
           >
             <Printer className="w-4 h-4" /> Print / Save PDF (1 Page Fit)
@@ -141,6 +183,16 @@ export default function ReportsTab({
             <button
               type="button"
               onClick={() => exportMisconductLog(misconductLogs)}
+              className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
+            >
+              <Download className="w-4 h-4" /> Download Excel (.xlsx)
+            </button>
+          )}
+
+          {selectedTemplateTab === 't8' && (
+            <button
+              type="button"
+              onClick={() => exportVacatedLog(vacatedRows, vacatedLabel)}
               className="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs cursor-pointer"
             >
               <Download className="w-4 h-4" /> Download Excel (.xlsx)
@@ -435,6 +487,62 @@ export default function ReportsTab({
                       </tr>
                     );
                   })}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )}
+
+        {/* 8. CAMP VACATED LOG */}
+        {selectedTemplateTab === 't8' && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between border-b-2 border-black pb-2">
+              <img src={dhowLogoImg} alt="Dhow Engineering" className="h-7 w-auto object-contain" />
+              <div className="report-title text-xs font-black tracking-wider uppercase text-center flex-1">
+                CAMP VACATED LOG — {vacatedLabel}{vacatedCamp !== 'ALL' ? ` — ${vacatedCamp}` : ''}
+              </div>
+              <div className="w-16 text-right text-[10px] font-mono">{vacatedRows.length} exits</div>
+            </div>
+            <div className="border-2 border-black p-2 bg-white">
+              <table className="w-full border-collapse text-[10px]">
+                <thead>
+                  <tr className="bg-slate-100 font-bold text-center">
+                    <th className="border border-black p-1">Sl</th>
+                    <th className="border border-black p-1">Emp ID</th>
+                    <th className="border border-black p-1">Name</th>
+                    <th className="border border-black p-1">Designation</th>
+                    <th className="border border-black p-1">Grade</th>
+                    <th className="border border-black p-1">Cost Center</th>
+                    <th className="border border-black p-1">Camp</th>
+                    <th className="border border-black p-1">Room</th>
+                    <th className="border border-black p-1">Entry Date</th>
+                    <th className="border border-black p-1">Exit Date</th>
+                    <th className="border border-black p-1">Days</th>
+                    <th className="border border-black p-1">Exit Type</th>
+                    <th className="border border-black p-1">Reason / Remarks</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {vacatedRows.length === 0 && (
+                    <tr><td colSpan={13} className="border border-black p-3 text-center text-slate-500">No one left the camp in this selection.</td></tr>
+                  )}
+                  {vacatedRows.map((v, i) => (
+                    <tr key={`${v.employeeId}-${v.exitDate}-${i}`} style={{ breakInside: 'avoid' }}>
+                      <td className="border border-black px-1 py-0.5 text-center">{i + 1}</td>
+                      <td className="border border-black px-1 py-0.5 text-center font-mono font-bold">{v.employeeId}</td>
+                      <td className="border border-black px-1 py-0.5 font-semibold">{v.employeeName}</td>
+                      <td className="border border-black px-1 py-0.5">{v.title}</td>
+                      <td className="border border-black px-1 py-0.5 text-center">{v.grade}</td>
+                      <td className="border border-black px-1 py-0.5 text-center">{v.costCenter}</td>
+                      <td className="border border-black px-1 py-0.5 text-center">{v.campNo}</td>
+                      <td className="border border-black px-1 py-0.5 text-center font-mono">{v.roomNo}</td>
+                      <td className="border border-black px-1 py-0.5 text-center">{v.entryDate}</td>
+                      <td className="border border-black px-1 py-0.5 text-center font-bold">{v.exitDate}</td>
+                      <td className="border border-black px-1 py-0.5 text-center">{v.daysStayed}</td>
+                      <td className="border border-black px-1 py-0.5 text-center">{v.exitType}</td>
+                      <td className="border border-black px-1 py-0.5">{v.remarks}</td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>

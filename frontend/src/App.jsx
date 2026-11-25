@@ -12,6 +12,8 @@ import { apiFetch } from './utils/api';
 
 import { printFormattedElement } from './utils/reportGenerators';
 import { EmployeePhoto, PhotoPicker, persistEmployeePhoto } from './components/EmployeePhoto';
+import OccupantHistoryModal from './components/OccupantHistoryModal';
+import { toDay, dayToIso, parsePeriod, periodLabel, chargesForMonth, monthsOfStay, buildPieces } from './utils/billing';
 
 import InvoicingTab from './components/InvoicingTab';
 import ReportsTab from './components/ReportsTab';
@@ -34,7 +36,8 @@ const _safeLoad = (key, fallback) => {
   }
 };
 
-let syncFailedAlerted = false;
+let syncFailCount = 0;
+const statusLabel = (st) => (st === 'RTD - Others' ? 'Left Camp (Others)' : st);
 
 export default function App() {
   const todayStr = useMemo(() => new Date().toISOString().split('T')[0], []);
@@ -55,11 +58,19 @@ export default function App() {
   const [rtdLogs, setRtdLogs] = useState([]);
   const [transferRequests, setTransferRequests] = useState([]);
   const [otherCosts, setOtherCosts] = useState([]);
+  const [extraInvoiceLines, setExtraInvoiceLines] = useState([]);
+  const [savedRates, setSavedRates] = useState({ nonManual: 120, manual: 45 });
+  const ratesDirty = useRef(false);
+  const [extraInvoiceModal, setExtraInvoiceModal] = useState(null);
+  const [historyOccupant, setHistoryOccupant] = useState(null);
+  const [extraInvoiceCategory, setExtraInvoiceCategory] = useState('Transport');
+  const [extraLineForm, setExtraLineForm] = useState({ description: '', quantity: '1', unitRateKwd: '' });
   const [activityLogs, setActivityLogs] = useState([]);
   const [maintenanceLogs, setMaintenanceLogs] = useState([]);
   const [misconductLogs, setMisconductLogs] = useState([]);
 
   const [isSyncing, setIsSyncing] = useState(false);
+  const [syncError, setSyncError] = useState('');
 
   // Navigation
   const [activeTab, setActiveTab] = useState('map');
@@ -166,7 +177,8 @@ export default function App() {
     try {
       setIsSyncing(true);
       const data = await apiFetch('bootstrap', 'GET');
-      syncFailedAlerted = false;
+      syncFailCount = 0;
+      setSyncError('');
       if (data) {
         setUsers(data.users || []);
         setOccupants(data.occupants || []);
@@ -178,6 +190,11 @@ export default function App() {
         setTransferRequests(data.transferRequests || []);
         setActivityLogs(data.activityLogs || []);
         setOtherCosts(data.otherCosts || []);
+        setExtraInvoiceLines(data.extraInvoiceLines || []);
+        if (data.rates) {
+          setSavedRates(data.rates);
+          if (!ratesDirty.current) setRates(data.rates);
+        }
         setMaintenanceLogs(data.maintenanceLogs || []);
         setMisconductLogs(data.misconductLogs || []);
         
@@ -186,10 +203,8 @@ export default function App() {
       }
     } catch (err) {
       console.error(err);
-      if (!syncFailedAlerted) {
-        window.alert('Cloud sync failed. The application is running on cached data.');
-        syncFailedAlerted = true;
-      }
+      syncFailCount += 1;
+      if (syncFailCount >= 2) setSyncError(err?.message || 'Cannot reach server');
     } finally {
       setIsSyncing(false);
     }
@@ -226,6 +241,16 @@ export default function App() {
       setLoginLoading(false);
     }
   };
+
+  useEffect(() => {
+    const onExpired = () => {
+      setCurrentUser(null);
+      setActiveTab('map');
+      setLoginError('Your session has expired. Please sign in again.');
+    };
+    window.addEventListener('dhow-session-expired', onExpired);
+    return () => window.removeEventListener('dhow-session-expired', onExpired);
+  }, []);
 
   const handleLogout = () => {
     setCurrentUser(null);
@@ -289,12 +314,8 @@ export default function App() {
   }, [occupants, searchTerm, statusFilter, divisionFilter, productiveTypeFilter]);
 
   const projectInvoicingData = useMemo(() => {
-    const [monthName, yearStr] = billingPeriod.split(' ');
-    const monthIdx = new Date(`${monthName} 1, 2000`).getMonth();
-    const year = parseInt(yearStr, 10);
-    const daysInMonth = new Date(year, monthIdx + 1, 0).getDate();
-    const monthStart = new Date(year, monthIdx, 1);
-    const monthEnd = new Date(year, monthIdx + 1, 0);
+    const { year, monthIdx } = parsePeriod(billingPeriod);
+    const todayDay = toDay(todayStr);
 
     const costCenterMap = {};
 
@@ -305,54 +326,33 @@ export default function App() {
           totalOccupants: 0, nonManualBeds: 0, manualBeds: 0, nonManualAmountFils: 0, manualAmountFils: 0,
           otherCostFils: Math.round(Number(otherCosts.find(oc => oc.costCenter === cc.code && oc.billingPeriod === billingPeriod)?.otherCostKwd || 0) * 1000),
           otherCostDesc: otherCosts.find(oc => oc.costCenter === cc.code && oc.billingPeriod === billingPeriod)?.otherCostDescription || '',
-          totalAmountFils: 0, occupants: []
+          totalAmountFils: 0, occupants: [], occupantRows: []
         };
       }
     });
 
     occupants.forEach(occ => {
-      const timeline = [...(occ.stayHistory || [])];
-      
-      if (!occ.employeeStatus.startsWith('RTD') && occ.campNo !== 'UNASSIGNED') {
-        timeline.push({
-          campNo: occ.campNo, roomGrade: occ.roomGrade, costCenter: occ.costCenter,
-          startDate: occ.entryDate, endDate: null // active
-        });
-      }
-
-      timeline.forEach(stay => {
-        if (!stay.costCenter || !costCenterMap[stay.costCenter]) return;
-
-        const stayStart = new Date(stay.startDate);
-        const stayEnd = stay.endDate ? new Date(stay.endDate) : new Date();
-
-        const overlapStart = stayStart > monthStart ? stayStart : monthStart;
-        const overlapEnd = stayEnd < monthEnd ? stayEnd : monthEnd;
-        
-        if (overlapStart <= overlapEnd) {
-          const daysOccupied = Math.floor((overlapEnd - overlapStart) / (1000 * 60 * 60 * 24)) + 1;
-          const rateKwd = stay.roomGrade === 'Non-Manual' ? Number(rates.nonManual || 0) : Number(rates.manual || 0);
-          
-          const proratedFils = Math.round((daysOccupied / daysInMonth) * rateKwd * 1000);
-
-          if (stay.roomGrade === 'Non-Manual') {
-            costCenterMap[stay.costCenter].nonManualBeds += (daysOccupied / daysInMonth);
-            costCenterMap[stay.costCenter].nonManualAmountFils += proratedFils;
-          } else {
-            costCenterMap[stay.costCenter].manualBeds += (daysOccupied / daysInMonth);
-            costCenterMap[stay.costCenter].manualAmountFils += proratedFils;
-          }
-
-          if (!costCenterMap[stay.costCenter].occupants.includes(occ)) {
-            costCenterMap[stay.costCenter].occupants.push(occ);
-            costCenterMap[stay.costCenter].totalOccupants += 1;
-          }
+      chargesForMonth(occ, year, monthIdx, rates, todayDay).forEach(row => {
+        const target = costCenterMap[row.cc];
+        if (!target) return;
+        if (row.grade === 'Non-Manual') {
+          target.nonManualBeds += 1;
+          target.nonManualAmountFils += row.amountFils;
+        } else {
+          target.manualBeds += 1;
+          target.manualAmountFils += row.amountFils;
         }
+        if (!target.occupants.includes(occ)) {
+          target.occupants.push(occ);
+          target.totalOccupants += 1;
+        }
+        target.occupantRows.push({ employeeId: occ.employeeId, employeeName: occ.employeeName, roomNo: row.roomNo, grade: row.grade, days: row.days });
       });
     });
 
     const items = Object.values(costCenterMap).map(item => ({
       ...item,
+      occupantRows: [...item.occupantRows].sort((a, b) => String(a.roomNo).localeCompare(String(b.roomNo)) || String(a.employeeId).localeCompare(String(b.employeeId))),
       nonManualAmountKWD: item.nonManualAmountFils / 1000,
       manualAmountKWD: item.manualAmountFils / 1000,
       otherCostKWD: item.otherCostFils / 1000,
@@ -367,7 +367,7 @@ export default function App() {
     const totalOthersKWD = items.reduce((acc, curr) => acc + curr.otherCostKWD, 0);
 
     return { items, grandTotalKWD, totalNonManualKWD, totalManualKWD, totalOthersKWD };
-  }, [occupants, costCenters, rates, otherCosts, billingPeriod]);
+  }, [occupants, costCenters, rates, otherCosts, billingPeriod, todayStr]);
 
   const handleFloorsCountChange = (count) => {
     const val = Math.max(1, Math.min(20, parseInt(count, 10) || 1));
@@ -429,6 +429,30 @@ export default function App() {
       rooms: [ { roomNo: `${campDigit}-${flStr}-${flatStr}-A`, capacity, occupants: [] }, { roomNo: `${campDigit}-${flStr}-${flatStr}-B`, capacity, occupants: [] }, { roomNo: `${campDigit}-${flStr}-${flatStr}-C`, capacity, occupants: [] } ]
     };
     setEditingCampModal(prev => ({ ...prev, floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: [...f.flats, newFlat] } : f) }));
+  };
+
+  // Add (+1) or remove (-1) the last room of one flat while editing a camp.
+  const handleChangeFlatRooms = (floorNo, flatCode, delta) => {
+    if (!editingCampModal) return;
+    const floor = editingCampModal.floors.find(f => f.floorNo === floorNo);
+    const flat = floor?.flats.find(f => f.flatCode === flatCode);
+    if (!flat) return;
+    const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
+    const prefix = flat.flatCode.split('-').slice(0, 3).join('-');
+    let nextRooms = flat.rooms;
+    if (delta > 0) {
+      if (flat.rooms.length >= 8) { alert('A flat can have at most 8 rooms.'); return; }
+      const used = new Set(flat.rooms.map(r => r.roomNo));
+      const letter = [...letters].find(l => !used.has(`${prefix}-${l}`));
+      const capacity = flat.rooms[0]?.capacity || (flat.roomGrade === 'Non-Manual' ? 2 : 3);
+      nextRooms = [...flat.rooms, { roomNo: `${prefix}-${letter}`, capacity, occupants: [] }];
+    } else {
+      if (flat.rooms.length <= 1) { alert('A flat needs at least one room.'); return; }
+      const last = flat.rooms[flat.rooms.length - 1];
+      if (last.occupants && last.occupants.length > 0) { alert(`Cannot remove Room ${last.roomNo} because it has active occupants. Please relocate them first.`); return; }
+      nextRooms = flat.rooms.slice(0, -1);
+    }
+    setEditingCampModal(prev => ({ ...prev, floors: prev.floors.map(f => f.floorNo === floorNo ? { ...f, flats: f.flats.map(ft => ft.flatCode === flatCode ? { ...ft, rooms: nextRooms } : ft) } : f) }));
   };
 
   const handleRemoveFlatFromFloor = (floorNo) => {
@@ -763,6 +787,35 @@ export default function App() {
     } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
+  const handleSaveRates = async () => {
+    try {
+      setIsSyncing(true);
+      await apiFetch('billing/rates', 'PUT', { nonManual: Number(rates.nonManual), manual: Number(rates.manual) });
+      ratesDirty.current = false;
+      await syncCloudDatabase();
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
+  };
+
+  const handleAddExtraLine = async (e) => {
+    e.preventDefault();
+    if (!extraInvoiceModal) return;
+    try {
+      setIsSyncing(true);
+      await apiFetch('billing/extra-lines', 'POST', { billingPeriod, costCenter: extraInvoiceModal.costCenter, category: extraInvoiceCategory, description: extraLineForm.description, quantity: extraLineForm.quantity, unitRateKwd: extraLineForm.unitRateKwd });
+      setExtraLineForm({ description: '', quantity: '1', unitRateKwd: '' });
+      await syncCloudDatabase();
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
+  };
+
+  const handleDeleteExtraLine = async (id) => {
+    if (!confirm('Remove this charge from the invoice?')) return;
+    try {
+      setIsSyncing(true);
+      await apiFetch(`billing/extra-lines/${id}`, 'DELETE');
+      await syncCloudDatabase();
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
+  };
+
   const handleCreateUser = async (e) => {
     e.preventDefault();
     try {
@@ -991,7 +1044,7 @@ export default function App() {
                             <span className="text-[10px] px-1.5 py-0.5 rounded bg-slate-800 text-cyan-300 font-medium">{occ.productiveType || 'DE'}</span>
                           </div>
                           <div className="text-[11px] text-slate-400 mt-0.5 truncate">
-                            {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • {occ.employeeStatus}
+                            {occ.campNo} • Room {occ.roomNo} ({occ.roomGrade}) • {statusLabel(occ.employeeStatus)}
                           </div>
                         </div>
                         <span className="text-[10px] px-2 py-0.5 rounded font-bold bg-cyan-950 text-cyan-300 border border-cyan-800 shrink-0">
@@ -1128,6 +1181,11 @@ export default function App() {
             <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-purple-100 text-purple-700 border border-purple-200">
               {currentUser.role}
             </span>
+            {syncError && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-amber-100 text-amber-800 border border-amber-200 ml-2" title={syncError}>
+                Sync paused ({syncError}) - retrying
+              </span>
+            )}
             {isSyncing && (
               <span className="flex items-center gap-1 text-cyan-600 font-bold ml-2">
                 <RefreshCw className="w-3.5 h-3.5 animate-spin" /> Syncing...
@@ -1561,6 +1619,7 @@ export default function App() {
                   <option value="On Leave">On Leave</option>
                   <option value="RTD - Resigned">RTD - Resigned</option>
                   <option value="RTD - Terminated">RTD - Terminated</option>
+                  <option value="RTD - Others">Left Camp (Others)</option>
                 </select>
 
                 <select
@@ -1671,7 +1730,7 @@ export default function App() {
                             occ.employeeStatus === 'Unassigned' ? 'bg-blue-100 text-blue-800' :
                             occ.employeeStatus === 'On Leave' ? 'bg-amber-100 text-amber-800' : 'bg-rose-50 text-rose-700'
                           }`}>
-                            {occ.employeeStatus}
+                            {statusLabel(occ.employeeStatus)}
                           </span>
                         </td>
                         <td className="p-3 text-right">
@@ -1728,7 +1787,10 @@ export default function App() {
             billingPeriod={billingPeriod}
             setBillingPeriod={setBillingPeriod}
             rates={rates}
-            setRates={setRates}
+            setRates={(r) => { ratesDirty.current = true; setRates(r); }}
+            savedRates={savedRates}
+            canEditAmounts={isSuperAdmin}
+            onSaveRates={handleSaveRates}
             otherCosts={invoicingOtherCostsObj}
             onUpdateOtherCost={async (cc, amt, desc) => {
               try {
@@ -1740,6 +1802,8 @@ export default function App() {
             projectInvoicingData={projectInvoicingData}
             setShowManageCostCentersModal={setShowManageCostCentersModal}
             setSelectedInvoiceModal={setSelectedInvoiceModal}
+            extraInvoiceLines={extraInvoiceLines}
+            onOpenExtraInvoices={(item) => { setExtraInvoiceCategory('Transport'); setExtraInvoiceModal(item); }}
             handleExportInvoicingCSV={() => alert('Billing CSV Exported')}
           />
         )}
@@ -2126,7 +2190,7 @@ export default function App() {
                     <datalist id="registered-employees-list">
                       {occupants.map(o => (
                         <option key={o.employeeId} value={o.employeeId}>
-                          {o.employeeName} ({o.employeeStatus})
+                          {o.employeeName} ({statusLabel(o.employeeStatus)})
                         </option>
                       ))}
                     </datalist>
@@ -2192,6 +2256,16 @@ export default function App() {
                     value={checkInForm.docRef}
                     onChange={e => setCheckInForm({ ...checkInForm, docRef: e.target.value })}
                     className="w-full border rounded-xl px-3 py-2 font-mono font-bold text-cyan-800"
+                  />
+                </div>
+                <div>
+                  <label className="block font-semibold mb-1">Entry Date (check-in to this bed)</label>
+                  <input
+                    type="date"
+                    required
+                    value={checkInForm.entryDate || ''}
+                    onChange={e => setCheckInForm({ ...checkInForm, entryDate: e.target.value })}
+                    className="w-full border rounded-xl px-3 py-2 font-bold"
                   />
                 </div>
               </div>
@@ -2674,7 +2748,7 @@ export default function App() {
                           <td className="border border-black p-1.5 text-left">{occ.title}</td>
                           <td className="border border-black p-1.5">{occ.costCenter}</td>
                           <td className="border border-black p-1.5 font-mono">{occ.roomNo}</td>
-                          <td className="border border-black p-1.5">{occ.employeeStatus}</td>
+                          <td className="border border-black p-1.5">{statusLabel(occ.employeeStatus)}</td>
                           <td className="border border-black p-1.5">{occ.entryDate}</td>
                         </tr>
                       ))}
@@ -2812,6 +2886,35 @@ export default function App() {
                 </tbody>
               </table>
 
+              <div>
+                <div className="text-xs font-bold uppercase mb-1">Occupant List ({selectedInvoiceModal.totalOccupants} Personnel)</div>
+                <table className="w-full border-collapse text-[11px]">
+                  <thead>
+                    <tr className="bg-slate-100 text-center font-bold">
+                      <th className="border border-black p-1.5 w-10">#</th>
+                      <th className="border border-black p-1.5">Emp ID</th>
+                      <th className="border border-black p-1.5 text-left">Name</th>
+                      <th className="border border-black p-1.5">Room No</th>
+                      <th className="border border-black p-1.5">Days in camp</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {selectedInvoiceModal.occupantRows.length === 0 && (
+                      <tr><td colSpan={5} className="border border-black p-2 text-center text-slate-500">No occupants billed in this period.</td></tr>
+                    )}
+                    {selectedInvoiceModal.occupantRows.map((r, i) => (
+                      <tr key={`${r.employeeId}-${r.roomNo}-${i}`} style={{ breakInside: 'avoid' }}>
+                        <td className="border border-black p-1.5 text-center">{i + 1}</td>
+                        <td className="border border-black p-1.5 text-center font-mono font-bold">{r.employeeId}</td>
+                        <td className="border border-black p-1.5">{r.employeeName}</td>
+                        <td className="border border-black p-1.5 text-center font-mono">{r.roomNo}</td>
+                        <td className="border border-black p-1.5 text-center">{r.days}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+
               <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-6 text-[11px]">
                 <div>
                   <div className="font-bold text-slate-800">Payment Terms & Instructions:</div>
@@ -2829,6 +2932,147 @@ export default function App() {
           </div>
         </div>
       )}
+
+      {historyOccupant && (
+        <OccupantHistoryModal
+          occupant={occupants.find(o => o.employeeId === historyOccupant.employeeId) || historyOccupant}
+          leaveLogs={leaveLogs}
+          misconductLogs={misconductLogs}
+          maintenanceLogs={maintenanceLogs}
+          transferRequests={transferRequests}
+          rtdLogs={rtdLogs}
+          rates={rates}
+          todayStr={todayStr}
+          onClose={() => setHistoryOccupant(null)}
+        />
+      )}
+
+      {/* =================================================================== */}
+      {/* MODAL: EXTRA INVOICES (Transport / Consumables / ...)               */}
+      {/* =================================================================== */}
+      {extraInvoiceModal && (() => {
+        const categories = [['Transport', 'TRN'], ['Consumables', 'CON'], ['Maintenance', 'MNT'], ['Other', 'OTH']];
+        const codeOf = Object.fromEntries(categories);
+        const lines = extraInvoiceLines.filter(l => l.costCenter === extraInvoiceModal.costCenter && l.billingPeriod === billingPeriod);
+        const catLines = lines.filter(l => l.category === extraInvoiceCategory);
+        const total = catLines.reduce((acc, l) => acc + Math.round(l.quantity * l.unitRateKwd * 1000), 0) / 1000;
+        const invNo = `INV-${extraInvoiceModal.costCenter}-${codeOf[extraInvoiceCategory]}-${billingPeriod.replace(' ', '-').toUpperCase()}`;
+        return (
+          <div className="fixed inset-0 bg-slate-900/70 z-[55] flex items-center justify-center p-4">
+            <div className="bg-white rounded-2xl max-w-3xl w-full max-h-[92vh] overflow-y-auto p-5 space-y-4 shadow-2xl text-xs">
+              <div className="flex items-center justify-between border-b pb-3">
+                <span className="font-mono font-bold text-slate-800">EXTRA INVOICES — {extraInvoiceModal.costCenter} • {billingPeriod}</span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => printFormattedElement('extra-invoice-print-area', invNo, false, { fit: 'flow' })}
+                    className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl font-bold flex items-center gap-1.5 cursor-pointer"
+                  >
+                    <Printer className="w-3.5 h-3.5" /> Print / Save PDF
+                  </button>
+                  <button type="button" onClick={() => setExtraInvoiceModal(null)} className="p-1 text-slate-400 hover:text-slate-700 cursor-pointer"><X className="w-5 h-5" /></button>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                {categories.map(([cat]) => {
+                  const n = lines.filter(l => l.category === cat).length;
+                  return (
+                    <button key={cat} type="button" onClick={() => setExtraInvoiceCategory(cat)}
+                      className={`px-3 py-1.5 rounded-lg font-bold border cursor-pointer ${extraInvoiceCategory === cat ? 'bg-cyan-600 text-white border-cyan-600' : 'bg-slate-50 text-slate-700 border-slate-300'}`}>
+                      {cat} Invoice ({n})
+                    </button>
+                  );
+                })}
+              </div>
+
+              {isSuperAdmin ? (
+                <form onSubmit={handleAddExtraLine} className="p-3 bg-purple-50/60 border border-purple-200 rounded-xl grid grid-cols-12 gap-2 items-end">
+                  <div className="col-span-5">
+                    <label className="block font-semibold text-slate-600 mb-1">Description ({extraInvoiceCategory})</label>
+                    <input type="text" required value={extraLineForm.description} onChange={e => setExtraLineForm({ ...extraLineForm, description: e.target.value })} placeholder="e.g. Staff bus, 2 trips/day" className="w-full border rounded-lg px-2.5 py-1.5" />
+                  </div>
+                  <div className="col-span-2">
+                    <label className="block font-semibold text-slate-600 mb-1">Qty</label>
+                    <input type="number" step="0.001" min="0.001" required value={extraLineForm.quantity} onChange={e => setExtraLineForm({ ...extraLineForm, quantity: e.target.value })} className="w-full border rounded-lg px-2.5 py-1.5 text-right font-mono" />
+                  </div>
+                  <div className="col-span-3">
+                    <label className="block font-semibold text-slate-600 mb-1">Unit Rate (KWD)</label>
+                    <input type="number" step="0.001" min="0" required value={extraLineForm.unitRateKwd} onChange={e => setExtraLineForm({ ...extraLineForm, unitRateKwd: e.target.value })} className="w-full border rounded-lg px-2.5 py-1.5 text-right font-mono" />
+                  </div>
+                  <div className="col-span-2">
+                    <button type="submit" className="w-full px-3 py-2 bg-purple-600 hover:bg-purple-500 text-white rounded-lg font-bold cursor-pointer">+ Add</button>
+                  </div>
+                </form>
+              ) : (
+                <p className="text-slate-500">Only a Super Admin can add or remove charges. You can still view and print these invoices.</p>
+              )}
+
+              <div id="extra-invoice-print-area" className="p-6 bg-white text-black font-sans space-y-4 border border-slate-300">
+                <div className="flex items-center justify-between border-b-2 border-black pb-3">
+                  <DhowLogo className="h-9 w-auto" />
+                  <div className="text-center">
+                    <h2 className="text-sm font-black tracking-wider uppercase">{extraInvoiceCategory.toUpperCase()} RECHARGE INVOICE</h2>
+                    <p className="text-[11px] text-slate-600 font-semibold">Master Cost Center: 1ACD000 • Billing Period: {billingPeriod}</p>
+                  </div>
+                  <div className="text-right font-mono text-[11px]">
+                    <div><strong>Inv No:</strong> {invNo}</div>
+                    <div><strong>Date:</strong> {todayStr}</div>
+                  </div>
+                </div>
+                <div className="border border-black p-3 bg-slate-50">
+                  <div className="text-[10px] text-slate-500 uppercase font-bold">Client / Project Site</div>
+                  <div className="text-xs font-bold text-slate-900">{extraInvoiceModal.costCenter} — {extraInvoiceModal.projectName}</div>
+                  <div className="text-[11px] text-slate-700">Division: {extraInvoiceModal.division}</div>
+                </div>
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-slate-100 text-center font-bold">
+                      <th className="border border-black p-2 w-10">#</th>
+                      <th className="border border-black p-2 text-left">Description</th>
+                      <th className="border border-black p-2">Qty</th>
+                      <th className="border border-black p-2">Unit Rate (KWD)</th>
+                      <th className="border border-black p-2">Amount (KWD)</th>
+                      {isSuperAdmin && <th className="border border-black p-2 print:hidden" data-no-print="true"></th>}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {catLines.length === 0 && (
+                      <tr><td colSpan={isSuperAdmin ? 6 : 5} className="border border-black p-3 text-center text-slate-500">No {extraInvoiceCategory.toLowerCase()} charges added for this period yet.</td></tr>
+                    )}
+                    {catLines.map((l, i) => (
+                      <tr key={l.id}>
+                        <td className="border border-black p-2 text-center">{i + 1}</td>
+                        <td className="border border-black p-2">{l.description}</td>
+                        <td className="border border-black p-2 text-center font-mono">{l.quantity}</td>
+                        <td className="border border-black p-2 text-center font-mono">{l.unitRateKwd.toFixed(3)}</td>
+                        <td className="border border-black p-2 text-right font-mono font-bold">{(Math.round(l.quantity * l.unitRateKwd * 1000) / 1000).toFixed(3)}</td>
+                        {isSuperAdmin && <td className="border border-black p-1 text-center" data-no-print="true"><button type="button" onClick={() => handleDeleteExtraLine(l.id)} className="text-rose-600 font-bold cursor-pointer">Remove</button></td>}
+                      </tr>
+                    ))}
+                    <tr className="bg-slate-100 font-bold">
+                      <td colSpan={4} className="border border-black p-2 text-right uppercase">Total Recharge:</td>
+                      <td className="border border-black p-2 text-right font-mono text-cyan-900 text-sm">{total.toFixed(3)} KWD</td>
+                      {isSuperAdmin && <td className="border border-black p-2" data-no-print="true"></td>}
+                    </tr>
+                  </tbody>
+                </table>
+                <div className="pt-4 border-t border-slate-300 grid grid-cols-2 gap-6 text-[11px]">
+                  <div>
+                    <div className="font-bold text-slate-800">Payment Terms & Instructions:</div>
+                    <p className="text-slate-600 mt-0.5">Payable upon receipt to Dhow Engineering General Trading & Contracting Co. Account # KW-DHOW-001.</p>
+                  </div>
+                  <div className="text-right">
+                    <span className="font-bold">Authorized Signatory:</span>
+                    <div className="h-8"></div>
+                    <div className="border-t border-black w-48 ml-auto pt-1 font-semibold">Accommodation Department Head</div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* =================================================================== */}
       {/* MODAL: BED RELOCATION                                               */}
@@ -2948,7 +3192,7 @@ export default function App() {
                   />
                 </div>
                 <div>
-                  <label className="block font-semibold mb-1">Transfer Date</label>
+                  <label className="block font-semibold mb-1">{relocatingOccupant?.employeeStatus === 'Unassigned' ? 'Entry Date (check-in to this bed)' : 'Transfer Date'}</label>
                   <input type="date" required value={relocationForm.transferDate} onChange={e => setRelocationForm({ ...relocationForm, transferDate: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-mono" />
                 </div>
               </div>
@@ -2997,6 +3241,13 @@ export default function App() {
                 </div>
               </div>
               <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setHistoryOccupant(viewingEmployeeDossier)}
+                  className="px-3 py-1.5 bg-cyan-50 hover:bg-cyan-100 text-cyan-800 border border-cyan-200 rounded-lg font-bold flex items-center gap-1 cursor-pointer"
+                >
+                  <Printer className="w-3.5 h-3.5" /> Full History
+                </button>
                 {canEditOccupants && (
                   <button
                     type="button"
@@ -3035,7 +3286,7 @@ export default function App() {
               </div>
               <div className="p-3 bg-slate-50 border rounded-xl">
                 <div className="text-slate-400 font-medium">Status</div>
-                <div className="mt-0.5 font-bold text-emerald-700">{viewingEmployeeDossier.employeeStatus}</div>
+                <div className="mt-0.5 font-bold text-emerald-700">{statusLabel(viewingEmployeeDossier.employeeStatus)}</div>
               </div>
             </div>
 
@@ -3141,7 +3392,7 @@ export default function App() {
                 {viewingEmployeeDossier.stayHistory && viewingEmployeeDossier.stayHistory.length > 0 ? (
                   viewingEmployeeDossier.stayHistory.map((hist, idx) => (
                     <div key={idx} className="border-l-2 border-cyan-600 pl-3">
-                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({hist.startDate} to {hist.endDate})</div>
+                      <div className="font-bold text-slate-800">{hist.campNo} — Room {hist.roomNo} ({String(hist.startDate).slice(0, 10)} to {String(hist.endDate).slice(0, 10)})</div>
                       <div className="text-[11px] text-slate-600">{hist.reason}</div>
                     </div>
                   ))
@@ -3188,7 +3439,8 @@ export default function App() {
 
               <div className="space-y-2">
                 {editingCampModal.floors.map(fl => (
-                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg flex items-center justify-between">
+                  <div key={fl.floorNo} className="p-3 bg-slate-50 border rounded-lg">
+                    <div className="flex items-center justify-between">
                     <span className="font-bold">Floor {fl.floorNo} ({fl.flats.length} Flats)</span>
                     <div className="flex gap-1.5">
                       {fl.flats.length > 1 && (
@@ -3196,6 +3448,19 @@ export default function App() {
                       )}
                       <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Non-Manual')} className="px-2 py-1 bg-cyan-50 text-cyan-800 border rounded font-bold">+ NM Flat</button>
                       <button type="button" onClick={() => handleAddFlatWithGrade(fl.floorNo, 'Manual')} className="px-2 py-1 bg-amber-50 text-amber-800 border rounded font-bold">+ M Flat</button>
+                    </div>
+                    </div>
+                    <div className="mt-2 space-y-1">
+                      {fl.flats.map(ft => (
+                        <div key={ft.flatCode} className="flex items-center justify-between bg-white border rounded-lg px-2.5 py-1.5">
+                          <span className="font-mono font-bold text-slate-700">{ft.flatCode} <span className="font-sans font-normal text-slate-500">({ft.roomGrade})</span></span>
+                          <span className="flex items-center gap-2">
+                            <span className="text-slate-600">Rooms: <strong>{ft.rooms.length}</strong> ({ft.rooms.map(r => r.roomNo.split('-').pop()).join(', ')})</span>
+                            <button type="button" onClick={() => handleChangeFlatRooms(fl.floorNo, ft.flatCode, -1)} className="px-2 py-0.5 bg-rose-50 text-rose-700 border rounded font-bold">- Room</button>
+                            <button type="button" onClick={() => handleChangeFlatRooms(fl.floorNo, ft.flatCode, 1)} className="px-2 py-0.5 bg-emerald-50 text-emerald-700 border rounded font-bold">+ Room</button>
+                          </span>
+                        </div>
+                      ))}
                     </div>
                   </div>
                 ))}
@@ -3499,6 +3764,10 @@ export default function App() {
                   <label className="block font-semibold mb-1">Total Floors</label>
                   <input type="number" min="1" max="20" value={newCampForm.floorsCount} onChange={e => handleFloorsCountChange(e.target.value)} className="w-full border rounded-xl px-3 py-2 font-bold" />
                 </div>
+                <div>
+                  <label className="block font-semibold mb-1">Rooms per Flat (A, B, C, D...)</label>
+                  <input type="number" min="1" max="8" value={newCampForm.roomsPerFlat} onChange={e => setNewCampForm({ ...newCampForm, roomsPerFlat: e.target.value })} className="w-full border rounded-xl px-3 py-2 font-bold" title="How many rooms each flat gets in this building. You can change it per flat later with Edit Camp." />
+                </div>
               </div>
 
               {/* Incharge Row Addition */}
@@ -3611,8 +3880,14 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleLeaveSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
             <h3 className="text-base font-bold">Mark On Leave (#{showLeaveModal.employeeId})</h3>
-            <input type="date" required value={leaveForm.startDate} onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })} className="w-full border rounded-lg p-2" />
-            <input type="date" required value={leaveForm.expectedEndDate} onChange={e => setLeaveForm({ ...leaveForm, expectedEndDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">Leave Start Date</label>
+              <input type="date" required value={leaveForm.startDate} onChange={e => setLeaveForm({ ...leaveForm, startDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            </div>
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">Leave End Date (expected return)</label>
+              <input type="date" required value={leaveForm.expectedEndDate} onChange={e => setLeaveForm({ ...leaveForm, expectedEndDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setShowLeaveModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-amber-500 text-white rounded-lg font-bold">Confirm Leave</button>
@@ -3625,7 +3900,10 @@ export default function App() {
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleReturnJobSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
             <h3 className="text-base font-bold">Return to Job (#{showReturnJobModal.employeeId})</h3>
-            <input type="date" required value={returnJobForm.actualReturnDate} onChange={e => setReturnJobForm({ ...returnJobForm, actualReturnDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            <div>
+              <label className="block font-semibold text-slate-600 mb-1">Actual Return Date</label>
+              <input type="date" required value={returnJobForm.actualReturnDate} onChange={e => setReturnJobForm({ ...returnJobForm, actualReturnDate: e.target.value })} className="w-full border rounded-lg p-2" />
+            </div>
             <div className="flex justify-end gap-2">
               <button type="button" onClick={() => setShowReturnJobModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
               <button type="submit" className="px-4 py-2 bg-emerald-600 text-white rounded-lg font-bold">Confirm Return</button>
@@ -3638,26 +3916,30 @@ export default function App() {
       {showRtdModal && (
         <div className="fixed inset-0 bg-slate-900/60 z-50 flex items-center justify-center p-4">
           <form onSubmit={handleRtdSubmit} className="bg-white rounded-2xl max-w-md w-full p-6 space-y-4 text-xs shadow-2xl">
-            <h3 className="text-base font-bold">Process RTD Exit (#{showRtdModal.employeeId})</h3>
+            <h3 className="text-base font-bold">{rtdForm.rtdType === 'Others' ? 'Process Camp Exit' : 'Process RTD Exit'} (#{showRtdModal.employeeId})</h3>
             <div>
               <label className="block font-semibold text-slate-600 mb-1">RTD Type</label>
               <select value={rtdForm.rtdType} onChange={e => setRtdForm({ ...rtdForm, rtdType: e.target.value })} className="w-full border rounded-lg p-2 font-bold">
                 <option value="Resigned">Resigned</option>
                 <option value="Terminated">Terminated</option>
                 <option value="Dismissed">Dismissed</option>
+                <option value="Others">Others (left camp on his own, no RTD)</option>
               </select>
+              {rtdForm.rtdType === 'Others' && (
+                <p className="mt-1 text-[11px] text-slate-500">Use this when the employee voluntarily leaves the camp and moves out on his own. The bed is released and the exit is recorded in the vacated log.</p>
+              )}
             </div>
             <div>
-              <label className="block font-semibold text-slate-600 mb-1">RTD Date</label>
+              <label className="block font-semibold text-slate-600 mb-1">{rtdForm.rtdType === 'Others' ? 'Exit Date (date he left the camp)' : 'RTD Date'}</label>
               <input type="date" required value={rtdForm.rtdDate} onChange={e => setRtdForm({ ...rtdForm, rtdDate: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div>
               <label className="block font-semibold text-slate-600 mb-1">Reason / Remarks</label>
-              <input type="text" placeholder="Enter reason for RTD..." required value={rtdForm.reason} onChange={e => setRtdForm({ ...rtdForm, reason: e.target.value })} className="w-full border rounded-lg p-2" />
+              <input type="text" placeholder={rtdForm.rtdType === 'Others' ? 'e.g. Moved to own accommodation' : 'Enter reason for RTD...'} required value={rtdForm.reason} onChange={e => setRtdForm({ ...rtdForm, reason: e.target.value })} className="w-full border rounded-lg p-2" />
             </div>
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setShowRtdModal(null)} className="px-4 py-2 bg-slate-100 rounded-lg">Cancel</button>
-              <button type="submit" className="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold">Confirm RTD</button>
+              <button type="submit" className="px-4 py-2 bg-rose-600 text-white rounded-lg font-bold">{rtdForm.rtdType === 'Others' ? 'Confirm Exit' : 'Confirm RTD'}</button>
             </div>
           </form>
         </div>
