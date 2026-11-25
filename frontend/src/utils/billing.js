@@ -67,21 +67,28 @@ export const buildPieces = (occ, todayDay) => {
   return pieces;
 };
 
-// What one employee costs in one month, per piece.
+// What one employee costs in one month. Full-month rule: if he was in a cost center on any day of
+// the month, that cost center is billed one whole month (once per cost center, at the room grade he
+// held last in that cost center during the month). `days` is only how long he was actually there.
 export const chargesForMonth = (occ, year, monthIdx, rates, todayDay) => {
   const daysInMonth = new Date(Date.UTC(year, monthIdx + 1, 0)).getUTCDate();
   const monthStart = Math.floor(Date.UTC(year, monthIdx, 1) / 86400000);
   const monthEnd = monthStart + daysInMonth - 1;
-  const rows = [];
+  const byCc = new Map();
   buildPieces(occ, todayDay).forEach(p => {
     const start = Math.max(p.start, monthStart);
     const end = Math.min(p.end, monthEnd);
     if (start > end) return;
-    const days = end - start + 1;
-    const rateKwd = p.grade === 'Non-Manual' ? Number(rates.nonManual || 0) : Number(rates.manual || 0);
-    rows.push({ cc: p.cc, roomNo: p.roomNo, campNo: p.campNo, grade: p.grade, days, daysInMonth, amountFils: Math.round((days / daysInMonth) * rateKwd * 1000), start, end });
+    const g = byCc.get(p.cc) || { cc: p.cc, days: 0, rooms: [], lastEnd: -Infinity, grade: p.grade, campNo: p.campNo };
+    g.days += end - start + 1;
+    if (!g.rooms.includes(p.roomNo)) g.rooms.push(p.roomNo);
+    if (end >= g.lastEnd) { g.lastEnd = end; g.grade = p.grade; g.campNo = p.campNo; }
+    byCc.set(p.cc, g);
   });
-  return rows;
+  return [...byCc.values()].map(g => {
+    const rateKwd = g.grade === 'Non-Manual' ? Number(rates.nonManual || 0) : Number(rates.manual || 0);
+    return { cc: g.cc, roomNo: g.rooms.join(', '), campNo: g.campNo, grade: g.grade, days: g.days, daysInMonth, amountFils: Math.round(rateKwd * 1000), fullMonth: true };
+  });
 };
 
 // Months (as [year, monthIdx]) from the employee's first stay to the current month.

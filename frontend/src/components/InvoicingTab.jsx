@@ -6,6 +6,9 @@ export default function InvoicingTab({
   setBillingPeriod,
   rates,
   setRates,
+  savedRates,
+  canEditAmounts = false,
+  onSaveRates,
   otherCosts,
   onUpdateOtherCost,
   projectInvoicingData,
@@ -63,7 +66,7 @@ export default function InvoicingTab({
         <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 flex flex-wrap items-center justify-between gap-4 text-xs">
           <div className="font-bold text-slate-700 flex items-center gap-1.5">
             <SlidersHorizontal className="w-4 h-4 text-cyan-600" />
-            Monthly Bed Recharge Rate Card (Per Occupant):
+            Monthly Bed Recharge Rate Card (Per Occupant, full month):
           </div>
 
           <div className="flex flex-wrap items-center gap-6">
@@ -73,7 +76,8 @@ export default function InvoicingTab({
                 type="number"
                 value={rates.nonManual}
                 onChange={(e) => setRates({ ...rates, nonManual: Number(e.target.value) })}
-                className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-right font-bold text-cyan-700"
+                readOnly={!canEditAmounts}
+                className={`w-24 border border-slate-300 rounded-lg px-2.5 py-1 text-right font-bold text-cyan-700 ${canEditAmounts ? 'bg-white' : 'bg-slate-100 cursor-not-allowed'}`}
               />
               <span className="text-slate-500 font-mono">KWD / bed</span>
             </div>
@@ -84,10 +88,24 @@ export default function InvoicingTab({
                 type="number"
                 value={rates.manual}
                 onChange={(e) => setRates({ ...rates, manual: Number(e.target.value) })}
-                className="w-24 bg-white border border-slate-300 rounded-lg px-2.5 py-1 text-right font-bold text-amber-700"
+                readOnly={!canEditAmounts}
+                className={`w-24 border border-slate-300 rounded-lg px-2.5 py-1 text-right font-bold text-amber-700 ${canEditAmounts ? 'bg-white' : 'bg-slate-100 cursor-not-allowed'}`}
               />
               <span className="text-slate-500 font-mono">KWD / bed</span>
             </div>
+
+            {canEditAmounts ? (
+              <button
+                type="button"
+                onClick={onSaveRates}
+                disabled={!savedRates || (Number(savedRates.nonManual) === Number(rates.nonManual) && Number(savedRates.manual) === Number(rates.manual))}
+                className="px-3 py-1.5 bg-cyan-600 hover:bg-cyan-500 disabled:opacity-40 text-white rounded-lg font-bold cursor-pointer"
+              >
+                Save Rates
+              </button>
+            ) : (
+              <span className="text-[11px] text-slate-500">Rates are set by a Super Admin.</span>
+            )}
           </div>
         </div>
       </div>
@@ -157,6 +175,7 @@ export default function InvoicingTab({
                           min="0"
                           value={miscObj.amount}
                           onChange={(e) => onUpdateOtherCost(item.costCenter, Number(e.target.value), miscObj.description)}
+                          readOnly={!canEditAmounts}
                           className="w-24 bg-white border border-purple-300 rounded-lg px-2 py-1 text-right font-mono font-bold text-purple-800 focus:outline-none focus:ring-2 focus:ring-purple-500"
                         />
                         <span className="text-[10px] font-mono text-purple-700">KWD</span>
@@ -168,6 +187,7 @@ export default function InvoicingTab({
                         placeholder="e.g. Catering, Transport, Utilities..."
                         value={miscObj.description}
                         onChange={(e) => onUpdateOtherCost(item.costCenter, miscObj.amount, e.target.value)}
+                        readOnly={!canEditAmounts}
                         className="w-52 bg-white border border-purple-200 rounded-lg px-2.5 py-1 text-xs text-slate-700 focus:outline-none focus:ring-2 focus:ring-purple-500"
                       />
                     </td>

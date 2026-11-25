@@ -229,7 +229,7 @@ export default function OccupantHistoryModal({ occupant, leaveLogs = [], miscond
                         <td className={`${td} text-center font-mono`}>{r.cc}</td>
                         <td className={`${td} text-center font-mono`}>{r.roomNo}</td>
                         <td className={`${td} text-center`}>{r.grade}</td>
-                        <td className={`${td} text-center`}>{r.days} / {r.daysInMonth}</td>
+                        <td className={`${td} text-center`}>Full month ({r.days} days in camp)</td>
                         <td className={`${td} text-right font-mono`}>{(r.amountFils / 1000).toFixed(3)}</td>
                       </tr>
                     ))}
@@ -239,7 +239,7 @@ export default function OccupantHistoryModal({ occupant, leaveLogs = [], miscond
                     </tr>
                   </tbody>
                 </table>
-                <p className="text-[10px] text-slate-500 mt-1">Worked out from the stay dates and the current monthly rates ({Number(rates.nonManual || 0).toFixed(3)} KWD Non-Manual, {Number(rates.manual || 0).toFixed(3)} KWD Manual). Miscellaneous and Transport / Consumables charges are billed per cost center and are not split per person.</p>
+                <p className="text-[10px] text-slate-500 mt-1">Each cost center the employee was in during a month is billed one full month. Worked out from the stay dates and the current monthly rates ({Number(rates.nonManual || 0).toFixed(3)} KWD Non-Manual, {Number(rates.manual || 0).toFixed(3)} KWD Manual). Miscellaneous and Transport / Consumables charges are billed per cost center and are not split per person.</p>
               </>
             )}
           </Section>

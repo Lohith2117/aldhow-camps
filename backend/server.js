@@ -109,13 +109,14 @@ const assertCampAccess = (req, campNo) => {
 
 app.get('/api/bootstrap', async (req, res) => {
   try {
-    const [users, emps, camps, floors, flats, rooms, ccs, leaves, rtds, trs, acts, others, maint, misc, stays, ccHist, extraLines] = await Promise.all([
+    const [users, emps, camps, floors, flats, rooms, ccs, leaves, rtds, trs, acts, others, maint, misc, stays, ccHist, extraLines, rateRows] = await Promise.all([
       pool.query('SELECT * FROM users'), pool.query('SELECT * FROM employees'), pool.query('SELECT * FROM camps'),
       pool.query('SELECT * FROM floors'), pool.query('SELECT * FROM flats'), pool.query('SELECT * FROM rooms'),
       pool.query('SELECT * FROM cost_centers'), pool.query('SELECT * FROM leave_logs'), pool.query('SELECT * FROM rtd_logs'),
       pool.query('SELECT * FROM transfer_requests'), pool.query('SELECT * FROM activity_logs ORDER BY timestamp DESC LIMIT 500'),
       pool.query('SELECT * FROM billing_other_costs'), pool.query('SELECT * FROM maintenance_logs'), pool.query('SELECT * FROM misconduct_logs'),
-      pool.query('SELECT * FROM stay_history ORDER BY start_date, id'), pool.query('SELECT * FROM cost_center_history ORDER BY end_date, id'), pool.query('SELECT * FROM extra_invoice_lines ORDER BY id')
+      pool.query('SELECT * FROM stay_history ORDER BY start_date, id'), pool.query('SELECT * FROM cost_center_history ORDER BY end_date, id'), pool.query('SELECT * FROM extra_invoice_lines ORDER BY id'),
+      pool.query('SELECT non_manual_kwd, manual_kwd FROM billing_rates WHERE id = 1').catch(() => ({ rows: [] }))
     ]);
 
     const isEditor = req.user.role === 'CAMP_EDITOR';
@@ -157,6 +158,7 @@ app.get('/api/bootstrap', async (req, res) => {
       rtdLogs: rtds.rows.filter(filterScope).map(r => ({ id: r.id, employeeId: r.employee_id, employeeName: r.employee_name, rtdType: r.rtd_type, rtdDate: r.rtd_date, vacatedCampNo: r.vacated_camp_no, vacatedRoomNo: r.vacated_room_no, costCenter: r.cost_center, remarks: r.remarks, recordedBy: r.recorded_by })),
       transferRequests: trs.rows.map(t => ({ id: t.id, employeeId: t.employee_id, employeeName: t.employee_name, fromCostCenter: t.from_cost_center, fromDivision: t.from_division, toCostCenter: t.to_cost_center, toDivision: t.to_division, reason: t.reason, status: t.status, requestedBy: t.requested_by, requestedByRole: t.requested_by_role, reviewedBy: t.reviewed_by, reviewDate: t.review_date })),
       activityLogs: acts.rows.map(a => ({ id: a.id, actorName: a.actor_name, actorRole: a.actor_role, category: a.category, actionTitle: a.action_title, details: a.details, campNo: a.camp_no, timestamp: a.timestamp })),
+      rates: rateRows.rows[0] ? { nonManual: Number(rateRows.rows[0].non_manual_kwd), manual: Number(rateRows.rows[0].manual_kwd) } : null,
       extraInvoiceLines: extraLines.rows.map(x => ({ id: x.id, billingPeriod: x.billing_period, costCenter: x.cost_center, category: x.category, description: x.description, quantity: Number(x.quantity), unitRateKwd: Number(x.unit_rate_kwd), createdBy: x.created_by })),
       otherCosts: others.rows.map(o => ({ id: o.id, billingPeriod: o.billing_period, costCenter: o.cost_center, otherCostKwd: o.other_cost_kwd, otherCostDescription: o.other_cost_description, updatedBy: o.updated_by })),
       maintenanceLogs: maint.rows.filter(filterScope).map(m => ({ id: m.id, date: m.date, issueDetails: m.issue_details, reportedByEmpId: m.reported_by_emp_id, roomNo: m.room_no, status: m.status })),
@@ -484,6 +486,21 @@ app.put('/api/billing/others', async (req, res) => {
     await client.query('BEGIN');
     await client.query(`INSERT INTO billing_other_costs (billing_period, cost_center, other_cost_kwd, other_cost_description, updated_by) VALUES ($1, $2, $3, $4, $5) ON CONFLICT (billing_period, cost_center) DO UPDATE SET other_cost_kwd = EXCLUDED.other_cost_kwd, other_cost_description = EXCLUDED.other_cost_description, updated_by = EXCLUDED.updated_by`, [billingPeriod, costCenter, amount, description, req.user.name]);
     await logActivity(client, req, 'BILLING', `Updated Other Costs for ${costCenter}`);
+    await client.query('COMMIT');
+    res.json({ success: true });
+  } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }
+});
+
+app.put('/api/billing/rates', async (req, res) => {
+  if (req.user.role !== 'SUPER_ADMIN') return res.status(403).json({ error: 'Forbidden' });
+  const nonManual = Number(req.body.nonManual), manual = Number(req.body.manual);
+  if (!Number.isFinite(nonManual) || !Number.isFinite(manual) || nonManual < 0 || manual < 0 || nonManual > 100000 || manual > 100000) return res.status(400).json({ error: 'Rates must be numbers of 0 or more' });
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    await client.query(`INSERT INTO billing_rates (id, non_manual_kwd, manual_kwd, updated_by) VALUES (1, $1, $2, $3)
+      ON CONFLICT (id) DO UPDATE SET non_manual_kwd = EXCLUDED.non_manual_kwd, manual_kwd = EXCLUDED.manual_kwd, updated_by = EXCLUDED.updated_by, updated_at = CURRENT_TIMESTAMP`, [nonManual, manual, req.user.name]);
+    await logActivity(client, req, 'BILLING', 'Updated monthly bed rates', `Non-Manual ${nonManual} KWD, Manual ${manual} KWD`);
     await client.query('COMMIT');
     res.json({ success: true });
   } catch (err) { console.error(req.method, req.originalUrl, 'ERROR:', err.message); await client.query('ROLLBACK'); res.status(500).json({ error: 'Server error' }); } finally { client.release(); }

@@ -59,6 +59,8 @@ export default function App() {
   const [transferRequests, setTransferRequests] = useState([]);
   const [otherCosts, setOtherCosts] = useState([]);
   const [extraInvoiceLines, setExtraInvoiceLines] = useState([]);
+  const [savedRates, setSavedRates] = useState({ nonManual: 120, manual: 45 });
+  const ratesDirty = useRef(false);
   const [extraInvoiceModal, setExtraInvoiceModal] = useState(null);
   const [historyOccupant, setHistoryOccupant] = useState(null);
   const [extraInvoiceCategory, setExtraInvoiceCategory] = useState('Transport');
@@ -189,6 +191,10 @@ export default function App() {
         setActivityLogs(data.activityLogs || []);
         setOtherCosts(data.otherCosts || []);
         setExtraInvoiceLines(data.extraInvoiceLines || []);
+        if (data.rates) {
+          setSavedRates(data.rates);
+          if (!ratesDirty.current) setRates(data.rates);
+        }
         setMaintenanceLogs(data.maintenanceLogs || []);
         setMisconductLogs(data.misconductLogs || []);
         
@@ -330,10 +336,10 @@ export default function App() {
         const target = costCenterMap[row.cc];
         if (!target) return;
         if (row.grade === 'Non-Manual') {
-          target.nonManualBeds += (row.days / row.daysInMonth);
+          target.nonManualBeds += 1;
           target.nonManualAmountFils += row.amountFils;
         } else {
-          target.manualBeds += (row.days / row.daysInMonth);
+          target.manualBeds += 1;
           target.manualAmountFils += row.amountFils;
         }
         if (!target.occupants.includes(occ)) {
@@ -779,6 +785,15 @@ export default function App() {
       setReportPreviewModal({ type: 'relocation', record: { employeeId: relocatingOccupant.employeeId, employeeName: relocatingOccupant.employeeName, title: relocatingOccupant.title, fromRoom: `${relocatingOccupant.campNo} (${relocatingOccupant.roomNo})`, toRoom: `${targetCamp.campNo} (${relocationForm.targetRoomNo})`, relocationDate: relocationForm.transferDate, docRef: relocationForm.docRef, reason: relocationForm.reason } });
       await syncCloudDatabase();
     } catch(err) { alert(err.message); } finally { setIsSyncing(false); }
+  };
+
+  const handleSaveRates = async () => {
+    try {
+      setIsSyncing(true);
+      await apiFetch('billing/rates', 'PUT', { nonManual: Number(rates.nonManual), manual: Number(rates.manual) });
+      ratesDirty.current = false;
+      await syncCloudDatabase();
+    } catch (err) { alert(err.message); } finally { setIsSyncing(false); }
   };
 
   const handleAddExtraLine = async (e) => {
@@ -1772,7 +1787,10 @@ export default function App() {
             billingPeriod={billingPeriod}
             setBillingPeriod={setBillingPeriod}
             rates={rates}
-            setRates={setRates}
+            setRates={(r) => { ratesDirty.current = true; setRates(r); }}
+            savedRates={savedRates}
+            canEditAmounts={isSuperAdmin}
+            onSaveRates={handleSaveRates}
             otherCosts={invoicingOtherCostsObj}
             onUpdateOtherCost={async (cc, amt, desc) => {
               try {
@@ -2877,7 +2895,7 @@ export default function App() {
                       <th className="border border-black p-1.5">Emp ID</th>
                       <th className="border border-black p-1.5 text-left">Name</th>
                       <th className="border border-black p-1.5">Room No</th>
-                      <th className="border border-black p-1.5">Days</th>
+                      <th className="border border-black p-1.5">Days in camp</th>
                     </tr>
                   </thead>
                   <tbody>
